@@ -1,0 +1,1 @@
+import{n as e}from"./setup-D1N6Yn79.js";import{n as t,t as n}from"./admin-auth-B1SGrnCb.js";async function r(r){await e();let i=await t(r);return i?Response.json({authenticated:!0,admin:i.admin,roleCodes:i.roleCodes,menuCodes:i.menuCodes,menuTree:i.menuTree,superAdmin:i.superAdmin},{headers:{"Cache-Control":`no-store`}}):n(`当前账号没有后台访问权限`)}export{r as GET};
