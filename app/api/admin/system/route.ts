@@ -82,9 +82,10 @@ export async function POST(request: Request) {
         if (!menuName || !menuCode) return Response.json({ message: '请填写菜单名称和菜单编码' }, { status: 400 });
         if (menuType === 'menu' && !componentKey) return Response.json({ message: '功能菜单必须填写组件标识' }, { status: 400 });
         if (parentId) {
-          const parent = await env.DB.prepare("SELECT id,menu_type FROM sys_menu WHERE id=?").bind(parentId).first<{ id: number; menu_type: string }>();
+          const parent = await env.DB.prepare("SELECT id,parent_id,menu_type FROM sys_menu WHERE id=?").bind(parentId).first<{ id: number; parent_id: number | null; menu_type: string }>();
           if (!parent) return Response.json({ message: '父级菜单不存在' }, { status: 400 });
           if (parent.menu_type !== 'directory') return Response.json({ message: '只有目录菜单可以作为父级菜单' }, { status: 400 });
+          if (parent.parent_id) return Response.json({ message: '当前管理端支持两级菜单，请选择顶级目录作为父级' }, { status: 400 });
           if (Number(body.id || 0) === Number(parent.id)) return Response.json({ message: '菜单不能设置自己为父级' }, { status: 400 });
         }
         const duplicate = await env.DB.prepare('SELECT id FROM sys_menu WHERE menu_code=? AND id<>?').bind(menuCode, Number(body.id || 0)).first();
