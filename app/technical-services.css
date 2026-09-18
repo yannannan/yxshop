@@ -1,0 +1,630 @@
+/* 商城双频道：首页导航、频道切换与技术服务卡片 */
+.compact-topbar{grid-template-columns:auto minmax(0,1fr) auto;gap:28px}.compact-topbar.has-admin-entry{grid-template-columns:auto minmax(0,1fr) auto auto}.site-navigation{display:flex;align-items:center;justify-content:center;gap:7px;min-width:0}.site-navigation a,.site-navigation button{height:36px;border:0;border-radius:8px;background:transparent;padding:0 10px;color:#69707a;font-size:12px;font-weight:800;text-decoration:none;white-space:nowrap}.site-navigation a:hover,.site-navigation button:hover,.site-navigation button.active{background:#fff1e9;color:#ed5e26}.site-navigation button.active{box-shadow:inset 0 -2px 0 #ff6b2c}.channel-switch{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:18px 0 0}.channel-switch>button{display:grid;grid-template-columns:52px minmax(0,1fr) auto;align-items:center;gap:14px;min-height:104px;padding:18px 22px;border:1px solid #dae6fb;border-radius:15px;background:linear-gradient(105deg,#f7fbff,#edf5ff);color:#182846;text-align:left;transition:.2s}.channel-switch>button:first-child{border-color:#f3c7b4;background:linear-gradient(105deg,#fff7f2,#fff0e8)}.channel-switch>button:hover{transform:translateY(-2px);box-shadow:0 12px 28px #25385d14}.channel-switch>button.active{border-color:#ff6b2c;box-shadow:0 10px 24px #ff6b2c1a}.channel-icon{display:grid;place-items:center;width:50px;height:50px;border-radius:15px;background:#dcebff;color:#3371d7;font-size:25px;font-weight:900}.channel-switch>button:first-child .channel-icon,.channel-switch>button.active .channel-icon{background:#ff6b2c;color:#fff;box-shadow:0 9px 20px #ff6b2c33}.channel-switch b,.channel-switch small{display:block}.channel-switch b{font-size:20px;color:#17213a}.channel-switch small{margin-top:6px;color:#718099;font-size:12px;line-height:1.5}.channel-switch em{padding:9px 12px;border:1px solid currentColor;border-radius:8px;color:#3470cf;font-size:11px;font-style:normal;font-weight:900;white-space:nowrap}.channel-switch>button.active em{border-color:transparent;background:#ff6b2c;color:#fff}.channel-content{scroll-margin-top:88px}.technical-services-section{padding-top:36px}.technical-services-heading{display:flex;align-items:end;justify-content:space-between;margin-bottom:20px;padding-bottom:17px;border-bottom:1px solid #e7e6e2}.technical-services-heading h2{margin:7px 0 0;font-size:26px}.technical-services-heading p{margin:8px 0 0;color:#8d949e;font-size:12px}.technical-services-heading>span{color:#9399a2;font-size:12px}.technical-services-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}.technical-service-card{display:flex;min-width:0;flex-direction:column;border:1px solid #e3e6ea;border-radius:17px;background:#fff;padding:19px;box-shadow:0 10px 24px #18202b08;transition:.2s}.technical-service-card:hover{transform:translateY(-4px);border-color:#ffb493;box-shadow:0 18px 34px #18202b12}.technical-provider-row{display:flex;align-items:center;gap:11px}.technical-avatar{display:grid;place-items:center;width:46px;height:46px;flex:none;border-radius:15px;background:linear-gradient(145deg,#2b3442,#11171f);color:#fff;font-size:18px;font-weight:900;box-shadow:0 8px 18px #1b223129}.technical-avatar.large{width:60px;height:60px;border-radius:18px;font-size:23px}.technical-provider-row>div{display:grid;grid-template-columns:auto 1fr;column-gap:7px;align-items:center;min-width:0}.technical-provider-row b{font-size:14px}.technical-provider-row span{color:#22a566;font-size:10px;font-weight:800;white-space:nowrap}.technical-provider-row small{grid-column:1/-1;margin-top:3px;color:#8c939c;font-size:10px}.technical-service-card h3{margin:19px 0 8px;color:#182239;font-size:19px;line-height:1.35}.technical-service-card>p{min-height:39px;margin:0;color:#7a838e;font-size:12px;line-height:1.65}.technical-mode-list{display:flex;flex-wrap:wrap;gap:7px;margin-top:14px}.technical-mode-list span{padding:5px 8px;border-radius:7px;background:#edf5ff;color:#3a72be;font-size:10px;font-weight:800}.technical-coverage{margin-top:9px;padding:7px 9px;border-radius:8px;background:#f5f7fa;color:#586573;font-size:10px;font-weight:800}.technical-price-row{display:flex;align-items:end;gap:8px;margin:16px 0 12px}.technical-price-row strong{color:#ee5b22;font-size:28px;line-height:1}.technical-price-row strong.negotiable{font-size:22px}.technical-price-row small{color:#89919b;font-size:10px;line-height:1.45}.technical-response-list{display:grid;grid-template-columns:1fr;gap:7px;margin-bottom:16px}.technical-response-list span{color:#566170;font-size:10px;font-weight:700;line-height:1.45}.technical-card-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:auto}.technical-card-actions a{display:grid;place-items:center;min-height:39px;border:1px solid #ff8d61;border-radius:9px;color:#e95b23;font-size:12px;font-weight:900;text-decoration:none}.technical-card-actions a.primary{border-color:#ff6b2c;background:#ff6b2c;color:#fff}.technical-card-actions a:hover{filter:brightness(.96)}.talent-entry{display:flex;align-items:center;justify-content:space-between;gap:20px;margin-top:24px;padding:24px 26px;border:1px solid #29354d;border-radius:16px;background:linear-gradient(105deg,#111c2b,#252044);color:#fff}.talent-entry>div>span{color:#ff9a72;font-size:10px;font-weight:900;letter-spacing:.14em}.talent-entry h3{margin:6px 0 0;font-size:20px}.talent-entry p{margin:7px 0 0;color:#bdc2cc;font-size:12px}.talent-entry button{flex:none;min-height:42px;border:0;border-radius:9px;background:#ff6b2c;color:#fff;padding:0 16px;font-size:12px;font-weight:900}
+
+/* 本轮排版校准：统一导航、字号与 CTA 层级 */
+.compact-topbar{grid-template-columns:auto minmax(0,1fr) auto;gap:clamp(16px,2.1vw,32px);min-height:72px;padding-inline:clamp(24px,4.5vw,72px)}
+.compact-topbar.has-admin-entry{grid-template-columns:auto minmax(0,1fr) auto auto}
+.compact-topbar .brand{grid-column:1;grid-row:1;white-space:nowrap}
+.site-navigation{grid-column:2;grid-row:1;justify-content:center;gap:4px;overflow-x:auto;scrollbar-width:none;overscroll-behavior-x:contain}
+.site-navigation::-webkit-scrollbar{display:none}
+.site-navigation a,.site-navigation button{display:inline-flex;align-items:center;justify-content:center;min-height:38px;height:38px;padding:0 12px;border-radius:9px;font-size:13px;letter-spacing:.01em}
+.site-navigation a:hover,.site-navigation button:hover,.site-navigation button.active{background:#fff1e9;color:#dd5723}
+.site-navigation button.active{box-shadow:inset 0 -2px 0 #ff6b2c}
+.compact-topbar .account-actions{grid-column:3;grid-row:1;min-width:max-content;gap:9px}
+.compact-topbar.has-admin-entry .admin-entry{grid-column:3;grid-row:1;justify-self:center;white-space:nowrap;font-size:14px}
+.compact-topbar.has-admin-entry .account-actions{grid-column:4}
+.channel-switch{margin-top:20px;gap:16px}
+.channel-switch>button{min-height:110px;padding:20px 24px}
+.channel-switch b{font-size:21px;line-height:1.25}
+.channel-switch small{margin-top:7px;font-size:13px;line-height:1.55}
+.channel-switch em{min-width:76px;padding:10px 12px;text-align:center;font-size:12px}
+.channel-content{scroll-margin-top:100px}
+.technical-services-section{padding-top:40px}
+.technical-services-heading{margin-bottom:22px;padding-bottom:19px}
+.technical-services-heading h2{font-size:28px}
+.technical-services-heading p,.technical-services-heading>span{font-size:13px;line-height:1.6}
+.technical-service-card{padding:22px}
+.technical-provider-row b{font-size:15px}
+.technical-provider-row span,.technical-provider-row small{font-size:11px}
+.technical-service-card h3{margin:20px 0 9px;font-size:21px;line-height:1.35}
+.technical-service-card>p{min-height:44px;font-size:13px;line-height:1.7}
+.technical-mode-list span,.technical-coverage{font-size:11px}
+.technical-mode-list span{padding:6px 9px}
+.technical-coverage{margin-top:10px;padding:8px 10px}
+.technical-price-row{margin:18px 0 14px}
+.technical-price-row small,.technical-response-list span{font-size:12px;line-height:1.55}
+.technical-response-list{gap:8px;margin-bottom:18px}
+.technical-card-actions{gap:10px}
+.technical-card-actions a{min-height:44px;border-radius:10px;font-size:13px}
+.talent-entry{margin-top:26px;padding:26px 28px}
+.talent-entry>div>span{font-size:11px}
+.talent-entry h3{font-size:22px}
+.talent-entry p,.talent-entry button{font-size:13px}
+.talent-entry button{min-height:44px;padding:0 18px}
+.service-banner-title{font-size:clamp(30px,2.45vw,42px)!important;line-height:1.2}
+.service-banner-title>span:nth-child(2){margin-left:4%;font-size:.9em}
+.service-banner-title>span:nth-child(3){font-size:.84em}
+.technical-detail-header nav a,.technical-detail-header>a:last-child{font-size:13px}
+.technical-breadcrumb{font-size:13px}
+.technical-detail-content>article>p{font-size:14px}
+.technical-content-grid span,.technical-flow li{font-size:13px}
+.technical-provider-panel p{font-size:13px}
+.site-navigation a:focus-visible,.site-navigation button:focus-visible,.channel-switch>button:focus-visible,.technical-card-actions a:focus-visible,.talent-entry button:focus-visible{outline:3px solid #ffbd9e;outline-offset:3px}
+
+/* 技术服务详情页 */
+.technical-detail-page{min-height:100vh;background:#f7f6f2}.technical-detail-header{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:30px;min-height:72px;padding:0 max(4vw,24px);border-bottom:1px solid #e6e7e9;background:#fff}.technical-detail-header nav{display:flex;justify-content:center;gap:8px}.technical-detail-header nav a,.technical-detail-header>a:last-child{padding:9px 10px;color:#68717d;font-size:12px;font-weight:800;text-decoration:none}.technical-detail-header nav a.active{color:#e95b23;box-shadow:inset 0 -2px 0 #ff6b2c}.technical-detail-shell{width:min(1240px,calc(100% - 48px));margin:0 auto 70px}.technical-breadcrumb{display:flex;align-items:center;gap:9px;padding:20px 2px;color:#9298a1;font-size:12px}.technical-breadcrumb a{color:#69717c;text-decoration:none}.technical-breadcrumb b{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#2b3442}.technical-detail-top{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(320px,.7fr);gap:22px}.technical-service-summary,.technical-buy-panel,.technical-detail-content>article,.technical-provider-panel{border:1px solid #e5e7ea;border-radius:18px;background:#fff;box-shadow:0 12px 28px #15203308}.technical-service-summary{min-height:330px;padding:35px;background:radial-gradient(circle at 90% 15%,#fbe1d2 0,transparent 31%),linear-gradient(120deg,#fff,#f9fbff)}.technical-service-summary h1{max-width:720px;margin:12px 0;color:#17223a;font-size:clamp(30px,3vw,46px);letter-spacing:-.035em}.technical-service-summary>p{max-width:650px;color:#6d7783;font-size:15px;line-height:1.75}.technical-detail-modes{display:flex;flex-wrap:wrap;gap:9px;margin-top:25px}.technical-detail-modes button,.technical-detail-modes span{min-height:39px;border:1px solid #d9e2ef;border-radius:10px;background:#fff;padding:0 13px;color:#4c5e73;font-size:12px;font-weight:800}.technical-detail-modes button.active{border-color:#ff6b2c;background:#fff4ed;color:#e65c25}.technical-detail-modes span{display:inline-flex;align-items:center;border-color:#e4e7ea;background:#f7f8fa}.technical-detail-promises{display:flex;flex-wrap:wrap;gap:12px;margin-top:23px}.technical-detail-promises span{display:grid;gap:5px;min-width:190px;padding:12px 14px;border:1px solid #e8eaf0;border-radius:11px;background:#fff;color:#697382;font-size:12px}.technical-detail-promises b{color:#27344b;font-size:13px}.technical-buy-panel{display:flex;flex-direction:column;align-items:stretch;padding:27px}.technical-buy-panel>strong{color:#ea5921;font-size:38px;line-height:1.1}.technical-buy-panel>strong.negotiable{font-size:29px}.technical-buy-panel p{min-height:36px;margin:9px 0 20px;color:#838b95;font-size:12px;line-height:1.55}.technical-buy-panel button{min-height:47px;border:0;border-radius:10px;background:#ff6b2c;color:#fff;font-size:14px;font-weight:900}.technical-buy-panel .technical-outline{margin-bottom:10px;border:1px solid #ff8a5c;background:#fff;color:#e95720}.technical-buy-panel>small{margin-top:15px;color:#9a9fa6;font-size:11px;text-align:center}.technical-detail-content{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,.9fr);gap:20px;margin-top:22px}.technical-detail-content>article{padding:25px}.technical-detail-content>article:nth-child(2){grid-column:1}.technical-detail-content h2{margin:0;color:#202a3d;font-size:19px}.technical-detail-content>article>p{margin:12px 0 0;color:#737d89;font-size:13px;line-height:1.8}.technical-content-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:19px}.technical-content-grid span{padding:12px;border:1px solid #ebedf0;border-radius:10px;color:#596574;font-size:12px;font-weight:700}.technical-flow{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:19px 0 0;padding:0;list-style:none;counter-reset:flow}.technical-flow li{counter-increment:flow;min-height:78px;padding:13px 9px;border-radius:10px;background:#f7f8fa;color:#596574;font-size:12px;font-weight:800;line-height:1.5}.technical-flow li::before{display:block;margin-bottom:5px;color:#ed5c24;font-size:16px;content:counter(flow)}.technical-provider-panel{display:flex;gap:16px;align-self:start;padding:23px}.technical-provider-panel h2{font-size:20px}.technical-provider-panel b{display:block;margin-top:7px;color:#22a566;font-size:11px}.technical-provider-panel p{margin:6px 0;color:#737d89;font-size:12px}.technical-provider-panel small{display:block;color:#9aa0a8;font-size:11px;line-height:1.6}.technical-modal-backdrop{position:fixed;z-index:90;inset:0;display:grid;place-items:center;padding:18px;background:#1519238a;backdrop-filter:blur(4px)}.technical-chat-modal,.technical-appointment-modal{position:relative;width:min(440px,100%);border-radius:18px;background:#fff;padding:25px;box-shadow:0 25px 80px #0005}.technical-chat-modal>header{display:flex;align-items:center;gap:11px;padding-bottom:16px;border-bottom:1px solid #eef0f2}.technical-chat-modal header b,.technical-chat-modal header small{display:block}.technical-chat-modal header b{font-size:14px}.technical-chat-modal header small{margin-top:5px;color:#949aa1;font-size:11px}.technical-chat-history{display:grid;align-content:start;gap:10px;min-height:190px;padding:17px 0}.technical-chat-history p{width:max-content;max-width:85%;margin:0;padding:9px 11px;border-radius:9px 9px 9px 2px;background:#f0f3f6;color:#475362;font-size:12px;line-height:1.55}.technical-chat-history p.mine{justify-self:end;border-radius:9px 9px 2px 9px;background:#fff0e8;color:#c94e1c}.technical-chat-input{display:flex;height:43px;overflow:hidden;border:1px solid #dfe3e7;border-radius:9px}.technical-chat-input input{min-width:0;flex:1;border:0;outline:0;padding:0 11px}.technical-chat-input button{width:66px;border:0;background:#ff6b2c;color:#fff;font-size:12px;font-weight:900}.technical-prototype-note{display:block;margin-top:10px;color:#9aa0a8;font-size:10px;line-height:1.55}.technical-appointment-modal{text-align:center}.technical-appointment-modal>span{display:grid;place-items:center;width:45px;height:45px;margin:0 auto 13px;border-radius:50%;background:#eaf7ef;color:#20a568;font-size:22px;font-weight:900}.technical-appointment-modal h2{margin:0;color:#202a3d;font-size:22px}.technical-appointment-modal p{margin:12px 0 20px;color:#737d89;font-size:13px;line-height:1.75}.technical-appointment-modal>button{width:100%;min-height:43px;border:0;border-radius:9px;background:#ff6b2c;color:#fff;font-size:13px;font-weight:900}
+
+@media(max-width:1120px){.compact-topbar{gap:15px}.site-navigation{justify-content:flex-start;overflow:auto}.site-navigation a,.site-navigation button{padding:0 8px;font-size:11px}.technical-services-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.technical-detail-top{grid-template-columns:1fr}.technical-detail-content{grid-template-columns:1fr}.technical-detail-content>article:nth-child(2){grid-column:auto}.technical-provider-panel{grid-row:auto}}
+@media(max-width:720px){.compact-topbar,.compact-topbar.has-admin-entry{grid-template-columns:1fr auto;gap:8px;min-height:108px;padding:10px 16px}.compact-topbar.has-admin-entry{min-height:138px}.site-navigation{grid-column:1/-1;grid-row:2;width:100%;justify-content:flex-start;padding-bottom:2px}.compact-topbar.has-admin-entry .admin-entry{grid-column:1/-1;grid-row:3;justify-self:start;padding:0;font-size:12px}.channel-switch{grid-template-columns:1fr;gap:10px;margin-top:12px}.channel-switch>button{grid-template-columns:44px minmax(0,1fr) auto;min-height:86px;padding:14px}.channel-icon{width:43px;height:43px;border-radius:13px;font-size:21px}.channel-switch b{font-size:17px}.channel-switch small{font-size:10px}.channel-switch em{padding:7px 8px;font-size:10px}.technical-services-section{padding-top:27px}.technical-services-heading{align-items:flex-start;gap:10px;flex-direction:column;margin-bottom:15px}.technical-services-heading h2{font-size:22px}.technical-services-grid{grid-template-columns:1fr}.technical-service-card{padding:17px}.talent-entry{align-items:flex-start;flex-direction:column;padding:21px}.technical-detail-header{grid-template-columns:1fr auto;gap:8px;min-height:110px;padding:10px 16px}.technical-detail-header nav{grid-column:1/-1;grid-row:2;justify-content:flex-start;overflow:auto}.technical-detail-header>a:last-child{justify-self:end}.technical-detail-shell{width:calc(100% - 28px);margin-bottom:45px}.technical-breadcrumb{padding:16px 1px;font-size:11px}.technical-service-summary{min-height:0;padding:25px 19px}.technical-service-summary h1{font-size:30px}.technical-detail-promises{display:grid;grid-template-columns:1fr}.technical-detail-promises span{min-width:0}.technical-buy-panel{padding:22px}.technical-detail-content{margin-top:14px}.technical-detail-content>article,.technical-provider-panel{padding:19px}.technical-content-grid,.technical-flow{grid-template-columns:1fr 1fr}.technical-provider-panel{align-items:flex-start}.technical-detail-modes button,.technical-detail-modes span{font-size:11px}.technical-chat-modal,.technical-appointment-modal{padding:22px 18px}}
+
+@media(max-width:1150px){
+  .compact-topbar.has-admin-entry{grid-template-columns:auto minmax(0,1fr) auto;min-height:104px;padding-block:9px}
+  .compact-topbar.has-admin-entry .admin-entry{grid-column:2;grid-row:2;justify-self:center;font-size:13px}
+  .compact-topbar.has-admin-entry .account-actions{grid-column:3;grid-row:1}
+  .site-navigation{justify-content:flex-start}
+}
+@media(max-width:720px){
+  .compact-topbar,.compact-topbar.has-admin-entry{grid-template-columns:minmax(0,1fr) auto;min-height:112px;padding:10px 16px}
+  .compact-topbar.has-admin-entry{min-height:146px}
+  .compact-topbar .account-actions,.compact-topbar.has-admin-entry .account-actions{grid-column:2;grid-row:1}
+  .site-navigation{grid-column:1/-1;grid-row:2;justify-content:flex-start;gap:5px;width:100%;padding:1px 0 3px}
+  .site-navigation a,.site-navigation button{min-height:36px;height:36px;padding:0 10px;font-size:12px}
+  .compact-topbar.has-admin-entry .admin-entry{grid-column:1/-1;grid-row:3;justify-self:start;padding:2px 0 0;font-size:12px}
+  .channel-switch{gap:11px;margin-top:14px}
+  .channel-switch>button{min-height:92px;padding:15px;gap:12px}
+  .channel-switch b{font-size:18px}
+  .channel-switch small{font-size:11px}
+  .channel-switch em{min-width:68px;padding:8px 7px;font-size:10px}
+  .technical-services-section{padding-top:30px}
+  .technical-services-heading h2{font-size:24px}
+  .technical-services-heading p,.technical-services-heading>span{font-size:12px}
+  .technical-service-card{padding:18px}
+  .technical-service-card h3{font-size:20px}
+  .technical-service-card>p{min-height:0;font-size:13px}
+  .technical-card-actions a{min-height:43px;font-size:12px}
+  .talent-entry{padding:22px}
+}
+@media(max-width:430px){
+  .channel-switch>button{grid-template-columns:42px minmax(0,1fr);min-height:88px}
+  .channel-switch em{display:none}
+  .technical-card-actions{grid-template-columns:1fr}
+}
+
+/* 技术服务卡片：整卡详情入口与稳定的价格区 */
+.technical-service-card{position:relative;isolation:isolate;transition:border-color .2s ease,box-shadow .2s ease}
+.technical-service-card:hover{transform:none;border-color:#ffb493;box-shadow:0 18px 34px #18202b12}
+.technical-card-hitarea{position:absolute;z-index:1;inset:0;border-radius:inherit;cursor:pointer}
+.technical-card-hitarea:focus-visible{outline:3px solid #ffbd9e;outline-offset:3px}
+.technical-price-row{min-height:40px;align-items:center}
+.technical-price-row strong{display:block;white-space:nowrap;font-variant-numeric:tabular-nums}
+.technical-card-actions{position:relative;z-index:2}
+
+/* 技术服务详情：按已确认的“主服务 + 购买 + 技术人员 + 内容标签”结构重排 */
+.technical-detail-shell{width:min(1510px,calc(100% - 56px));margin:0 auto 76px}
+.technical-detail-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(340px,400px);align-items:start;gap:24px}
+.technical-detail-primary{display:grid;gap:22px;min-width:0}
+.technical-detail-sidebar{display:grid;align-self:start;gap:18px;position:sticky;top:92px}
+.technical-service-summary{position:relative;display:block;min-height:448px;overflow:hidden;padding:34px;border:1px solid #e1e8f2;border-radius:20px;background:radial-gradient(circle at 80% 13%,#ffdac969 0,transparent 27%),linear-gradient(118deg,#fff 0%,#f7fbff 64%,#fff3ec 100%);box-shadow:0 16px 36px #1520330a}
+.technical-summary-copy{position:relative;z-index:2;width:min(58%,690px)}
+.technical-service-label{display:grid;grid-template-columns:auto 1fr;column-gap:10px;align-items:center}
+.technical-service-label>span{grid-column:1/-1;margin-bottom:5px;color:#ff7240;font-size:11px;font-weight:900;letter-spacing:.16em}
+.technical-service-label>b{color:#132747;font-size:20px}
+.technical-service-label small{color:#71809a;font-size:13px}
+.technical-provider-inline{display:none}
+.technical-service-summary h1{max-width:none;margin:27px 0 13px;color:#10244a;font-size:clamp(34px,3.25vw,54px);line-height:1.15;letter-spacing:-.045em}
+.technical-service-summary>p{max-width:620px;margin:0;color:#4e6687;font-size:18px;font-weight:600;line-height:1.65}
+.technical-detail-modes{position:relative;z-index:3;margin-top:28px;gap:10px}
+.technical-detail-modes button,.technical-detail-modes span{display:inline-flex;align-items:center;min-height:44px;border:0;border-radius:999px;background:#f0f6ff;padding:0 18px;color:#2368d6;font-size:14px;font-weight:800}
+.technical-detail-modes button.active{border:0;background:#eaf2ff;color:#1762d4;box-shadow:0 5px 14px #2370d318}
+.technical-detail-modes span{background:#f5f8fd;color:#526986}
+.technical-service-illustration{position:absolute;z-index:1;right:-2%;top:2%;width:54%;height:74%;pointer-events:none}
+.technical-service-illustration img{object-fit:contain;object-position:center right;filter:drop-shadow(0 18px 22px #1a66b426)}
+.technical-response-highlights{position:absolute;z-index:3;left:34px;bottom:31px;display:flex;gap:13px}
+.technical-response-highlights span{display:grid;gap:4px;min-width:210px;border:1px solid #e2e9f4;border-radius:12px;background:#ffffffd9;padding:13px 16px;box-shadow:0 8px 17px #193f6d08}
+.technical-response-highlights b{color:#61708a;font-size:13px}
+.technical-response-highlights strong{color:#10244a;font-size:22px;line-height:1.1}
+
+.technical-buy-panel{display:grid;align-content:start;gap:13px;min-height:0;padding:28px;border:1px solid #e3e8ef;border-radius:18px;background:#fff;box-shadow:0 12px 28px #15203308}
+.technical-buy-kicker{color:#63728a;font-size:13px;font-weight:800}
+.technical-price{display:flex;align-items:baseline;min-height:56px;gap:4px;white-space:nowrap;color:#ff5d22;line-height:1}
+.technical-price>span{font-size:27px;font-weight:900}
+.technical-price>b{font-size:54px;font-weight:900;letter-spacing:-.045em}
+.technical-price em{color:#60708a;font-size:20px;font-style:normal;font-weight:800}
+.technical-price-negotiable>b{font-size:36px;letter-spacing:0}
+.technical-buy-panel p{min-height:0;margin:0;color:#6b7b92;font-size:15px;line-height:1.55}
+.technical-buy-panel button{order:4;min-height:50px;border:0;border-radius:10px;background:#ff642a;color:#fff;font-size:16px;font-weight:900;transition:background .2s ease,box-shadow .2s ease}
+.technical-buy-panel button:hover{background:#ee551e;box-shadow:0 9px 18px #ff642a30}
+.technical-buy-panel .technical-outline{order:5;margin:0;border:1px solid #ff8052;background:#fff;color:#ea5722}
+.technical-buy-panel>small{order:6;margin:2px 0 0;color:#97a0ad;font-size:12px;text-align:center}
+
+.technical-provider-panel,.technical-provider-more,.technical-detail-tabs{border:1px solid #e3e8ef;border-radius:18px;background:#fff;box-shadow:0 12px 28px #15203308}
+.technical-provider-panel{display:grid;gap:17px;padding:23px}
+.technical-provider-panel>header,.technical-provider-more>header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.technical-provider-panel>header>b,.technical-provider-more>header>b{color:#172b4e;font-size:17px}
+.technical-provider-panel>header a,.technical-provider-more>header a{color:#1766d7;font-size:12px;font-weight:800;text-decoration:none;white-space:nowrap}
+.technical-provider-profile{display:flex;align-items:flex-start;gap:14px}
+.technical-provider-profile h2{margin:1px 0 6px;color:#1a2b47;font-size:21px}
+.technical-provider-profile b{display:block;color:#20a266;font-size:12px}
+.technical-provider-profile p{margin:5px 0;color:#6d7b8f;font-size:13px}
+.technical-provider-profile small{display:block;color:#8490a1;font-size:12px;line-height:1.5}
+.technical-provider-intro{margin:0;color:#63748b;font-size:13px;line-height:1.75}
+.technical-provider-more{display:grid;gap:11px;padding:21px}
+.technical-provider-more>a{display:flex;align-items:center;justify-content:space-between;gap:13px;border:1px solid #eaf0f6;border-radius:11px;padding:13px;color:inherit;text-decoration:none}
+.technical-provider-more>a:hover{border-color:#ffb497;background:#fffaf8}
+.technical-provider-more>a span{display:grid;gap:4px;min-width:0}
+.technical-provider-more>a b{overflow:hidden;color:#223653;font-size:13px;text-overflow:ellipsis;white-space:nowrap}
+.technical-provider-more>a small{overflow:hidden;color:#8794a6;font-size:11px;text-overflow:ellipsis;white-space:nowrap}
+.technical-provider-more>a em{flex:none;color:#ef5a23;font-size:13px;font-style:normal;font-weight:900;white-space:nowrap}
+
+.technical-detail-tabs{overflow:hidden}
+.technical-detail-tabs>nav{display:flex;gap:28px;border-bottom:1px solid #e6edf5;padding:0 27px}
+.technical-detail-tabs>nav button{position:relative;min-height:62px;border:0;background:transparent;color:#65748c;font-size:16px;font-weight:800}
+.technical-detail-tabs>nav button.active{color:#f15b25}
+.technical-detail-tabs>nav button.active::after{position:absolute;right:0;bottom:0;left:0;height:3px;border-radius:99px;background:#ff642a;content:""}
+.technical-tab-panel{padding:28px}
+.technical-tab-panel h2{margin:0;color:#172b4e;font-size:25px}
+.technical-tab-panel>p{margin:12px 0 0;color:#62758e;font-size:15px;line-height:1.8}
+.technical-feature-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:21px}
+.technical-feature-grid article{display:grid;gap:8px;min-height:118px;border:1px solid #e4ecf6;border-radius:12px;background:linear-gradient(135deg,#fff,#f7fbff);padding:17px}
+.technical-feature-grid b{color:#1d3559;font-size:15px}
+.technical-feature-grid span{color:#71829a;font-size:12px;line-height:1.65}
+.technical-flow{grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:21px}
+.technical-flow li{min-height:102px;background:#f5f8fc;color:#52657d;font-size:13px}
+.technical-flow li::before{font-size:18px}
+.technical-delivery-list{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:21px}
+.technical-delivery-list span{display:grid;gap:10px;border:1px solid #e4ecf6;border-radius:12px;padding:17px;color:#5d708a;font-size:14px;font-weight:800}
+.technical-delivery-list b{color:#f35d26;font-size:20px}
+
+@media(max-width:1180px){
+  .technical-detail-layout{grid-template-columns:1fr}
+  .technical-detail-sidebar{grid-template-columns:repeat(2,minmax(0,1fr));position:static}
+  .technical-provider-more{grid-column:1/-1}
+}
+@media(max-width:760px){
+  .technical-detail-shell{width:calc(100% - 28px);margin-bottom:46px}
+  .technical-detail-layout{gap:14px}
+  .technical-service-summary{min-height:570px;padding:24px 20px}
+  .technical-summary-copy{width:100%}
+  .technical-service-label>b{font-size:18px}
+  .technical-service-label small{font-size:12px}
+  .technical-service-summary h1{margin-top:22px;font-size:clamp(31px,9vw,42px)}
+  .technical-service-summary>p{font-size:15px}
+  .technical-service-illustration{right:-14%;top:34%;width:92%;height:45%;opacity:.6}
+  .technical-detail-modes{margin-top:20px}
+  .technical-detail-modes button,.technical-detail-modes span{min-height:39px;padding:0 13px;font-size:12px}
+  .technical-response-highlights{right:20px;bottom:20px;left:20px;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .technical-response-highlights span{min-width:0;padding:11px 12px}
+  .technical-response-highlights b{font-size:11px}
+  .technical-response-highlights strong{font-size:16px}
+  .technical-detail-sidebar{grid-template-columns:1fr;gap:14px}
+  .technical-provider-more{grid-column:auto}
+  .technical-buy-panel{padding:22px}
+  .technical-price>b{font-size:47px}
+  .technical-detail-tabs>nav{gap:20px;overflow-x:auto;padding:0 18px}
+  .technical-detail-tabs>nav button{min-height:54px;flex:none;font-size:14px}
+  .technical-tab-panel{padding:22px 18px}
+  .technical-tab-panel h2{font-size:22px}
+  .technical-tab-panel>p{font-size:14px}
+  .technical-feature-grid,.technical-delivery-list{grid-template-columns:1fr;gap:9px}
+  .technical-feature-grid article{min-height:0;padding:15px}
+  .technical-flow{grid-template-columns:1fr 1fr}
+}
+
+/* 本轮：在线沟通是明确的卡片主入口；指定地点在支付后预约。 */
+.technical-coverage{display:grid;gap:3px}
+.technical-coverage span{color:#586573}
+.technical-coverage small{color:#8a96a5;font-size:10px;font-weight:700;line-height:1.45}
+.technical-card-actions{grid-template-columns:minmax(0,1.32fr) minmax(0,1fr);gap:10px}
+.technical-card-actions .technical-card-consult,.technical-card-actions .technical-card-purchase{min-height:52px;text-decoration:none}
+.technical-card-actions .technical-card-consult{display:flex;align-items:center;justify-content:space-between;gap:10px;border:0;border-radius:11px;background:linear-gradient(120deg,#1767d8,#327de4);padding:0 13px;color:#fff;box-shadow:0 10px 20px #1f6ed238}
+.technical-card-actions .technical-card-consult>span{display:grid;gap:3px;text-align:left}
+.technical-card-actions .technical-card-consult b{font-size:14px;line-height:1.1}
+.technical-card-actions .technical-card-consult small{color:#dceaff;font-size:10px;font-weight:700;line-height:1.2;white-space:nowrap}
+.technical-card-actions .technical-card-consult em{display:flex;align-items:center;gap:5px;color:#fff;font-size:10px;font-style:normal;font-weight:900;white-space:nowrap}
+.technical-card-actions .technical-card-consult i{font-size:16px;font-style:normal;line-height:1}
+.technical-card-actions .technical-card-purchase{display:grid;place-items:center;border:0;border-radius:11px;background:#ff642a;color:#fff;font-size:13px;font-weight:900;box-shadow:0 9px 18px #ff642a2b}
+.technical-card-actions .technical-card-purchase:hover,.technical-card-actions .technical-card-consult:hover{filter:brightness(.96);transform:translateY(-1px)}
+
+/* 金额、币种、计费单位分开布局，避免字体或卡片宽度变化时彼此挤压。 */
+.technical-price-row{min-height:46px;align-items:baseline;gap:9px}
+.technical-card-price{display:inline-flex;align-items:baseline;min-width:0;color:#ee5b22;font-variant-numeric:tabular-nums;line-height:1;white-space:nowrap}
+.technical-card-price i{font-size:18px;font-style:normal;font-weight:900}
+.technical-card-price b{font-size:31px;font-weight:900;letter-spacing:-.025em}
+.technical-card-price em{margin-left:4px;color:#708096;font-size:14px;font-style:normal;font-weight:800}
+.technical-price{max-width:100%;min-width:0;font-variant-numeric:tabular-nums}
+.technical-price>*{flex:none}
+.technical-price>b{font-size:clamp(40px,4.1vw,54px)}
+.technical-price em{align-self:flex-end;padding-bottom:5px}
+
+.technical-post-order-note{position:relative;z-index:3;max-width:560px;margin:12px 0 0;color:#667b96;font-size:12px;font-weight:700;line-height:1.6}
+.technical-post-order-note::before{margin-right:6px;color:#f06029;content:"●"}
+.technical-buy-panel .technical-consult-cta{display:flex;align-items:center;justify-content:space-between;gap:12px;border-color:#1767d8;background:#f3f8ff;color:#1767d8}
+.technical-buy-panel .technical-consult-cta:hover{background:#eaf3ff;box-shadow:0 8px 16px #1767d820}
+.technical-buy-panel .technical-consult-cta small{color:#4c7ac6;font-size:12px;font-weight:800}
+
+@media(max-width:430px){
+  .technical-card-actions{grid-template-columns:1fr}
+  .technical-card-actions .technical-card-consult,.technical-card-actions .technical-card-purchase{min-height:50px}
+}
+
+/* 技术服务卡片：按“服务者 / 主服务 / 服务范围 / 商业信息 / 行动”分层。 */
+.technical-service-card{padding:20px;overflow:hidden}
+.technical-card-header{padding-bottom:16px;border-bottom:1px solid #edf0f4}
+.technical-card-service{padding:17px 0 14px}
+.technical-card-service h3{margin:0;color:#182b4b;font-size:21px;line-height:1.34}
+.technical-card-service p{min-height:42px;margin:8px 0 0;color:#718098;font-size:13px;line-height:1.65}
+.technical-card-meta{display:grid;gap:9px;padding:13px 0;border-top:1px solid #f0f2f5;border-bottom:1px solid #edf0f4}
+.technical-card-meta .technical-mode-list{margin:0;gap:7px}
+.technical-card-meta .technical-mode-list span{border:1px solid #dce9ff;background:#f4f8ff;color:#2368c8}
+.technical-card-meta .technical-coverage{margin:0;border:1px solid #edf0f4;background:#f8fafc}
+.technical-card-commercial{display:grid;grid-template-columns:minmax(0,1fr) minmax(138px,.9fr);align-items:center;gap:14px;padding:14px 0 16px}
+.technical-card-commercial .technical-price-row{min-height:44px;margin:0;gap:7px}
+.technical-card-commercial .technical-response-list{gap:5px;margin:0}
+.technical-card-commercial .technical-response-list span{font-size:11px;line-height:1.45}
+.technical-card-actions{grid-template-columns:1fr;gap:9px;margin-top:auto}
+.technical-card-actions .technical-card-consult,.technical-card-actions .technical-card-purchase{width:100%;min-height:48px;font:inherit}
+.technical-card-actions .technical-card-consult{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;text-align:left;cursor:pointer}
+.technical-card-actions .technical-card-consult small{white-space:normal}
+.technical-card-actions .technical-card-purchase{min-height:44px;background:#ff6a30}
+
+/* 多会话技术支持窗口：真实消息与授权数据后续由服务端接入。 */
+.technical-chat-backdrop{position:fixed;z-index:120;inset:0;display:grid;place-items:center;padding:24px;background:#14213a80;backdrop-filter:blur(5px)}
+.technical-support-chat{display:grid;grid-template-columns:250px minmax(0,1fr) 250px;width:min(1160px,100%);height:min(680px,calc(100vh - 48px));overflow:hidden;border:1px solid #dce5ef;border-radius:20px;background:#fff;box-shadow:0 28px 80px #07142d40}
+.technical-chat-sidebar{display:grid;grid-template-rows:auto minmax(0,1fr);min-width:0;border-right:1px solid #e6ebf1;background:#f7f9fc}
+.technical-chat-sidebar>header{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;padding:22px 18px 17px;border-bottom:1px solid #e7ebf0}
+.technical-chat-sidebar>header span,.technical-chat-sidebar>header b{display:block}
+.technical-chat-sidebar>header span{margin-bottom:5px;color:#f0642b;font-size:10px;font-weight:900;letter-spacing:.14em}
+.technical-chat-sidebar>header b{color:#1b2b45;font-size:16px}
+.technical-chat-sidebar>header small{color:#8592a4;font-size:11px;white-space:nowrap}
+.technical-chat-thread-list{display:grid;align-content:start;gap:4px;overflow:auto;padding:10px}
+.technical-chat-thread-list>button{display:flex;align-items:center;gap:10px;width:100%;border:0;border-radius:11px;background:transparent;padding:11px 9px;color:inherit;text-align:left;cursor:pointer;font:inherit}
+.technical-chat-thread-list>button:hover,.technical-chat-thread-list>button.active{background:#e8f1ff}
+.technical-chat-thread-list>button>span:last-child{display:grid;gap:4px;min-width:0}
+.technical-chat-thread-list b{color:#223653;font-size:13px}
+.technical-chat-thread-list small{overflow:hidden;color:#8090a4;font-size:11px;text-overflow:ellipsis;white-space:nowrap}
+.technical-chat-main{display:grid;grid-template-rows:auto minmax(0,1fr) auto;min-width:0;background:#fff}
+.technical-chat-main-header{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;min-height:83px;border-bottom:1px solid #e8edf2;padding:19px 24px}
+.technical-chat-main-header>div{display:grid;gap:4px}
+.technical-chat-main-header b{color:#172b4a;font-size:17px}
+.technical-chat-main-header span{color:#1f9c62;font-size:11px;font-weight:800}
+.technical-chat-main-header small{color:#8390a2;font-size:11px}
+.technical-chat-main-header .modal-close{position:static;flex:none}
+.technical-chat-messages{display:grid;align-content:start;gap:12px;overflow:auto;padding:20px 24px;background:linear-gradient(180deg,#fbfcfe,#fff)}
+.technical-chat-notice{margin-bottom:3px;border:1px solid #e8edf3;border-radius:9px;background:#f5f8fc;padding:9px 11px;color:#7b899b;font-size:11px;line-height:1.55}
+.technical-chat-message{display:grid;justify-items:start;gap:4px;max-width:76%}
+.technical-chat-message>span{border-radius:12px 12px 12px 3px;background:#eff3f8;padding:10px 12px;color:#43536a;font-size:13px;line-height:1.6}
+.technical-chat-message.mine{justify-self:end;justify-items:end}
+.technical-chat-message.mine>span{border-radius:12px 12px 3px 12px;background:#eaf3ff;color:#1762c7}
+.technical-chat-message small{color:#a2adbb;font-size:10px}
+.technical-contact-protection{display:grid;align-content:start;gap:17px;min-width:0;border-left:1px solid #e6ebf1;background:#f8fafc;padding:22px 18px}
+.technical-contact-protection>header{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.technical-contact-protection>header div{display:grid;gap:3px}
+.technical-contact-protection>header div>span{color:#f0642b;font-size:10px;font-weight:900;letter-spacing:.13em}
+.technical-contact-protection>header b{color:#2a3c57;font-size:16px}
+.technical-contact-protection>header small{color:#8795a7;font-size:11px}
+.technical-contact-protection>header>em{flex:none;border-radius:999px;background:#f1f3f5;padding:4px 7px;color:#7c8794;font-size:10px;font-style:normal;font-weight:900}
+.technical-contact-protection>header>em.requested{background:#fff3e8;color:#e9652f}
+.technical-contact-protection>header>em.approved{background:#e8f7ee;color:#1f9a5e}
+.technical-contact-preview{display:grid;justify-items:center;gap:13px;border-top:1px solid #e6ebf1;border-bottom:1px solid #e6ebf1;padding:17px 0}
+.technical-contact-qr{display:grid;place-items:center;width:126px;height:126px;overflow:hidden;border-radius:10px;background-color:#e7ebf0;background-image:linear-gradient(90deg,#617084 25%,transparent 25%,transparent 75%,#617084 75%),linear-gradient(90deg,#617084 25%,transparent 25%,transparent 75%,#617084 75%);background-position:0 0,8px 8px;background-size:16px 16px}
+.technical-contact-qr span,.technical-contact-qr small{position:relative;z-index:1;padding:1px 4px;background:#ffffffd9;color:#52627a;font-size:9px;font-weight:900;text-align:center}
+.technical-contact-preview>div:not(.technical-contact-qr){display:grid;justify-items:center;gap:5px;min-width:0}
+.technical-contact-preview>div:not(.technical-contact-qr)>span{color:#8694a5;font-size:11px}
+.technical-contact-preview>div:not(.technical-contact-qr)>b{color:#354762;font-size:15px;letter-spacing:.08em}
+.technical-contact-preview>p{margin:0;color:#8593a5;font-size:10px;line-height:1.65;text-align:center}
+.technical-contact-protection>button{justify-self:stretch;min-height:39px;border:1px solid #2b72d5;border-radius:9px;background:#fff;padding:0 10px;color:#1e69cb;font-size:12px;font-weight:900;cursor:pointer}
+.technical-contact-pending{margin:0;color:#e56830;font-size:11px;font-weight:800;line-height:1.5}
+.technical-chat-composer{display:flex;gap:9px;border-top:1px solid #edf0f3;padding:15px 24px}
+.technical-chat-composer input{min-width:0;flex:1;border:1px solid #dfe6ef;border-radius:9px;outline:0;padding:0 12px;color:#34455f;font-size:13px}
+.technical-chat-composer input:focus{border-color:#5090e7;box-shadow:0 0 0 3px #5090e718}
+.technical-chat-composer button{min-width:74px;border:0;border-radius:9px;background:#2474dc;color:#fff;font-size:13px;font-weight:900;cursor:pointer}
+
+@media(max-width:720px){
+  .technical-card-commercial{grid-template-columns:1fr;gap:8px}
+  .technical-chat-backdrop{padding:12px}
+  .technical-support-chat{grid-template-columns:1fr;height:min(820px,calc(100vh - 24px));overflow:auto;border-radius:16px}
+  .technical-chat-sidebar{grid-template-rows:auto minmax(0,1fr);border-right:0;border-bottom:1px solid #e6ebf1}
+  .technical-chat-sidebar>header{padding:13px 15px 10px}
+  .technical-chat-thread-list{display:flex;gap:7px;overflow:auto;padding:7px 10px}
+  .technical-chat-thread-list>button{min-width:166px;padding:8px}
+  .technical-chat-main{grid-template-rows:auto minmax(260px,1fr) auto;min-height:460px}
+  .technical-chat-main-header{min-height:70px;padding:14px 16px}
+  .technical-chat-messages{padding:15px 16px}
+  .technical-contact-protection{border-top:1px solid #e6ebf1;border-left:0;padding:17px 16px}
+  .technical-contact-preview{grid-template-columns:92px minmax(0,1fr);justify-items:start;column-gap:13px;padding:13px 0}
+  .technical-contact-qr{width:86px;height:86px;grid-row:1/3;background-position:0 0,7px 7px;background-size:14px 14px}
+  .technical-contact-preview>div:not(.technical-contact-qr){justify-items:start}
+  .technical-contact-preview>p{text-align:left}
+  .technical-chat-composer{padding:12px 16px}
+}
+
+/* 已确认的技术服务卡片：头像、能力、服务信息与三个明确入口。 */
+.technical-reference-card{position:relative;isolation:isolate;display:flex;min-width:0;min-height:456px;flex-direction:column;border:1px solid #dfe6ee;border-radius:16px;background:#fff;padding:16px;box-shadow:0 10px 26px #17253c0a;transition:border-color .2s ease,box-shadow .2s ease}
+.technical-reference-card:hover{border-color:#ffad8e;box-shadow:0 18px 36px #17253c12}
+.technical-reference-card-header{display:grid;grid-template-columns:96px minmax(0,1fr) auto;align-items:start;gap:12px;min-height:96px}
+.technical-reference-card-avatar{width:96px;height:96px;border-radius:12px;object-fit:cover;background:#e8edf3;box-shadow:0 7px 16px #17253c17}
+.technical-reference-card-provider{display:grid;align-content:start;gap:5px;min-width:0;padding-top:2px}
+.technical-reference-card-provider>div{display:flex;align-items:center;flex-wrap:wrap;gap:6px}
+.technical-reference-card-provider b{color:#172946;font-size:18px;line-height:1.2}
+.technical-reference-card-provider span{border-radius:999px;background:#fff0e9;padding:3px 6px;color:#ef642c;font-size:10px;font-weight:900;line-height:1}
+.technical-reference-card-provider p{margin:0;color:#77879b;font-size:12px;line-height:1.4}
+.technical-reference-card-provider small{color:#60718a;font-size:12px;line-height:1.45}
+.technical-reference-card-header>em{border-radius:999px;background:#eaf8ef;padding:5px 8px;color:#1d9a5c;font-size:10px;font-style:normal;font-weight:900;line-height:1;white-space:nowrap}
+.technical-reference-card-service{padding:17px 0 13px}
+.technical-reference-card-service h3{margin:0;color:#162946;font-size:20px;line-height:1.35;letter-spacing:-.02em}
+.technical-reference-card-service p{min-height:40px;margin:8px 0 0;color:#708197;font-size:13px;line-height:1.55}
+.technical-reference-card-skills{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.technical-reference-card-skills span{border-radius:6px;background:#edf5ff;padding:5px 8px;color:#3170c9;font-size:10px;font-weight:800;line-height:1}
+.technical-reference-card-service-info{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:14px;margin-top:auto;border-top:1px solid #edf0f3;padding:13px 0}
+.technical-reference-card-delivery{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.technical-reference-card-delivery>span{border:1px solid #deebff;border-radius:7px;background:#f5f9ff;padding:5px 7px;color:#2868bf;font-size:10px;font-weight:800;line-height:1}
+.technical-reference-card-delivery>small{width:100%;color:#76879a;font-size:10px;font-weight:700;line-height:1.45}
+.technical-reference-card-price{display:grid;justify-items:end;gap:4px;min-width:102px}
+.technical-reference-card-price .technical-card-price{color:#f25c25}
+.technical-reference-card-price .technical-card-price i{font-size:16px}
+.technical-reference-card-price .technical-card-price b{font-size:27px}
+.technical-reference-card-price .technical-card-price em{font-size:12px}
+.technical-reference-card-price strong{color:#f25c25;font-size:20px;line-height:1.25;white-space:nowrap}
+.technical-reference-card-price small{color:#8391a1;font-size:10px;line-height:1.35;text-align:right}
+.technical-reference-card-actions{position:relative;z-index:2;display:grid;gap:8px}
+.technical-reference-card-consult{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:46px;border:0;border-radius:9px;background:linear-gradient(104deg,#174f9f,#2776d9);padding:0 13px;color:#fff;cursor:pointer;font:inherit;transition:background .2s ease,box-shadow .2s ease}
+.technical-reference-card-consult:hover{background:linear-gradient(104deg,#12478f,#1e67c6);box-shadow:0 9px 18px #1e65c42b}
+.technical-reference-card-consult>span{display:grid;gap:2px;text-align:left}
+.technical-reference-card-consult b{font-size:13px;line-height:1.2}
+.technical-reference-card-consult small{color:#dceaff;font-size:10px;font-weight:700;line-height:1.2}
+.technical-reference-card-consult em{color:#f4f8ff;font-size:10px;font-style:normal;font-weight:900;white-space:nowrap}
+.technical-reference-card-secondary-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.technical-reference-card-secondary-actions a{display:grid;place-items:center;min-height:42px;border:1px solid #ff946c;border-radius:9px;background:#fff;color:#ee602a;font-size:12px;font-weight:900;text-decoration:none;transition:border-color .2s ease,background .2s ease,color .2s ease}
+.technical-reference-card-secondary-actions a.primary{border-color:#ff682e;background:#ff682e;color:#fff}
+.technical-reference-card-secondary-actions a:hover{border-color:#ef5c27;background:#fff4ef;color:#df4f1a}
+.technical-reference-card-secondary-actions a.primary:hover{background:#ef5c27;color:#fff}
+.technical-reference-card button:focus-visible,.technical-reference-card a:focus-visible{outline:3px solid #ffbd9e;outline-offset:3px}
+
+/* 技术服务详情：左侧人员档案，右侧以当前服务与购买为首个标签。 */
+.technical-detail-layout-legacy{display:none!important}
+.technical-provider-detail-shell{width:min(1510px,calc(100% - 56px));margin:0 auto 76px}
+.technical-provider-detail-banner{position:relative;isolation:isolate;min-height:154px;overflow:hidden;border-radius:18px;background:linear-gradient(108deg,#07152c,#112f57 58%,#32185a)}
+.technical-provider-detail-banner::after{position:absolute;z-index:-1;inset:0;background:linear-gradient(90deg,#07152cf4 0%,#0b1b39dc 43%,#10275468 72%,#2e185c48);content:""}
+.technical-provider-detail-banner img{z-index:-2;object-fit:cover;object-position:right center;opacity:.72}
+.technical-provider-detail-banner>div{position:relative;z-index:1;display:grid;align-content:center;min-height:154px;max-width:760px;padding:24px 48px;color:#fff}
+.technical-provider-detail-banner span{color:#ff8d62;font-size:10px;font-weight:900;letter-spacing:.18em}
+.technical-provider-detail-banner h1{margin:9px 0 7px;font-size:clamp(25px,2.2vw,35px);line-height:1.25;letter-spacing:-.035em}
+.technical-provider-detail-banner p{margin:0;color:#d2dfef;font-size:14px;font-weight:700}
+.technical-provider-detail-layout{display:grid;grid-template-columns:310px minmax(0,1fr);align-items:start;gap:20px;margin-top:18px}
+.technical-provider-profile-card,.technical-provider-detail-main{border:1px solid #e2e8ef;border-radius:16px;background:#fff;box-shadow:0 12px 30px #162b4709}
+.technical-provider-profile-card{display:grid;align-content:start;gap:15px;position:sticky;top:0;overflow:hidden;padding:17px}
+.technical-provider-portrait-wrap{position:relative;height:235px;overflow:hidden;border-radius:12px;background:#e9eef3}
+.technical-provider-portrait-wrap img{object-fit:cover;object-position:center top}
+.technical-provider-portrait-wrap span{position:absolute;right:10px;top:10px;border-radius:999px;background:#ebfaef;padding:6px 9px;color:#209e5f;font-size:10px;font-weight:900;box-shadow:0 4px 12px #14361d18}
+.technical-provider-profile-card>header{display:grid;gap:4px}
+.technical-provider-profile-card>header>div{display:flex;align-items:center;gap:7px}
+.technical-provider-profile-card h2{margin:0;color:#172946;font-size:24px;line-height:1.2}
+.technical-provider-profile-card>header b{border-radius:999px;background:#fff0e9;padding:4px 7px;color:#ef632c;font-size:10px;line-height:1}
+.technical-provider-profile-card>header p{margin:0;color:#718197;font-size:13px}
+.technical-provider-profile-card>header small{color:#50667f;font-size:13px;line-height:1.55}
+.technical-provider-profile-intro{margin:0;color:#61728a;font-size:13px;line-height:1.75}
+.technical-provider-skill-tags{display:flex;flex-wrap:wrap;gap:7px}
+.technical-provider-skill-tags span{border-radius:7px;background:#edf5ff;padding:6px 8px;color:#2e6ec8;font-size:11px;font-weight:800;line-height:1}
+.technical-provider-sla-list{display:grid;gap:9px}
+.technical-provider-sla-list article{display:grid;gap:4px;border-radius:10px;background:linear-gradient(105deg,#eaf8ef,#f4fcf7);padding:12px 13px}
+.technical-provider-sla-list article+article{background:linear-gradient(105deg,#fff2eb,#fff9f5)}
+.technical-provider-sla-list span{color:#47745c;font-size:11px;font-weight:800}
+.technical-provider-sla-list article+article span{color:#9c684d}
+.technical-provider-sla-list b{color:#1c9b59;font-size:18px;line-height:1.15}
+.technical-provider-sla-list article+article b{color:#ef622b}
+.technical-provider-profile-facts{display:grid;gap:10px;margin:0;border-top:1px solid #edf0f3;padding-top:14px}
+.technical-provider-profile-facts>div{display:grid;grid-template-columns:74px minmax(0,1fr);gap:8px;font-size:11px;line-height:1.5}
+.technical-provider-profile-facts dt{color:#8492a3}
+.technical-provider-profile-facts dd{margin:0;color:#4e627b;font-weight:800}
+.technical-provider-detail-main{min-width:0;overflow:hidden}
+.technical-provider-detail-tabs{display:flex;gap:25px;overflow-x:auto;border-bottom:1px solid #e8edf2;padding:0 25px}
+.technical-provider-detail-tabs button{position:relative;min-height:66px;flex:none;border:0;background:transparent;color:#64758d;font-size:15px;font-weight:900;cursor:pointer}
+.technical-provider-detail-tabs button.active{color:#ef602a}
+.technical-provider-detail-tabs button.active::after{position:absolute;right:0;bottom:0;left:0;height:3px;border-radius:99px;background:#ff6830;content:""}
+.technical-provider-detail-tabs button:focus-visible{outline:3px solid #ffbd9e;outline-offset:-3px}
+.technical-provider-tab-panel{padding:28px}
+.technical-current-service-heading{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:22px;padding-bottom:21px}
+.technical-current-service-heading>div>span,.technical-provider-about-panel>section>span,.technical-provider-cases-panel>header>span,.technical-provider-credentials-panel>header>span{color:#f16a36;font-size:10px;font-weight:900;letter-spacing:.15em}
+.technical-current-service-heading h2,.technical-current-service-includes h2,.technical-provider-about-panel h2,.technical-provider-cases-panel h2,.technical-provider-credentials-panel h2{margin:8px 0 0;color:#172946;font-size:28px;line-height:1.28;letter-spacing:-.035em}
+.technical-current-service-heading p,.technical-current-service-includes header p,.technical-provider-about-panel p,.technical-provider-cases-panel header p,.technical-provider-credentials-panel header p{margin:10px 0 0;color:#657790;font-size:14px;line-height:1.75}
+.technical-provider-detail-price{display:flex;align-items:baseline;gap:3px;color:#f05c25;line-height:1;white-space:nowrap}
+.technical-provider-detail-price i{font-size:25px;font-style:normal;font-weight:900}
+.technical-provider-detail-price b{font-size:48px;letter-spacing:-.05em}
+.technical-provider-detail-price em{color:#6c7b91;font-size:16px;font-style:normal;font-weight:800}
+.technical-provider-detail-negotiable{display:block;color:#f05c25;font-size:29px;white-space:nowrap}
+.technical-current-service-purchase{display:grid;grid-template-columns:minmax(0,1fr) minmax(250px,.7fr);gap:16px;border:1px solid #e5ebf2;border-radius:13px;background:linear-gradient(112deg,#fbfdff,#f6faff);padding:18px}
+.technical-current-service-purchase>div:first-child{display:grid;align-content:start;gap:9px}
+.technical-current-service-purchase>div:first-child>span{color:#61738d;font-size:12px;font-weight:900}
+.technical-current-service-modes{display:flex;flex-wrap:wrap;gap:8px}
+.technical-current-service-modes button{min-height:35px;border:1px solid #dfe7f1;border-radius:8px;background:#fff;padding:0 11px;color:#53667e;font-size:12px;font-weight:800;cursor:pointer}
+.technical-current-service-modes button.active{border-color:#ff6a32;background:#fff3ed;color:#ec5e28}
+.technical-current-service-purchase small{color:#8795a6;font-size:11px;font-weight:700;line-height:1.5}
+.technical-current-service-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;align-self:end}
+.technical-current-service-actions button{min-height:43px;border-radius:9px;padding:0 10px;font-size:12px;font-weight:900;cursor:pointer}
+.technical-current-service-consult{border:1px solid #255fae;background:#fff;color:#245fae}
+.technical-current-service-buy{border:1px solid #ff652d;background:#ff652d;color:#fff;box-shadow:0 8px 16px #ff652d22}
+.technical-current-service-consult:hover{background:#edf5ff}
+.technical-current-service-buy:hover{background:#ed5924}
+.technical-current-service-appointment-note{margin:13px 0 0;border:1px solid #ffd9c8;border-radius:9px;background:#fff8f4;padding:10px 12px;color:#c45a31;font-size:12px;font-weight:800;line-height:1.6}
+.technical-current-service-includes{margin-top:26px;border-top:1px solid #e9edf2;padding-top:23px}
+.technical-current-service-includes>header{display:flex;align-items:end;justify-content:space-between;gap:16px}
+.technical-current-service-includes h2{font-size:22px}
+.technical-current-service-includes header p{max-width:420px;font-size:12px;text-align:right}
+.technical-current-service-includes>div{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px;margin-top:17px}
+.technical-current-service-includes article{display:grid;gap:7px;min-height:100px;border:1px solid #e5ebf2;border-radius:11px;background:#fff;padding:15px}
+.technical-current-service-includes b{color:#263b59;font-size:14px}
+.technical-current-service-includes article span{color:#72839a;font-size:12px;line-height:1.65}
+.technical-provider-about-panel{display:grid;gap:29px}
+.technical-provider-about-panel>section+section{border-top:1px solid #e9edf2;padding-top:25px}
+.technical-provider-about-panel blockquote{display:grid;gap:8px;margin:20px 0 0;border-radius:10px;background:#fff6f1;padding:16px 18px;color:#596e87;font-size:15px;line-height:1.65}
+.technical-provider-about-panel cite{justify-self:end;color:#ef632d;font-size:13px;font-style:normal;font-weight:900}
+.technical-provider-flow{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:16px 0 0;padding:0;list-style:none;counter-reset:technical-flow}
+.technical-provider-flow li{counter-increment:technical-flow;min-height:92px;border-radius:10px;background:#f5f8fc;padding:14px 12px;color:#50647d;font-size:12px;font-weight:800;line-height:1.6}
+.technical-provider-flow li::before{display:block;margin-bottom:6px;color:#ef622c;font-size:19px;content:counter(technical-flow)}
+.technical-provider-cases-panel>header,.technical-provider-credentials-panel>header{padding-bottom:20px}
+.technical-provider-cases-panel>div{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.technical-provider-cases-panel article{display:grid;gap:9px;min-height:180px;border:1px solid #e4ebf3;border-radius:12px;background:linear-gradient(135deg,#f8fbff,#fff);padding:17px}
+.technical-provider-cases-panel article>span{color:#2e6fc9;font-size:10px;font-weight:900}
+.technical-provider-cases-panel b{color:#213854;font-size:16px;line-height:1.35}
+.technical-provider-cases-panel article p{margin:0;color:#73849a;font-size:12px;line-height:1.7}
+.technical-provider-credentials-panel>div{display:grid;gap:10px}
+.technical-provider-credentials-panel article{display:flex;align-items:center;justify-content:space-between;gap:15px;border:1px solid #e4ebf3;border-radius:10px;padding:15px 16px}
+.technical-provider-credentials-panel b{color:#27405f;font-size:14px}
+.technical-provider-credentials-panel article span{color:#73859c;font-size:12px;text-align:right}
+.technical-appointment-modal .technical-prototype-note{display:block;margin:-8px 0 16px;color:#8c9aac;font-size:11px;line-height:1.55}
+
+@media(max-width:1180px){
+  .technical-provider-detail-shell{width:min(1040px,calc(100% - 44px))}
+  .technical-provider-detail-layout{grid-template-columns:280px minmax(0,1fr)}
+  .technical-provider-profile-card{top:0}
+  .technical-current-service-purchase{grid-template-columns:1fr}
+  .technical-current-service-actions{max-width:430px}
+  .technical-provider-cases-panel>div{grid-template-columns:1fr}
+}
+@media(max-width:860px){
+  .technical-provider-detail-layout{grid-template-columns:1fr}
+  .technical-provider-profile-card{position:static;grid-template-columns:220px minmax(0,1fr);align-items:start}
+  .technical-provider-portrait-wrap{height:220px;grid-row:span 3}
+  .technical-provider-sla-list,.technical-provider-profile-facts{grid-column:1/-1}
+  .technical-provider-sla-list{grid-template-columns:1fr 1fr}
+}
+@media(max-width:640px){
+  .technical-provider-detail-shell{width:calc(100% - 28px);margin-bottom:46px}
+  .technical-provider-detail-banner{min-height:172px;border-radius:14px}
+  .technical-provider-detail-banner>div{min-height:172px;padding:22px 20px}
+  .technical-provider-detail-banner h1{font-size:25px}
+  .technical-provider-detail-banner p{font-size:12px}
+  .technical-provider-detail-layout{gap:14px;margin-top:14px}
+  .technical-provider-profile-card{grid-template-columns:1fr;padding:14px}
+  .technical-provider-portrait-wrap{height:240px;grid-row:auto}
+  .technical-provider-sla-list{grid-template-columns:1fr}
+  .technical-provider-detail-tabs{gap:21px;padding:0 17px}
+  .technical-provider-detail-tabs button{min-height:56px;font-size:13px}
+  .technical-provider-tab-panel{padding:20px 17px}
+  .technical-current-service-heading{grid-template-columns:1fr;gap:15px}
+  .technical-current-service-heading h2{font-size:24px}
+  .technical-provider-detail-price b{font-size:41px}
+  .technical-current-service-actions{max-width:none;grid-template-columns:1fr}
+  .technical-current-service-includes>header{align-items:start;flex-direction:column}
+  .technical-current-service-includes header p{text-align:left}
+  .technical-current-service-includes>div{grid-template-columns:1fr}
+  .technical-provider-flow{grid-template-columns:1fr 1fr}
+  .technical-provider-credentials-panel article{align-items:flex-start;flex-direction:column}
+  .technical-provider-credentials-panel article span{text-align:left}
+}
+@media(max-width:430px){
+  .technical-reference-card{min-height:0;padding:14px}
+  .technical-reference-card-header{grid-template-columns:74px minmax(0,1fr);gap:10px}
+  .technical-reference-card-avatar{width:74px;height:74px}
+  .technical-reference-card-header>em{grid-column:2;justify-self:start;margin-top:-28px}
+  .technical-reference-card-provider b{font-size:16px}
+  .technical-reference-card-provider small{font-size:11px}
+  .technical-reference-card-service h3{font-size:18px}
+  .technical-reference-card-service-info{grid-template-columns:1fr;gap:9px}
+  .technical-reference-card-price{justify-items:start}
+  .technical-reference-card-price small{text-align:left}
+  .technical-reference-card-secondary-actions{grid-template-columns:1fr}
+}
+
+/* 详情右栏：先统一流程，再展示可购买服务，最后列出已包含的服务项目。 */
+.technical-service-standard-flow{border-bottom:1px solid #e8edf2;padding-bottom:24px}
+.technical-service-standard-flow>header{display:flex;align-items:end;justify-content:space-between;gap:18px}
+.technical-service-standard-flow>header>span,.technical-service-projects header>div>span{color:#f16a36;font-size:10px;font-weight:900;letter-spacing:.15em}
+.technical-service-standard-flow h2,.technical-service-projects h2{margin:8px 0 0;color:#172946;font-size:22px;line-height:1.3;letter-spacing:-.025em}
+.technical-service-standard-flow header p{max-width:390px;margin:0;color:#718299;font-size:12px;line-height:1.65;text-align:right}
+.technical-service-standard-flow ol{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:17px 0 0;padding:0;list-style:none;counter-reset:service-flow}
+.technical-service-standard-flow li{counter-increment:service-flow;display:grid;align-content:start;gap:6px;min-height:100px;border:1px solid #e4eaf2;border-radius:10px;background:linear-gradient(135deg,#fbfdff,#f5f8fc);padding:14px 13px}
+.technical-service-standard-flow li::before{color:#ef622c;font-size:18px;font-weight:900;line-height:1;content:counter(service-flow)}
+.technical-service-standard-flow li b{color:#2a405f;font-size:13px;line-height:1.35}
+.technical-service-standard-flow li span{color:#75869b;font-size:11px;line-height:1.55}
+.technical-current-service-heading{padding-top:25px}
+.technical-service-projects{margin-top:26px;border-top:1px solid #e9edf2;padding-top:23px}
+.technical-service-projects>header{display:flex;align-items:end;justify-content:space-between;gap:16px}
+.technical-service-projects>header p{max-width:435px;margin:0;color:#6d7e94;font-size:12px;line-height:1.65;text-align:right}
+.technical-service-projects>div{display:grid;gap:10px;margin-top:17px}
+.technical-service-projects article{display:grid;grid-template-columns:42px minmax(0,1fr) auto auto;align-items:center;gap:14px;border:1px solid #e3eaf2;border-radius:11px;background:#fff;padding:13px 15px;transition:border-color .2s ease,box-shadow .2s ease}
+.technical-service-projects article:hover{border-color:#bed6f5;box-shadow:0 7px 17px #152c4b08}
+.technical-service-project-index{display:grid;place-items:center;width:38px;height:38px;border-radius:10px;background:linear-gradient(135deg,#e8f2ff,#d9eaff);color:#2a70cc;font-size:12px;font-weight:900}
+.technical-service-projects article>div{display:grid;gap:4px;min-width:0}
+.technical-service-projects article b{color:#233b5b;font-size:14px;line-height:1.35}
+.technical-service-projects article p{margin:0;color:#718299;font-size:12px;line-height:1.55}
+.technical-service-project-mode{border-radius:7px;background:#f2f7ff;padding:6px 8px;color:#3470c8;font-size:10px;font-weight:800;line-height:1;white-space:nowrap}
+.technical-service-projects article em{border-radius:999px;background:#eaf8ef;padding:5px 8px;color:#209b5c;font-size:10px;font-style:normal;font-weight:900;line-height:1;white-space:nowrap}
+
+@media(max-width:860px){
+  .technical-service-standard-flow ol{grid-template-columns:1fr 1fr}
+}
+@media(max-width:640px){
+  .technical-service-standard-flow>header,.technical-service-projects>header{align-items:start;flex-direction:column}
+  .technical-service-standard-flow header p,.technical-service-projects>header p{max-width:none;text-align:left}
+  .technical-service-standard-flow ol{grid-template-columns:1fr 1fr;gap:8px}
+  .technical-service-standard-flow li{min-height:112px;padding:12px}
+  .technical-service-projects article{grid-template-columns:38px minmax(0,1fr);gap:10px;padding:12px}
+  .technical-service-project-index{width:34px;height:34px;border-radius:9px}
+  .technical-service-project-mode{grid-column:2;justify-self:start}
+  .technical-service-projects article em{grid-column:2;justify-self:start;margin-top:-4px}
+}
+@media(max-width:390px){
+  .technical-service-standard-flow ol{grid-template-columns:1fr}
+}
+
+/* 服务项目直接复用首页技术服务数据：说明、价格与操作入口保持一致。 */
+.technical-market-service-list{display:grid;gap:10px!important;margin-top:17px}
+.technical-service-projects .technical-market-service-row{display:grid;grid-template-columns:50px minmax(230px,1fr) minmax(120px,.58fr) auto 210px;align-items:center;gap:14px;min-height:82px;border:1px solid #e2eaf3;border-radius:11px;background:#fff;padding:12px 14px}
+.technical-service-projects .technical-market-service-row:hover{border-color:#bcd6f7;box-shadow:0 8px 18px #152c4b0a}
+.technical-market-service-row>img{width:50px;height:50px;border-radius:10px;object-fit:cover;background:#e9eef4}
+.technical-market-service-row>div:nth-child(2){display:grid;gap:4px;min-width:0}
+.technical-market-service-row>div:nth-child(2)>b{color:#223b5c;font-size:14px;line-height:1.35}
+.technical-market-service-row>div:nth-child(2)>p{margin:0;color:#718299;font-size:11px;line-height:1.5}
+.technical-market-service-row>div:nth-child(2)>small{color:#2e6ec7;font-size:10px;font-weight:800;line-height:1.2}
+.technical-market-service-modes{display:flex;flex-wrap:wrap;gap:5px;align-items:center}
+.technical-market-service-modes i{border-radius:6px;background:#f1f6ff;padding:5px 6px;color:#3771c3;font-size:10px;font-style:normal;font-weight:800;line-height:1;white-space:nowrap}
+.technical-market-service-row>strong{color:#f05b25;font-size:18px;line-height:1.2;white-space:nowrap}
+.technical-market-service-actions{display:grid!important;grid-template-columns:1fr 1fr;gap:7px;margin:0!important}
+.technical-market-service-actions a,.technical-market-service-actions button{display:grid;place-items:center;min-height:36px;border:1px solid #2a66b5;border-radius:8px;background:#fff;padding:0 8px;color:#2562b3;font-size:10px;font-weight:900;text-align:center;text-decoration:none;cursor:pointer}
+.technical-market-service-actions a.primary,.technical-market-service-actions button.primary{border-color:#ff652d;background:#ff652d;color:#fff}
+.technical-market-service-actions a:hover,.technical-market-service-actions button:hover{background:#edf5ff}
+.technical-market-service-actions a.primary:hover,.technical-market-service-actions button.primary:hover{background:#ed5924}
+.technical-market-service-actions a:focus-visible,.technical-market-service-actions button:focus-visible{outline:3px solid #ffbd9e;outline-offset:2px}
+
+@media(max-width:1180px){
+  .technical-service-projects .technical-market-service-row{grid-template-columns:50px minmax(0,1fr) auto;gap:10px}
+  .technical-market-service-modes{grid-column:2;grid-row:2}
+  .technical-market-service-row>strong{grid-column:3;grid-row:1}
+  .technical-market-service-actions{grid-column:3;grid-row:2;min-width:190px}
+}
+@media(max-width:640px){
+  .technical-service-projects .technical-market-service-row{grid-template-columns:46px minmax(0,1fr);padding:12px}
+  .technical-market-service-row>img{width:46px;height:46px}
+  .technical-market-service-modes{grid-column:2;grid-row:auto}
+  .technical-market-service-row>strong{grid-column:2;grid-row:auto;font-size:17px}
+  .technical-market-service-actions{grid-column:1/-1;grid-row:auto;min-width:0}
+  .technical-market-service-actions a,.technical-market-service-actions button{min-height:39px}
+}
+
+/* 服务购买与“该服务者的其他服务”是两个独立业务板块。 */
+.technical-current-service-panel{display:grid;gap:18px;background:#f5f7fa;padding:20px}
+.technical-purchase-overview,.technical-service-projects{border:1px solid #dfe7f0;border-radius:15px;background:#fff;box-shadow:0 9px 22px #13274308}
+.technical-purchase-overview{padding:24px}
+.technical-purchase-overview .technical-service-standard-flow{border-bottom:1px solid #e8edf2;padding-bottom:23px}
+.technical-purchase-overview .technical-current-service-heading{padding-top:24px}
+.technical-purchase-overview .technical-current-service-purchase{background:linear-gradient(112deg,#fbfdff,#f4f8fd)}
+.technical-service-projects{margin-top:0;border-top:1px solid #dfe7f0;padding:24px}
+.technical-service-projects>header{padding-bottom:17px;border-bottom:1px solid #edf1f5}
+
+@media(max-width:640px){
+  .technical-current-service-panel{gap:12px;padding:12px}
+  .technical-purchase-overview,.technical-service-projects{border-radius:12px}
+  .technical-purchase-overview,.technical-service-projects{padding:16px}
+  .technical-purchase-overview .technical-current-service-heading{padding-top:18px}
+}
+
+/* 其他服务属于详情页的固定底部模块，随任意标签面板显示。 */
+.technical-other-services-panel{margin:0 20px 20px;border:1px solid #dfe7f0;border-radius:15px;background:#fff;padding:24px;box-shadow:0 9px 22px #13274308}
+.technical-other-services-panel .technical-service-projects{margin:0;border:0;border-radius:0;box-shadow:none;padding:0}
+.technical-other-services-empty{margin:18px 0 0;border:1px dashed #dbe4ee;border-radius:10px;background:#f8fafc;padding:20px;color:#7b8b9e;font-size:13px;text-align:center}
+
+@media(max-width:640px){
+  .technical-other-services-panel{margin:0 12px 12px;border-radius:12px;padding:16px}
+  .technical-other-services-panel .technical-service-projects{padding:0}
+}

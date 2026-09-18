@@ -1,0 +1,1 @@
+ALTER TABLE `products` ADD `billing_cycle` text DEFAULT 'once' NOT NULL;

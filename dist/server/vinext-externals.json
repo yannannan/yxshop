@@ -1,0 +1,7 @@
+[
+  "nodemailer",
+  "mysql2",
+  "react",
+  "react-dom",
+  "ipaddr.js"
+]

@@ -1,0 +1,1 @@
+import{i as e,t}from"./setup-Q_JED0_3.js";async function n(){await t();let{results:n}=await e.DB.prepare(`SELECT id,parent_id,name,sort FROM categories WHERE status='active' ORDER BY sort,id`).all(),r=n.filter(e=>e.parent_id===null);return Response.json(r.map(e=>({id:e.id,name:e.name,children:n.filter(t=>t.parent_id===e.id).map(e=>({id:e.id,name:e.name}))})))}export{n as GET};
