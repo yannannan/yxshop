@@ -173,8 +173,15 @@ export async function POST(request: Request) {
       if (children?.total || products?.total) return Response.json({ message: '分类下仍有关联内容，不能删除' }, { status: 400 });
       await env.DB.prepare('DELETE FROM categories WHERE id=?').bind(body.id).run(); break;
     }
-    case 'user-status':
-      await env.DB.prepare('UPDATE users SET status=? WHERE id=?').bind(body.status, body.id).run(); break;
+    case 'user-status': {
+      const id = Number(body.id || 0);
+      const status = body.status === 'disabled' ? 'disabled' : 'active';
+      const user = await env.DB.prepare('SELECT id,phone,permission_type FROM users WHERE id=?').bind(id).first<{ id: number; phone: string; permission_type: string }>();
+      if (!user) return Response.json({ message: '用户不存在' }, { status: 404 });
+      if (user.phone === admin.admin.username && status === 'disabled') return Response.json({ message: '不能停用当前登录超级管理员账号' }, { status: 400 });
+      await env.DB.prepare('UPDATE users SET status=? WHERE id=?').bind(status, id).run();
+      break;
+    }
     case 'user-permission': {
       const id = Number(body.id || 0);
       const permissionType = String(body.permissionType || '');
