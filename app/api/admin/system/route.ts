@@ -137,6 +137,8 @@ export async function POST(request: Request) {
         const duplicate = await env.DB.prepare('SELECT id FROM sys_role WHERE role_code=? AND id<>?').bind(roleCode, Number(body.id || 0)).first();
         if (duplicate) return Response.json({ message: '角色编码已存在' }, { status: 400 });
         if (body.id) {
+          const currentRole = await env.DB.prepare('SELECT role_code FROM sys_role WHERE id=?').bind(body.id).first<{ role_code: string }>();
+          if (currentRole?.role_code === 'super_admin' && (roleCode !== 'super_admin' || status !== 'active')) return Response.json({ message: '超级管理员角色编码和启用状态不能修改' }, { status: 400 });
           await env.DB.prepare('UPDATE sys_role SET role_code=?,role_name=?,description=?,status=?,updated_at=? WHERE id=?').bind(roleCode, roleName, description, status, now, body.id).run();
         } else {
           await env.DB.prepare('INSERT INTO sys_role (role_code,role_name,description,status,created_at,updated_at) VALUES (?,?,?,?,?,?)').bind(roleCode, roleName, description, status, now, now).run();
@@ -153,9 +155,12 @@ export async function POST(request: Request) {
         await env.DB.batch(statements);
         break;
       }
-      case 'role-status':
+      case 'role-status': {
+        const role = await env.DB.prepare('SELECT role_code FROM sys_role WHERE id=?').bind(body.id).first<{ role_code: string }>();
+        if (role?.role_code === 'super_admin' && body.status === 'disabled') return Response.json({ message: '超级管理员角色不能停用' }, { status: 400 });
         await env.DB.prepare('UPDATE sys_role SET status=?,updated_at=? WHERE id=?').bind(body.status === 'disabled' ? 'disabled' : 'active', now, body.id).run();
         break;
+      }
       case 'role-delete': {
         const id = Number(body.id || 0);
         const role = await env.DB.prepare('SELECT role_code FROM sys_role WHERE id=?').bind(id).first<{ role_code: string }>();
@@ -179,6 +184,7 @@ export async function POST(request: Request) {
         if (duplicate) return Response.json({ message: '该手机号已经是管理员' }, { status: 400 });
         if (id) {
           if (id === admin.admin.id && status === 'disabled') return Response.json({ message: '不能停用当前登录管理员' }, { status: 400 });
+          if (id === admin.admin.id && username !== admin.admin.username) return Response.json({ message: '不能直接修改当前登录管理员的登录手机号，请使用其他超级管理员调整' }, { status: 400 });
           await env.DB.prepare('UPDATE sys_admin_user SET username=?,display_name=?,status=?,updated_at=? WHERE id=?').bind(username, displayName, status, now, id).run();
         } else {
           await env.DB.prepare("INSERT INTO sys_admin_user (username,display_name,password_hash,status,created_at,updated_at) VALUES (?,?,?,?,?,?)").bind(username, displayName, '', status, now, now).run();
