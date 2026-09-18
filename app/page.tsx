@@ -100,7 +100,7 @@ export default function StorePage() {
     fetch("/api/technical-services", { cache: "no-store" })
       .then((response) => (response.ok ? response.json() : []))
       .then((result: unknown) => {
-        if (Array.isArray(result) && result.length) setTechnicalServiceItems(result as TechnicalService[]);
+        if (Array.isArray(result)) setTechnicalServiceItems(result as TechnicalService[]);
       })
       .catch(() => null);
   }, []);
