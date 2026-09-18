@@ -65,7 +65,7 @@ function Modal({ title, children, onClose }: { title: string; children: React.Re
 }
 function Status({ value }: { value: string }) {
   const labels: Record<string, string> = {
-    pending_quote: "待报价", pending_payment: "待支付", paid: "已支付", accepted: "已接单", in_service: "服务中", completed: "已完成", closed: "已关闭", cancelled: "已取消",
+    pending_quote: "待报价", pending_payment: "待支付", payment_review: "支付核验", paid: "已支付", accepted: "已接单", in_service: "服务中", completed: "已完成", closed: "已关闭", cancelled: "已取消",
     pending: "待确认", confirmed: "已确认", arrived: "已到场", open: "沟通中", approved: "已通过", rejected: "已驳回",
   };
   return <span className={`status status-${value}`}>{labels[value] || value}</span>;
@@ -75,7 +75,7 @@ function Header({ title, description, loading, onRefresh }: { title: string; des
 }
 
 const orderStatuses = [
-  ["pending_quote","待报价"], ["pending_payment","待支付"], ["paid","已支付"], ["accepted","已接单"], ["in_service","服务中"], ["completed","已完成"], ["closed","已关闭"], ["cancelled","已取消"],
+  ["pending_quote","待报价"], ["pending_payment","待支付"], ["payment_review","支付核验"], ["paid","已支付"], ["accepted","已接单"], ["in_service","服务中"], ["completed","已完成"], ["closed","已关闭"], ["cancelled","已取消"],
 ];
 
 export function OnsiteOrderManagement() {
