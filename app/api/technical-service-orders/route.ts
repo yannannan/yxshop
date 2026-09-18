@@ -40,6 +40,8 @@ export async function POST(request: Request) {
   if (!user) return Response.json({ message: '用户不可用' }, { status: 401 });
 
   const body = await request.json() as {
+    action?: string;
+    orderId?: string;
     serviceSlug?: string;
     deliveryMode?: 'online' | 'onsite';
     scheduledAt?: string;
@@ -48,6 +50,15 @@ export async function POST(request: Request) {
     contactName?: string;
     contactPhone?: string;
   };
+
+  if (body.action === 'payment-submitted') {
+    const orderId = String(body.orderId || '').trim();
+    const order = await env.DB.prepare("SELECT id,status FROM technical_service_orders WHERE id=? AND user_id=?").bind(orderId, user.id).first<{ id: string; status: string }>();
+    if (!order) return Response.json({ message: '服务订单不存在' }, { status: 404 });
+    if (!['pending_payment','payment_review'].includes(order.status)) return Response.json({ message: '当前订单无需提交支付核验' }, { status: 400 });
+    if (order.status !== 'payment_review') await env.DB.prepare("UPDATE technical_service_orders SET status='payment_review',updated_at=? WHERE id=? AND user_id=?").bind(new Date().toISOString(), orderId, user.id).run();
+    return Response.json({ ok: true, status: 'payment_review' });
+  }
 
   const slug = String(body.serviceSlug || '').trim();
   const deliveryMode = body.deliveryMode === 'onsite' ? 'onsite' : 'online';
