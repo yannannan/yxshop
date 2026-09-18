@@ -1,0 +1,1 @@
+async function e(){return new Response(JSON.stringify({ok:!0}),{headers:{"content-type":`application/json`,"set-cookie":`mall_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`}})}export{e as POST};
