@@ -18,9 +18,11 @@ type OrderListTab = 'all' | 'pending' | 'paid' | 'pending_delivery' | 'delivered
 type ProductListTab = 'all' | 'active' | 'inactive' | 'closed';
 type CredentialListTab = 'all' | 'used' | 'disabled' | 'closed';
 type AdminMenu = { id: number; parent_id: number | null; menu_code: string; menu_name: string; component_key: string; icon: string; menu_type: 'directory' | 'menu'; sort_order: number; visible: number; status: 'active' | 'disabled'; children?: AdminMenu[] };
-type SystemData = { initialized: boolean; menus: AdminMenu[]; menuTree: AdminMenu[]; roles: Row[]; roleMenus: Row[]; message?: string };
+type SystemData = { initialized: boolean; menus: AdminMenu[]; menuTree: AdminMenu[]; roles: Row[]; roleMenus: Row[]; admins: Row[]; adminRoles: Row[]; message?: string };
 type MenuForm = { id?: number; parentId: string; menuCode: string; menuName: string; componentKey: string; icon: string; menuType: 'directory' | 'menu'; sortOrder: string; visible: boolean; status: 'active' | 'disabled' };
 type RoleForm = { id?: number; roleCode: string; roleName: string; description: string; status: 'active' | 'disabled' };
+type AdminForm = { id?: number; username: string; displayName: string; status: 'active' | 'disabled' };
+type AdminSession = { authenticated: true; admin: { id: number; username: string; displayName: string }; roleCodes: string[]; menuCodes: string[]; menuTree: AdminMenu[]; superAdmin: boolean };
 
 const tabs = [
   { key: 'products', label: '商品管理', icon: '◇' },
@@ -44,10 +46,11 @@ const fallbackMenuTree: AdminMenu[] = [
   { id: 200, parent_id: null, menu_code: 'system-settings', menu_name: '系统设置', component_key: '', icon: '⚙', menu_type: 'directory', sort_order: 900, visible: 1, status: 'active', children: [
     { id: 201, parent_id: 200, menu_code: 'system-menu-management', menu_name: '菜单管理', component_key: 'menu-management', icon: '菜', menu_type: 'menu', sort_order: 910, visible: 1, status: 'active', children: [] },
     { id: 202, parent_id: 200, menu_code: 'system-role-management', menu_name: '角色管理', component_key: 'role-management', icon: '角', menu_type: 'menu', sort_order: 920, visible: 1, status: 'active', children: [] },
+    { id: 203, parent_id: 200, menu_code: 'system-admin-management', menu_name: '管理员管理', component_key: 'admin-management', icon: '管', menu_type: 'menu', sort_order: 930, visible: 1, status: 'active', children: [] },
   ] },
 ];
 
-const emptySystemData: SystemData = { initialized: false, menus: [], menuTree: [], roles: [], roleMenus: [] };
+const emptySystemData: SystemData = { initialized: false, menus: [], menuTree: [], roles: [], roleMenus: [], admins: [], adminRoles: [] };
 const flattenMenus = (menus: AdminMenu[], depth = 0): { menu: AdminMenu; depth: number }[] => menus.flatMap((menu) => [{ menu, depth }, ...flattenMenus(menu.children || [], depth + 1)]);
 const findMenu = (menus: AdminMenu[], componentKey: string): AdminMenu | undefined => {
   for (const menu of menus) {
@@ -56,6 +59,15 @@ const findMenu = (menus: AdminMenu[], componentKey: string): AdminMenu | undefin
     if (child) return child;
   }
   return undefined;
+};
+const firstMenuComponent = (menus: AdminMenu[]): string => {
+  for (const menu of menus) {
+    if (menu.status !== 'active' || !menu.visible) continue;
+    if (menu.menu_type === 'menu' && menu.component_key) return menu.component_key;
+    const child = firstMenuComponent(menu.children || []);
+    if (child) return child;
+  }
+  return '';
 };
 
 const emptyData: Data = { products: [], users: [], orders: [], credentials: [], credentialAssignments: [], qrs: [], categories: [], notificationSettings: [], emailConfig: null };
@@ -104,6 +116,28 @@ export default function AdminPage() {
   const [rechargeJsonView, setRechargeJsonView] = useState<{ id: string; json: string } | null>(null);
   const [systemData, setSystemData] = useState<SystemData>(emptySystemData);
   const [systemLoading, setSystemLoading] = useState(false);
+  const [adminSession, setAdminSession] = useState<AdminSession | null>(null);
+  const [adminAccessLoading, setAdminAccessLoading] = useState(true);
+
+  const loadSession = useCallback(async () => {
+    setAdminAccessLoading(true);
+    try {
+      const response = await fetch(`/api/admin/session?refresh=${Date.now()}`, { cache: 'no-store' });
+      if (!response.ok) {
+        setAdminSession(null);
+        return null;
+      }
+      const result = await response.json() as AdminSession;
+      setAdminSession(result);
+      setActive((current) => findMenu(result.menuTree, current) ? current : (firstMenuComponent(result.menuTree) || current));
+      return result;
+    } catch {
+      setAdminSession(null);
+      return null;
+    } finally {
+      setAdminAccessLoading(false);
+    }
+  }, []);
 
   const loadSystem = useCallback(async () => {
     setSystemLoading(true);
@@ -147,9 +181,17 @@ export default function AdminPage() {
   }, []);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => { void load(); void loadSystem(); }, 0);
-    return () => window.clearTimeout(timer);
-  }, [load, loadSystem]);
+    let activeRequest = true;
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        const session = await loadSession();
+        if (!activeRequest || !session) return;
+        await load();
+        if (session.menuCodes.some((code) => ['system-menu-management','system-role-management','system-admin-management'].includes(code)) || session.superAdmin) await loadSystem();
+      })();
+    }, 0);
+    return () => { activeRequest = false; window.clearTimeout(timer); };
+  }, [load, loadSession, loadSystem]);
 
   useEffect(() => {
     const refreshWhenBack = () => {
@@ -357,25 +399,35 @@ export default function AdminPage() {
     }
   }
 
-  const navigationMenus = systemData.initialized && systemData.menuTree.length ? systemData.menuTree : fallbackMenuTree;
+  const navigationMenus = adminSession?.menuTree?.length ? adminSession.menuTree : fallbackMenuTree;
   const currentMenu = findMenu(navigationMenus, active);
   const showStoreStats = tabs.some((tab) => tab.key === active);
+
+  if (adminAccessLoading) return <main className="admin-access-page"><section><span className="brand-mark"><Image src="/yxstar_logo.png" alt="宇星商城 Logo" fill sizes="52px" /></span><h1>正在验证管理权限…</h1><p>正在读取当前账号的后台角色与菜单权限。</p></section></main>;
+  if (!adminSession) return <main className="admin-access-page"><section><span className="brand-mark"><Image src="/yxstar_logo.png" alt="宇星商城 Logo" fill sizes="52px" /></span><h1>无后台访问权限</h1><p>请先使用已配置为管理员的手机号登录宇星商城，再进入管理后台。</p><Link href="/">返回商城登录</Link></section></main>;
+
+  async function adminLogout() {
+    await fetch('/api/auth/logout', { method: 'POST' }).catch(() => null);
+    window.localStorage.removeItem('mall_phone');
+    window.location.href = '/';
+  }
 
   return <main className="admin-shell">
     <aside className="admin-sidebar">
       <Link className="brand admin-brand" href="/"><span className="brand-mark"><Image src="/yxstar_logo.png" alt="宇星商城 Logo" fill sizes="34px" /></span><span>宇星商城</span></Link>
       <small>商城管理</small>
       <AdminNavigation menus={navigationMenus} active={active} pendingOrders={pendingOrders} onSelect={(key) => { setActive(key); if (tabs.some((tab) => tab.key === key)) void load(true); }} />
-      <div className="admin-user"><span>管</span><div><b>管理员</b><small>admin@qx.shop</small></div></div>
+      <div className="admin-user"><span>管</span><div><b>{adminSession.admin.displayName}</b><small>{adminSession.admin.username}</small></div></div>
     </aside>
     <section className="admin-main">
-      <header><div><span className="section-kicker">STORE CONSOLE</span><h1>{currentMenu?.menu_name || tabs.find((item) => item.key === active)?.label || '宇星商城'}</h1></div><div><Link href="/" target="_blank" rel="noopener noreferrer">查看商城</Link><button disabled={refreshing || systemLoading} onClick={() => { void load(true); void loadSystem(); }}>{refreshing || systemLoading ? '正在刷新…' : '↻ 刷新数据'}</button></div></header>
+      <header><div><span className="section-kicker">STORE CONSOLE</span><h1>{currentMenu?.menu_name || tabs.find((item) => item.key === active)?.label || '宇星商城'}</h1></div><div><Link href="/" target="_blank" rel="noopener noreferrer">查看商城</Link><button disabled={refreshing || systemLoading} onClick={() => { void load(true); if (adminSession.superAdmin || adminSession.menuCodes.some((code) => code.startsWith('system-'))) void loadSystem(); }}>{refreshing || systemLoading ? '正在刷新…' : '↻ 刷新数据'}</button><button className="admin-logout-button" onClick={() => void adminLogout()}>退出后台</button></div></header>
       {active === 'orders' ? <div className="order-stat-grid">{orderStatTabs.map((tab) => <button type="button" key={tab.key} className={`order-stat-card ${tab.key}${orderListTab === tab.key ? ' active' : ''}`} onClick={() => setOrderListTab(tab.key)}><span>{tab.label}</span><b>{tab.key === 'all' ? data.orders.filter((order) => text(order.status) !== 'closed').length : data.orders.filter((order) => text(order.status) === tab.key).length}</b><small>{orderStatDescription[tab.key]}</small><i>→</i></button>)}</div> : showStoreStats ? <div className="stat-grid"><article><span>商品总数</span><b>{data.products.filter((item) => item.status !== 'closed').length}</b><small>在售 {data.products.filter((item) => item.status === 'active').length} 件</small></article><article><span>分类数量</span><b>{data.categories.length}</b><small>支持一级、二级分类</small></article><article><span>待处理订单</span><b>{pendingOrders}</b><small>请及时核对支付</small></article><article><span>可用卡密</span><b>{availableCards}</b><small>库存不足请补充</small></article></div> : null}
       <div className="admin-panel">
         {notice && <div className="admin-message">{notice}</div>}
         {loading ? <div className="admin-loading">正在读取数据…</div> : <>
           {active === 'menu-management' && <SystemMenuPanel data={systemData} loading={systemLoading} onAction={systemAction} />}
           {active === 'role-management' && <SystemRolePanel data={systemData} loading={systemLoading} onAction={systemAction} />}
+          {active === 'admin-management' && <SystemAdminPanel data={systemData} loading={systemLoading} currentAdminId={adminSession.admin.id} onAction={systemAction} />}
           {active === 'service-management' && <OnsiteServiceManagement />}
           {active === 'provider-management' && <OnsiteProviderManagement />}
           {active === 'service-orders' && <OnsiteOrderManagement />}
