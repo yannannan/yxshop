@@ -27,11 +27,22 @@ function normalizeServiceIncludes(value: unknown) {
   }).slice(0, 20);
 }
 
+async function readPaymentQrs() {
+  try {
+    const { results } = await env.DB.prepare("SELECT q.*,s.title AS service_title FROM technical_payment_qrs q JOIN technical_services s ON s.id=q.service_id ORDER BY q.service_id,q.type,q.id").all();
+    return results;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '';
+    if (/technical_payment_qrs|doesn't exist|does not exist|no such table/i.test(message)) return [];
+    throw error;
+  }
+}
+
 async function readData() {
   const [providers, services, paymentQrs, orders, appointments, consultations, messages, contactRequests, applications] = await Promise.all([
     env.DB.prepare('SELECT * FROM technical_providers ORDER BY sort_order,id').all(),
     env.DB.prepare("SELECT s.*,p.name AS provider_name,p.provider_code,p.avatar,p.city,p.experience,p.role_name,p.intro,p.skills_json,p.certification_status,p.online_status FROM technical_services s JOIN technical_providers p ON p.id=s.provider_id ORDER BY s.sort_order,s.id").all(),
-    env.DB.prepare("SELECT q.*,s.title AS service_title FROM technical_payment_qrs q JOIN technical_services s ON s.id=q.service_id ORDER BY q.service_id,q.type,q.id").all(),
+    readPaymentQrs(),
     env.DB.prepare("SELECT o.*,s.title AS service_title,s.slug AS service_slug,p.name AS provider_name FROM technical_service_orders o JOIN technical_services s ON s.id=o.service_id JOIN technical_providers p ON p.id=o.provider_id ORDER BY o.created_at DESC").all(),
     env.DB.prepare("SELECT a.*,s.title AS service_title,p.name AS provider_name FROM technical_service_appointments a JOIN technical_services s ON s.id=a.service_id JOIN technical_providers p ON p.id=a.provider_id ORDER BY a.scheduled_at DESC,a.id DESC").all(),
     env.DB.prepare("SELECT c.*,s.title AS service_title,s.slug AS service_slug,p.name AS provider_name FROM technical_consultations c JOIN technical_services s ON s.id=c.service_id JOIN technical_providers p ON p.id=c.provider_id ORDER BY c.last_message_at DESC,c.id DESC").all(),
@@ -43,7 +54,7 @@ async function readData() {
     initialized: true,
     providers: providers.results,
     services: services.results,
-    paymentQrs: paymentQrs.results,
+    paymentQrs,
     orders: orders.results,
     appointments: appointments.results,
     consultations: consultations.results,
