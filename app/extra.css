@@ -79,3 +79,44 @@
 .credential-tabs{overflow-x:auto}.credential-table .order-select-cell{width:42px}
 .notification-settings{padding:22px 24px;display:grid;gap:14px}.notification-setting{display:grid;grid-template-columns:minmax(180px,1fr) minmax(240px,1.4fr) auto auto;align-items:end;gap:14px;padding:18px;border:1px solid #ececef;border-radius:12px;background:#fff}.notification-setting h3{margin:0;font-size:14px}.notification-setting p,.notification-help{margin:6px 0 0;color:#8b8f96;font-size:11px;line-height:1.6}.notification-setting label{display:grid;gap:7px;color:#666;font-size:11px;font-weight:700}.notification-setting input[type=text],.notification-setting input:not([type]){height:38px;padding:0 10px;border:1px solid #dfe1e5;border-radius:8px}.notification-setting .notification-enabled{display:flex;align-items:center;height:38px;gap:6px;white-space:nowrap}.notification-setting button{height:38px;border:0;border-radius:8px;background:var(--orange);color:#fff;padding:0 13px;font-size:11px;font-weight:800;white-space:nowrap}.notification-help{padding:0 4px}@media(max-width:900px){.notification-setting{grid-template-columns:1fr}.notification-setting .notification-enabled{height:auto}}
 .email-config-form{padding:20px;border:1px solid #ececef;border-radius:12px;background:#fff}.mail-config-section+.mail-config-section{margin-top:22px;padding-top:20px;border-top:1px solid #eee}.mail-config-section h3{margin:0;font-size:15px}.mail-config-section>p{margin:6px 0 16px;color:#8b8f96;font-size:11px}.email-config-form .admin-form-actions{justify-content:flex-start;margin-top:16px}
+
+
+/* 数据库驱动后台菜单与系统设置 */
+.admin-menu-tree{display:grid;gap:5px;overflow-y:auto;overflow-x:hidden;padding-right:2px}
+.admin-menu-group{display:grid;gap:4px}
+.admin-sidebar .admin-menu-parent{grid-template-columns:28px 1fr 20px}
+.admin-sidebar .admin-menu-parent i{justify-self:end;color:#727780;font-size:11px;font-style:normal}
+.admin-sidebar .admin-menu-parent.active-parent{background:#25282e;color:#fff}
+.admin-submenu{display:grid;gap:3px;margin:0 0 4px 16px;padding-left:13px;border-left:1px solid #343840}
+.admin-sidebar .admin-submenu button{height:38px;grid-template-columns:24px 1fr;border-radius:8px;padding:0 10px;color:#8f949d;font-size:11px}
+.admin-sidebar .admin-submenu button span{display:grid;place-items:center;width:20px;height:20px;border-radius:6px;background:#292c32;color:#8f949d;font-size:9px}
+.admin-sidebar .admin-submenu button:hover,.admin-sidebar .admin-submenu button.active{background:#30343b;color:#fff}
+.admin-sidebar .admin-submenu button.active span{background:#ff6b2c;color:#fff}
+.system-init-empty,.system-module-placeholder{display:grid;place-items:center;min-height:320px;padding:42px;text-align:center;color:#7d8289}
+.system-init-empty b,.system-module-placeholder b{color:#30343a;font-size:17px}
+.system-init-empty p,.system-module-placeholder p{max-width:620px;margin:10px 0;color:#8d9299;font-size:12px;line-height:1.7}
+.system-init-empty code{margin-top:7px;border:1px solid #e2e4e8;border-radius:8px;background:#f7f8fa;padding:9px 12px;color:#e45e28;font-size:11px}
+.system-module-placeholder>span{display:grid;place-items:center;width:58px;height:58px;margin-bottom:15px;border-radius:17px;background:#fff1e9;color:#ef642d;font-size:26px;font-weight:900}
+.system-menu-table table{min-width:1050px}
+.system-menu-table td:first-child b{font-size:12px}
+.system-menu-table code,.system-permission-tree code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10px}
+.system-checkbox{display:flex!important;align-items:center;min-height:38px;gap:8px;border:1px solid #dfe1e5;border-radius:8px;padding:0 11px;color:#5f646c!important;font-size:11px!important}
+.system-checkbox input{width:15px;height:15px}
+.system-permission-tree{display:grid;gap:3px;max-height:450px;overflow:auto;margin:4px 0 18px;border:1px solid #e4e6e9;border-radius:11px;background:#fbfcfd;padding:10px}
+.system-permission-tree label{display:grid;grid-template-columns:20px minmax(180px,1fr) minmax(140px,.7fr);align-items:center;gap:8px;min-height:38px;border-radius:7px;padding-top:4px;padding-right:10px;padding-bottom:4px;color:#42474e;font-size:11px}
+.system-permission-tree label:hover{background:#f2f4f7}
+.system-permission-tree label input{width:14px;height:14px}
+.system-permission-tree label span{font-weight:800}
+.system-permission-tree label small{color:#9a9fa6;font-size:9px;text-align:right}
+.admin-form-grid textarea{min-height:88px;border:1px solid #dfe1e5;border-radius:8px;background:#fff;padding:10px;outline:0;resize:vertical;font:inherit}
+@media(max-width:900px){
+  .admin-sidebar .admin-menu-parent i{display:none}
+  .admin-sidebar .admin-submenu{margin-left:0;padding-left:0;border-left:0}
+  .admin-sidebar .admin-submenu button{grid-template-columns:1fr;place-items:center;height:38px;padding:0;font-size:0}
+  .admin-sidebar .admin-submenu button span{font-size:10px}
+}
+@media(max-width:600px){
+  .system-init-empty,.system-module-placeholder{min-height:260px;padding:28px 18px}
+  .system-permission-tree label{grid-template-columns:20px 1fr}
+  .system-permission-tree label small{grid-column:2;text-align:left}
+}
