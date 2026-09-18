@@ -15,6 +15,10 @@ type ConfirmTarget = { title: string; description: string; confirmText: string; 
 type OrderListTab = 'all' | 'pending' | 'paid' | 'pending_delivery' | 'delivered' | 'closed';
 type ProductListTab = 'all' | 'active' | 'inactive' | 'closed';
 type CredentialListTab = 'all' | 'used' | 'disabled' | 'closed';
+type AdminMenu = { id: number; parent_id: number | null; menu_code: string; menu_name: string; component_key: string; icon: string; menu_type: 'directory' | 'menu'; sort_order: number; visible: number; status: 'active' | 'disabled'; children?: AdminMenu[] };
+type SystemData = { initialized: boolean; menus: AdminMenu[]; menuTree: AdminMenu[]; roles: Row[]; roleMenus: Row[]; message?: string };
+type MenuForm = { id?: number; parentId: string; menuCode: string; menuName: string; componentKey: string; icon: string; menuType: 'directory' | 'menu'; sortOrder: string; visible: boolean; status: 'active' | 'disabled' };
+type RoleForm = { id?: number; roleCode: string; roleName: string; description: string; status: 'active' | 'disabled' };
 
 const tabs = [
   { key: 'products', label: '商品管理', icon: '◇' },
@@ -24,6 +28,33 @@ const tabs = [
   { key: 'credentials', label: '账号 / 卡密', icon: '⌘' },
   { key: 'notifications', label: '订单通知', icon: '✉' },
 ] as const;
+
+const fallbackMenuTree: AdminMenu[] = [
+  ...tabs.map((tab, index) => ({ id: index + 1, parent_id: null, menu_code: tab.key, menu_name: tab.label, component_key: tab.key, icon: tab.icon, menu_type: 'menu' as const, sort_order: (index + 1) * 10, visible: 1, status: 'active' as const, children: [] })),
+  { id: 100, parent_id: null, menu_code: 'onsite-services', menu_name: '上门服务', component_key: '', icon: '⌖', menu_type: 'directory', sort_order: 100, visible: 1, status: 'active', children: [
+    { id: 101, parent_id: 100, menu_code: 'onsite-service-management', menu_name: '服务管理', component_key: 'service-management', icon: '服', menu_type: 'menu', sort_order: 110, visible: 1, status: 'active', children: [] },
+    { id: 102, parent_id: 100, menu_code: 'onsite-provider-management', menu_name: '技术人员', component_key: 'provider-management', icon: '人', menu_type: 'menu', sort_order: 120, visible: 1, status: 'active', children: [] },
+    { id: 103, parent_id: 100, menu_code: 'onsite-service-orders', menu_name: '服务订单', component_key: 'service-orders', icon: '单', menu_type: 'menu', sort_order: 130, visible: 1, status: 'active', children: [] },
+    { id: 104, parent_id: 100, menu_code: 'onsite-appointments', menu_name: '预约管理', component_key: 'service-appointments', icon: '约', menu_type: 'menu', sort_order: 140, visible: 1, status: 'active', children: [] },
+    { id: 105, parent_id: 100, menu_code: 'onsite-consultations', menu_name: '在线咨询', component_key: 'service-consultations', icon: '聊', menu_type: 'menu', sort_order: 150, visible: 1, status: 'active', children: [] },
+    { id: 106, parent_id: 100, menu_code: 'onsite-provider-applications', menu_name: '入驻审核', component_key: 'provider-applications', icon: '审', menu_type: 'menu', sort_order: 160, visible: 1, status: 'active', children: [] },
+  ] },
+  { id: 200, parent_id: null, menu_code: 'system-settings', menu_name: '系统设置', component_key: '', icon: '⚙', menu_type: 'directory', sort_order: 900, visible: 1, status: 'active', children: [
+    { id: 201, parent_id: 200, menu_code: 'system-menu-management', menu_name: '菜单管理', component_key: 'menu-management', icon: '菜', menu_type: 'menu', sort_order: 910, visible: 1, status: 'active', children: [] },
+    { id: 202, parent_id: 200, menu_code: 'system-role-management', menu_name: '角色管理', component_key: 'role-management', icon: '角', menu_type: 'menu', sort_order: 920, visible: 1, status: 'active', children: [] },
+  ] },
+];
+
+const emptySystemData: SystemData = { initialized: false, menus: [], menuTree: [], roles: [], roleMenus: [] };
+const flattenMenus = (menus: AdminMenu[], depth = 0): { menu: AdminMenu; depth: number }[] => menus.flatMap((menu) => [{ menu, depth }, ...flattenMenus(menu.children || [], depth + 1)]);
+const findMenu = (menus: AdminMenu[], componentKey: string): AdminMenu | undefined => {
+  for (const menu of menus) {
+    if (menu.component_key === componentKey) return menu;
+    const child = findMenu(menu.children || [], componentKey);
+    if (child) return child;
+  }
+  return undefined;
+};
 
 const emptyData: Data = { products: [], users: [], orders: [], credentials: [], credentialAssignments: [], qrs: [], categories: [], notificationSettings: [], emailConfig: null };
 const text = (value: unknown) => String(value ?? '');
@@ -40,7 +71,7 @@ const orderStatTabs = orderListTabs.filter((tab) => tab.key !== 'closed');
 const orderStatDescription: Record<OrderListTab, string> = { all: '全部订单总览', pending: '等待用户支付', paid: '管理员已确认收款', pending_delivery: '客户已确认，等待发货', delivered: '已完成交付', closed: '已作废订单' };
 
 export default function AdminPage() {
-  const [active, setActive] = useState<(typeof tabs)[number]['key']>('products');
+  const [active, setActive] = useState<string>('products');
   const [data, setData] = useState<Data>(emptyData);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -69,6 +100,34 @@ export default function AdminPage() {
   const [productImageError, setProductImageError] = useState('');
   const [uploadingProductImage, setUploadingProductImage] = useState<'coverImage' | 'detailImage' | null>(null);
   const [rechargeJsonView, setRechargeJsonView] = useState<{ id: string; json: string } | null>(null);
+  const [systemData, setSystemData] = useState<SystemData>(emptySystemData);
+  const [systemLoading, setSystemLoading] = useState(false);
+
+  const loadSystem = useCallback(async () => {
+    setSystemLoading(true);
+    try {
+      const response = await fetch(`/api/admin/system?refresh=${Date.now()}`, { cache: 'no-store', headers: { 'cache-control': 'no-cache' } });
+      const result = await response.json() as SystemData;
+      setSystemData(result);
+    } catch {
+      setSystemData((current) => ({ ...current, initialized: false, message: '系统设置读取失败' }));
+    } finally {
+      setSystemLoading(false);
+    }
+  }, []);
+
+  async function systemAction(body: Record<string, string | number>) {
+    setNotice('');
+    const response = await fetch('/api/admin/system', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    const result = await response.json() as { message?: string };
+    if (!response.ok) {
+      setNotice(result.message || '系统设置操作未完成');
+      return false;
+    }
+    await loadSystem();
+    setNotice(result.message || '保存成功');
+    return true;
+  }
 
   const load = useCallback(async (background = false) => {
     if (background) setRefreshing(true);
@@ -86,9 +145,9 @@ export default function AdminPage() {
   }, []);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => { void load(); }, 0);
+    const timer = window.setTimeout(() => { void load(); void loadSystem(); }, 0);
     return () => window.clearTimeout(timer);
-  }, [load]);
+  }, [load, loadSystem]);
 
   useEffect(() => {
     const refreshWhenBack = () => {
@@ -296,19 +355,26 @@ export default function AdminPage() {
     }
   }
 
+  const navigationMenus = systemData.initialized && systemData.menuTree.length ? systemData.menuTree : fallbackMenuTree;
+  const currentMenu = findMenu(navigationMenus, active);
+  const showStoreStats = tabs.some((tab) => tab.key === active);
+
   return <main className="admin-shell">
     <aside className="admin-sidebar">
       <Link className="brand admin-brand" href="/"><span className="brand-mark"><Image src="/yxstar_logo.png" alt="宇星商城 Logo" fill sizes="34px" /></span><span>宇星商城</span></Link>
       <small>商城管理</small>
-      <nav>{tabs.map((tab) => <button key={tab.key} className={active === tab.key ? 'active' : ''} onClick={() => { setActive(tab.key); void load(true); }}><span>{tab.icon}</span>{tab.label}{tab.key === 'orders' && pendingOrders > 0 && <em>{pendingOrders}</em>}</button>)}</nav>
+      <AdminNavigation menus={navigationMenus} active={active} pendingOrders={pendingOrders} onSelect={(key) => { setActive(key); if (tabs.some((tab) => tab.key === key)) void load(true); }} />
       <div className="admin-user"><span>管</span><div><b>管理员</b><small>admin@qx.shop</small></div></div>
     </aside>
     <section className="admin-main">
-      <header><div><span className="section-kicker">STORE CONSOLE</span><h1>{tabs.find((item) => item.key === active)?.label}</h1></div><div><Link href="/" target="_blank" rel="noopener noreferrer">查看商城</Link><button disabled={refreshing} onClick={() => void load(true)}>{refreshing ? '正在刷新…' : '↻ 刷新数据'}</button></div></header>
-      {active === 'orders' ? <div className="order-stat-grid">{orderStatTabs.map((tab) => <button type="button" key={tab.key} className={`order-stat-card ${tab.key}${orderListTab === tab.key ? ' active' : ''}`} onClick={() => setOrderListTab(tab.key)}><span>{tab.label}</span><b>{tab.key === 'all' ? data.orders.filter((order) => text(order.status) !== 'closed').length : data.orders.filter((order) => text(order.status) === tab.key).length}</b><small>{orderStatDescription[tab.key]}</small><i>→</i></button>)}</div> : <div className="stat-grid"><article><span>商品总数</span><b>{data.products.filter((item) => item.status !== 'closed').length}</b><small>在售 {data.products.filter((item) => item.status === 'active').length} 件</small></article><article><span>分类数量</span><b>{data.categories.length}</b><small>支持一级、二级分类</small></article><article><span>待处理订单</span><b>{pendingOrders}</b><small>请及时核对支付</small></article><article><span>可用卡密</span><b>{availableCards}</b><small>库存不足请补充</small></article></div>}
+      <header><div><span className="section-kicker">STORE CONSOLE</span><h1>{currentMenu?.menu_name || tabs.find((item) => item.key === active)?.label || '宇星商城'}</h1></div><div><Link href="/" target="_blank" rel="noopener noreferrer">查看商城</Link><button disabled={refreshing || systemLoading} onClick={() => { void load(true); void loadSystem(); }}>{refreshing || systemLoading ? '正在刷新…' : '↻ 刷新数据'}</button></div></header>
+      {active === 'orders' ? <div className="order-stat-grid">{orderStatTabs.map((tab) => <button type="button" key={tab.key} className={`order-stat-card ${tab.key}${orderListTab === tab.key ? ' active' : ''}`} onClick={() => setOrderListTab(tab.key)}><span>{tab.label}</span><b>{tab.key === 'all' ? data.orders.filter((order) => text(order.status) !== 'closed').length : data.orders.filter((order) => text(order.status) === tab.key).length}</b><small>{orderStatDescription[tab.key]}</small><i>→</i></button>)}</div> : showStoreStats ? <div className="stat-grid"><article><span>商品总数</span><b>{data.products.filter((item) => item.status !== 'closed').length}</b><small>在售 {data.products.filter((item) => item.status === 'active').length} 件</small></article><article><span>分类数量</span><b>{data.categories.length}</b><small>支持一级、二级分类</small></article><article><span>待处理订单</span><b>{pendingOrders}</b><small>请及时核对支付</small></article><article><span>可用卡密</span><b>{availableCards}</b><small>库存不足请补充</small></article></div> : null}
       <div className="admin-panel">
         {notice && <div className="admin-message">{notice}</div>}
         {loading ? <div className="admin-loading">正在读取数据…</div> : <>
+          {active === 'menu-management' && <SystemMenuPanel data={systemData} loading={systemLoading} onAction={systemAction} />}
+          {active === 'role-management' && <SystemRolePanel data={systemData} loading={systemLoading} onAction={systemAction} />}
+          {['service-management', 'provider-management', 'service-orders', 'service-appointments', 'service-consultations', 'provider-applications'].includes(active) && <ServiceModulePlaceholder moduleKey={active} />}
           {active === 'products' && <>
             <div className="panel-title"><div><h2>商品列表</h2><p>可维护商品分类、价格、库存及前台详情内容</p></div><div className="panel-title-actions"><button className="refresh-list-button" disabled={refreshing} onClick={() => void load(true)}>{refreshing ? '正在刷新…' : '↻ 刷新列表'}</button><button onClick={() => startProduct()}>＋ 新增商品</button></div></div>
             <div className="order-tabs product-tabs">{productListTabs.map((tab) => <button key={tab.key} className={`${productListTab === tab.key ? 'active ' : ''}${tab.key === 'closed' ? 'void-tab' : ''}`} onClick={() => { setProductListTab(tab.key); setProductPage(1); setSelectedProductIds([]); }}>{tab.label} <span>{tab.key === 'all' ? data.products.filter((product) => text(product.status) !== 'closed').length : data.products.filter((product) => text(product.status) === tab.key).length}</span></button>)}</div>
@@ -383,6 +449,67 @@ export default function AdminPage() {
     {rechargeJsonView && <Modal title={`充值JSON · ${rechargeJsonView.id}`} onClose={() => setRechargeJsonView(null)}><div className="recharge-json-view"><textarea readOnly value={rechargeJsonView.json} /></div><div className="admin-form-actions"><button className="ghost-button" onClick={() => setRechargeJsonView(null)}>关闭</button></div></Modal>}
     {confirmTarget && <Modal title={confirmTarget.title} onClose={() => setConfirmTarget(null)} compact><div className="confirm-content"><b>{confirmTarget.danger ? '此操作无法撤销' : '请确认本次变更'}</b><p>{confirmTarget.description}</p></div><div className="admin-form-actions"><button className="ghost-button" onClick={() => setConfirmTarget(null)}>取消</button><button className={confirmTarget.danger ? 'danger-button' : ''} onClick={async () => { if (await action(confirmTarget.body)) { const confirmAction = text(confirmTarget.body.action); if (['order-batch-status', 'order-batch-delete'].includes(confirmAction)) setSelectedOrderIds([]); if (['product-delete', 'product-batch-delete'].includes(confirmAction)) setSelectedProductIds([]); if (['credential-delete', 'credential-batch-delete'].includes(confirmAction)) setSelectedCredentialIds([]); setConfirmTarget(null); } }}>{confirmTarget.confirmText}</button></div></Modal>}
   </main>;
+}
+
+function AdminNavigation({ menus, active, pendingOrders, onSelect }: { menus: AdminMenu[]; active: string; pendingOrders: number; onSelect: (key: string) => void }) {
+  const [expanded, setExpanded] = useState<string[]>(() => menus.filter((item) => item.menu_type === 'directory').map((item) => item.menu_code));
+  useEffect(() => {
+    setExpanded((current) => Array.from(new Set([...current, ...menus.filter((item) => item.menu_type === 'directory').map((item) => item.menu_code)])));
+  }, [menus]);
+  return <nav className="admin-menu-tree">{menus.filter((item) => item.visible && item.status === 'active').map((menu) => {
+    const children = (menu.children || []).filter((item) => item.visible && item.status === 'active');
+    if (menu.menu_type === 'directory') {
+      const open = expanded.includes(menu.menu_code);
+      const childActive = children.some((child) => child.component_key === active);
+      return <div className={`admin-menu-group${childActive ? ' active-group' : ''}`} key={menu.menu_code}>
+        <button type="button" className={`admin-menu-parent${childActive ? ' active-parent' : ''}`} onClick={() => setExpanded((items) => open ? items.filter((item) => item !== menu.menu_code) : [...items, menu.menu_code])}><span>{menu.icon || '□'}</span>{menu.menu_name}<i>{open ? '⌃' : '⌄'}</i></button>
+        {open && <div className="admin-submenu">{children.map((child) => <button type="button" key={child.menu_code} className={active === child.component_key ? 'active' : ''} onClick={() => onSelect(child.component_key)}><span>{child.icon || '·'}</span>{child.menu_name}</button>)}</div>}
+      </div>;
+    }
+    return <button type="button" key={menu.menu_code} className={active === menu.component_key ? 'active' : ''} onClick={() => onSelect(menu.component_key)}><span>{menu.icon || '·'}</span>{menu.menu_name}{menu.component_key === 'orders' && pendingOrders > 0 && <em>{pendingOrders}</em>}</button>;
+  })}</nav>;
+}
+
+function ServiceModulePlaceholder({ moduleKey }: { moduleKey: string }) {
+  const modules: Record<string, { title: string; description: string }> = {
+    'service-management': { title: '技术服务管理', description: '发布、编辑、上下架技术服务，并维护服务方式、价格、服务区域和交付说明。' },
+    'provider-management': { title: '技术人员管理', description: '维护技术人员资料、技能、经验、服务区域、认证信息和可提供的服务。' },
+    'service-orders': { title: '服务订单', description: '管理技术服务交易订单、支付、接单、实施、完成与售后状态。' },
+    'service-appointments': { title: '预约管理', description: '管理在线服务时间、上门时间、服务地址和预约状态。' },
+    'service-consultations': { title: '在线咨询', description: '管理用户与技术服务者的咨询会话、消息记录和联系方式申请。' },
+    'provider-applications': { title: '入驻审核', description: '审核技术人才入驻资料、技能、资质及服务发布资格。' },
+  };
+  const module = modules[moduleKey] || { title: '上门服务', description: '模块建设中。' };
+  return <><div className="panel-title"><div><h2>{module.title}</h2><p>{module.description}</p></div></div><div className="system-module-placeholder"><span>⌖</span><b>后台模块已建立</b><p>菜单、权限与模块入口已接入数据库配置。下一阶段将把当前前端静态技术服务数据迁移为 MySQL 数据并完成真实业务 CRUD。</p></div></>;
+}
+
+function SystemMenuPanel({ data, loading, onAction }: { data: SystemData; loading: boolean; onAction: (body: Record<string, string | number>) => Promise<boolean> }) {
+  const emptyForm = (): MenuForm => ({ parentId: '', menuCode: '', menuName: '', componentKey: '', icon: '', menuType: 'menu', sortOrder: '0', visible: true, status: 'active' });
+  const [form, setForm] = useState<MenuForm | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<AdminMenu | null>(null);
+  const rows = flattenMenus(data.menuTree);
+  if (!data.initialized) return <><div className="panel-title"><div><h2>菜单管理</h2><p>菜单由数据库统一配置，并支持父级与二级菜单。</p></div></div><div className="system-init-empty"><b>系统菜单表尚未初始化</b><p>{data.message || '请执行 sql/yxshop-system-rbac-V1.sql 后刷新页面。'}</p><code>sql/yxshop-system-rbac-V1.sql</code></div></>;
+  return <><div className="panel-title"><div><h2>菜单管理</h2><p>维护菜单层级、显示状态、排序和功能组件映射</p></div><div className="panel-title-actions"><button disabled={loading} onClick={() => setForm(emptyForm())}>＋ 新增菜单</button></div></div>
+    <div className="table-wrap system-menu-table"><table><thead><tr><th>菜单名称</th><th>编码</th><th>类型</th><th>组件标识</th><th>排序</th><th>显示</th><th>状态</th><th>操作</th></tr></thead><tbody>{rows.map(({ menu, depth }) => <tr key={menu.id}><td><b style={{ paddingLeft: depth * 22 }}>{depth ? '└ ' : ''}{menu.icon ? `${menu.icon} ` : ''}{menu.menu_name}</b></td><td><code>{menu.menu_code}</code></td><td>{menu.menu_type === 'directory' ? '目录' : '菜单'}</td><td>{menu.component_key || '—'}</td><td>{menu.sort_order}</td><td>{menu.visible ? '显示' : '隐藏'}</td><td><Status value={menu.status} /></td><td><button className="text-action" onClick={() => setForm({ id: menu.id, parentId: menu.parent_id ? String(menu.parent_id) : '', menuCode: menu.menu_code, menuName: menu.menu_name, componentKey: menu.component_key, icon: menu.icon, menuType: menu.menu_type, sortOrder: String(menu.sort_order), visible: Boolean(menu.visible), status: menu.status })}>编辑</button><button className="text-action" onClick={() => void onAction({ action: 'menu-status', id: menu.id, status: menu.status === 'active' ? 'disabled' : 'active' })}>{menu.status === 'active' ? '停用' : '启用'}</button><button className="text-action danger-action" onClick={() => setDeleteTarget(menu)}>删除</button></td></tr>)}</tbody></table></div>
+    {form && <Modal title={form.id ? '编辑菜单' : '新增菜单'} onClose={() => setForm(null)}><form onSubmit={async (event) => { event.preventDefault(); const ok = await onAction({ action: 'menu-save', id: form.id || 0, parentId: form.parentId, menuCode: form.menuCode, menuName: form.menuName, componentKey: form.componentKey, icon: form.icon, menuType: form.menuType, sortOrder: form.sortOrder, visible: form.visible ? 1 : 0, status: form.status }); if (ok) setForm(null); }}><div className="admin-form-grid"><Field label="菜单名称"><input value={form.menuName} onChange={(e) => setForm({ ...form, menuName: e.target.value })} /></Field><Field label="菜单编码"><input value={form.menuCode} onChange={(e) => setForm({ ...form, menuCode: e.target.value })} /></Field><Field label="父级菜单"><select value={form.parentId} onChange={(e) => setForm({ ...form, parentId: e.target.value })}><option value="">顶级菜单</option>{data.menus.filter((item) => item.menu_type === 'directory' && item.id !== form.id).map((item) => <option value={item.id} key={item.id}>{item.menu_name}</option>)}</select></Field><Field label="菜单类型"><select value={form.menuType} onChange={(e) => setForm({ ...form, menuType: e.target.value as 'directory' | 'menu' })}><option value="menu">功能菜单</option><option value="directory">目录</option></select></Field><Field label="组件标识"><input disabled={form.menuType === 'directory'} value={form.componentKey} onChange={(e) => setForm({ ...form, componentKey: e.target.value })} placeholder="例如 service-management" /></Field><Field label="图标"><input value={form.icon} onChange={(e) => setForm({ ...form, icon: e.target.value })} placeholder="字符或简短图标" /></Field><Field label="排序"><input type="number" value={form.sortOrder} onChange={(e) => setForm({ ...form, sortOrder: e.target.value })} /></Field><Field label="状态"><select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as 'active' | 'disabled' })}><option value="active">启用</option><option value="disabled">停用</option></select></Field><Field label="前台显示"><label className="system-checkbox"><input type="checkbox" checked={form.visible} onChange={(e) => setForm({ ...form, visible: e.target.checked })} /> 显示在管理端导航</label></Field></div><div className="admin-form-actions"><button type="button" className="ghost-button" onClick={() => setForm(null)}>取消</button><button>保存菜单</button></div></form></Modal>}
+    {deleteTarget && <Modal title="删除菜单" onClose={() => setDeleteTarget(null)} compact><div className="confirm-content"><b>确认删除“{deleteTarget.menu_name}”吗？</b><p>存在子菜单时系统会拒绝删除；角色与该菜单的关联权限会同步清除。</p></div><div className="admin-form-actions"><button className="ghost-button" onClick={() => setDeleteTarget(null)}>取消</button><button className="danger-button" onClick={async () => { if (await onAction({ action: 'menu-delete', id: deleteTarget.id })) setDeleteTarget(null); }}>确认删除</button></div></Modal>}
+  </>;
+}
+
+function SystemRolePanel({ data, loading, onAction }: { data: SystemData; loading: boolean; onAction: (body: Record<string, string | number>) => Promise<boolean> }) {
+  const emptyRole = (): RoleForm => ({ roleCode: '', roleName: '', description: '', status: 'active' });
+  const [form, setForm] = useState<RoleForm | null>(null);
+  const [permissionRole, setPermissionRole] = useState<Row | null>(null);
+  const [selectedMenuIds, setSelectedMenuIds] = useState<number[]>([]);
+  const [deleteRole, setDeleteRole] = useState<Row | null>(null);
+  const rows = flattenMenus(data.menuTree);
+  if (!data.initialized) return <><div className="panel-title"><div><h2>角色管理</h2><p>角色用于分配管理端菜单权限。</p></div></div><div className="system-init-empty"><b>系统角色表尚未初始化</b><p>{data.message || '请执行 sql/yxshop-system-rbac-V1.sql 后刷新页面。'}</p><code>sql/yxshop-system-rbac-V1.sql</code></div></>;
+  return <><div className="panel-title"><div><h2>角色管理</h2><p>维护后台角色，并按菜单树分配管理权限</p></div><div className="panel-title-actions"><button disabled={loading} onClick={() => setForm(emptyRole())}>＋ 新增角色</button></div></div>
+    <div className="table-wrap"><table><thead><tr><th>角色</th><th>角色编码</th><th>说明</th><th>菜单权限</th><th>状态</th><th>操作</th></tr></thead><tbody>{data.roles.map((role) => { const count = data.roleMenus.filter((item) => Number(item.role_id) === Number(role.id)).length; return <tr key={text(role.id)}><td><b>{text(role.role_name)}</b></td><td><code>{text(role.role_code)}</code></td><td>{text(role.description) || '—'}</td><td>{count} 项</td><td><Status value={text(role.status)} /></td><td><button className="text-action" onClick={() => setForm({ id: Number(role.id), roleCode: text(role.role_code), roleName: text(role.role_name), description: text(role.description), status: text(role.status) === 'disabled' ? 'disabled' : 'active' })}>编辑</button><button className="text-action" onClick={() => { setPermissionRole(role); setSelectedMenuIds(data.roleMenus.filter((item) => Number(item.role_id) === Number(role.id)).map((item) => Number(item.menu_id))); }}>菜单权限</button><button className="text-action" onClick={() => void onAction({ action: 'role-status', id: Number(role.id), status: text(role.status) === 'active' ? 'disabled' : 'active' })}>{text(role.status) === 'active' ? '停用' : '启用'}</button>{text(role.role_code) !== 'super_admin' && <button className="text-action danger-action" onClick={() => setDeleteRole(role)}>删除</button>}</td></tr>; })}</tbody></table></div>
+    {form && <Modal title={form.id ? '编辑角色' : '新增角色'} onClose={() => setForm(null)}><form onSubmit={async (event) => { event.preventDefault(); const ok = await onAction({ action: 'role-save', id: form.id || 0, roleCode: form.roleCode, roleName: form.roleName, description: form.description, status: form.status }); if (ok) setForm(null); }}><div className="admin-form-grid"><Field label="角色名称"><input value={form.roleName} onChange={(e) => setForm({ ...form, roleName: e.target.value })} /></Field><Field label="角色编码"><input value={form.roleCode} onChange={(e) => setForm({ ...form, roleCode: e.target.value })} disabled={form.roleCode === 'super_admin'} /></Field><Field label="状态"><select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as 'active' | 'disabled' })}><option value="active">启用</option><option value="disabled">停用</option></select></Field><Field label="角色说明" wide><textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></Field></div><div className="admin-form-actions"><button type="button" className="ghost-button" onClick={() => setForm(null)}>取消</button><button>保存角色</button></div></form></Modal>}
+    {permissionRole && <Modal title={`${text(permissionRole.role_name)} · 菜单权限`} onClose={() => setPermissionRole(null)}><div className="system-permission-tree">{rows.map(({ menu, depth }) => <label key={menu.id} style={{ paddingLeft: depth * 24 }}><input type="checkbox" checked={selectedMenuIds.includes(Number(menu.id))} onChange={(event) => setSelectedMenuIds((current) => event.target.checked ? Array.from(new Set([...current, Number(menu.id)])) : current.filter((id) => id !== Number(menu.id)))} /><span>{menu.icon || '·'} {menu.menu_name}</span><small>{menu.menu_type === 'directory' ? '目录' : menu.component_key}</small></label>)}</div><div className="admin-form-actions"><button className="ghost-button" onClick={() => setPermissionRole(null)}>取消</button><button onClick={async () => { if (await onAction({ action: 'role-menu-save', roleId: Number(permissionRole.id), menuIds: selectedMenuIds.join(',') })) setPermissionRole(null); }}>保存权限</button></div></Modal>}
+    {deleteRole && <Modal title="删除角色" onClose={() => setDeleteRole(null)} compact><div className="confirm-content"><b>确认删除“{text(deleteRole.role_name)}”吗？</b><p>角色菜单权限和管理员角色关联会同步清除。</p></div><div className="admin-form-actions"><button className="ghost-button" onClick={() => setDeleteRole(null)}>取消</button><button className="danger-button" onClick={async () => { if (await onAction({ action: 'role-delete', id: Number(deleteRole.id) })) setDeleteRole(null); }}>确认删除</button></div></Modal>}
+  </>;
 }
 
 function Modal({ title, children, onClose, compact = false }: { title: string; children: React.ReactNode; onClose: () => void; compact?: boolean }) {
