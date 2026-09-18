@@ -11,8 +11,8 @@ SET @db_name = DATABASE();
 SET @sql = (
   SELECT IF(
     COUNT(*) = 0,
-    "ALTER TABLE users ADD COLUMN status VARCHAR(20) NOT NULL DEFAULT 'active'",
-    "SELECT 1"
+    'ALTER TABLE users ADD COLUMN status VARCHAR(20) NOT NULL DEFAULT ''active''',
+    'SELECT 1'
   )
   FROM information_schema.COLUMNS
   WHERE TABLE_SCHEMA=@db_name AND TABLE_NAME='users' AND COLUMN_NAME='status'
@@ -22,8 +22,8 @@ PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 SET @sql = (
   SELECT IF(
     COUNT(*) = 0,
-    "ALTER TABLE users ADD COLUMN permission_type VARCHAR(10) NOT NULL DEFAULT '10001'",
-    "SELECT 1"
+    'ALTER TABLE users ADD COLUMN permission_type VARCHAR(10) NOT NULL DEFAULT ''10001''',
+    'SELECT 1'
   )
   FROM information_schema.COLUMNS
   WHERE TABLE_SCHEMA=@db_name AND TABLE_NAME='users' AND COLUMN_NAME='permission_type'
@@ -33,8 +33,8 @@ PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 SET @sql = (
   SELECT IF(
     COUNT(*) = 0,
-    "ALTER TABLE users ADD COLUMN permission_type_name VARCHAR(30) NOT NULL DEFAULT '普通用户'",
-    "SELECT 1"
+    'ALTER TABLE users ADD COLUMN permission_type_name VARCHAR(30) NOT NULL DEFAULT ''普通用户''',
+    'SELECT 1'
   )
   FROM information_schema.COLUMNS
   WHERE TABLE_SCHEMA=@db_name AND TABLE_NAME='users' AND COLUMN_NAME='permission_type_name'
@@ -61,7 +61,7 @@ SET @idx_exists = (
   FROM information_schema.STATISTICS
   WHERE TABLE_SCHEMA=@db_name AND TABLE_NAME='users' AND INDEX_NAME='idx_users_permission_type'
 );
-SET @sql = IF(@idx_exists=0, "CREATE INDEX idx_users_permission_type ON users(permission_type)", "SELECT 1");
+SET @sql = IF(@idx_exists=0, 'CREATE INDEX idx_users_permission_type ON users(permission_type)', 'SELECT 1');
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 SELECT id,phone,status,permission_type,permission_type_name
