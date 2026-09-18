@@ -3,9 +3,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 type Row = Record<string, string | number | null>;
-type OnsiteData = { initialized: boolean; providers: Row[]; services: Row[]; message?: string };
+type OnsiteData = { initialized: boolean; providers: Row[]; services: Row[]; paymentQrs: Row[]; message?: string };
 
-const emptyData: OnsiteData = { initialized: false, providers: [], services: [] };
+const emptyData: OnsiteData = { initialized: false, providers: [], services: [], paymentQrs: [] };
 const text = (value: unknown) => String(value ?? "");
 
 function useOnsiteAdmin() {
@@ -18,7 +18,7 @@ function useOnsiteAdmin() {
     try {
       const response = await fetch(`/api/admin/onsite?refresh=${Date.now()}`, { cache: "no-store" });
       const result = await response.json() as OnsiteData;
-      setData(result);
+      setData({ ...result, paymentQrs: result.paymentQrs || [] });
     } catch {
       setData({ initialized: false, providers: [], services: [], message: "上门服务数据读取失败" });
     } finally {
@@ -99,7 +99,26 @@ export function OnsiteServiceManagement() {
   const { data, loading, notice, load, action } = useOnsiteAdmin();
   const [form, setForm] = useState<ServiceForm | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Row | null>(null);
+  const [paymentService, setPaymentService] = useState<Row | null>(null);
+  const [paymentType, setPaymentType] = useState<"wechat" | "alipay">("wechat");
+  const [paymentImage, setPaymentImage] = useState("");
   const providerMap = useMemo(() => new Map(data.providers.map((item) => [Number(item.id), item])), [data.providers]);
+
+  function openPayment(service: Row, type: "wechat" | "alipay") {
+    const existing = data.paymentQrs.find((item) => Number(item.service_id) === Number(service.id) && text(item.type) === type);
+    setPaymentService(service);
+    setPaymentType(type);
+    setPaymentImage(text(existing?.image_url));
+  }
+
+  function readPaymentImage(file?: File) {
+    if (!file) return;
+    if (!file.type.match(/^image\/(jpeg|png|webp)$/)) return;
+    if (file.size > 1024 * 1024) return;
+    const reader = new FileReader();
+    reader.onload = () => setPaymentImage(String(reader.result || ""));
+    reader.readAsDataURL(file);
+  }
 
   function edit(row: Row) {
     let modes: string[] = [], includes: { title: string; detail: string }[] = [], notes: string[] = [];
@@ -113,9 +132,10 @@ export function OnsiteServiceManagement() {
     {!data.initialized ? <InitRequired message={data.message} /> : <div className="table-wrap onsite-admin-table"><table><thead><tr><th>服务</th><th>技术人员</th><th>服务方式</th><th>价格</th><th>响应 / 到场</th><th>首页</th><th>状态</th><th>排序</th><th>操作</th></tr></thead><tbody>{data.services.map((service) => {
       let modes: string[] = []; try { modes = JSON.parse(text(service.delivery_modes_json) || "[]"); } catch { modes = []; }
       const provider = providerMap.get(Number(service.provider_id));
-      return <tr key={text(service.id)}><td><b>{text(service.title)}</b><small>{text(service.slug)} · {text(service.summary)}</small></td><td>{text(provider?.name || service.provider_name)}</td><td><div className="onsite-skill-list">{modes.map((mode) => <span key={mode}>{mode === "onsite" ? "指定地点服务" : "在线沟通"}</span>)}</div></td><td className="money">{text(service.pricing_mode) === "negotiable" ? "价格面议" : `¥${text(service.price)} / ${text(service.unit) || "次"}`}</td><td>{text(service.online_response) || "—"}<small>{text(service.onsite_arrival) || "—"}</small></td><td>{Number(service.homepage_featured) ? "推荐" : "—"}</td><td><Status value={text(service.status)} /></td><td>{text(service.sort_order)}</td><td><button className="text-action" onClick={() => edit(service)}>编辑</button><button className="text-action" onClick={() => void action({ action: "service-status", id: Number(service.id), status: text(service.status) === "active" ? "inactive" : "active" })}>{text(service.status) === "active" ? "下架" : "上架"}</button><button className="text-action danger-action" onClick={() => setDeleteTarget(service)}>删除</button></td></tr>;
+      return <tr key={text(service.id)}><td><b>{text(service.title)}</b><small>{text(service.slug)} · {text(service.summary)}</small></td><td>{text(provider?.name || service.provider_name)}</td><td><div className="onsite-skill-list">{modes.map((mode) => <span key={mode}>{mode === "onsite" ? "指定地点服务" : "在线沟通"}</span>)}</div></td><td className="money">{text(service.pricing_mode) === "negotiable" ? "价格面议" : `¥${text(service.price)} / ${text(service.unit) || "次"}`}</td><td>{text(service.online_response) || "—"}<small>{text(service.onsite_arrival) || "—"}</small></td><td>{Number(service.homepage_featured) ? "推荐" : "—"}</td><td><Status value={text(service.status)} /></td><td>{text(service.sort_order)}</td><td><div className="onsite-service-actions"><button className="text-action" onClick={() => edit(service)}>编辑</button><button className="text-action" onClick={() => openPayment(service, "wechat")}>微信收款码</button><button className="text-action" onClick={() => openPayment(service, "alipay")}>支付宝收款码</button><button className="text-action" onClick={() => void action({ action: "service-status", id: Number(service.id), status: text(service.status) === "active" ? "inactive" : "active" })}>{text(service.status) === "active" ? "下架" : "上架"}</button><button className="text-action danger-action" onClick={() => setDeleteTarget(service)}>删除</button></div></td></tr>;
     })}</tbody></table></div>}
     {form && <Modal title={form.id ? "编辑技术服务" : "发布技术服务"} onClose={() => setForm(null)}><form onSubmit={async (event) => { event.preventDefault(); const modes = [form.online ? "online" : "", form.onsite ? "onsite" : ""].filter(Boolean).join(","); const ok = await action({ action: "service-save", id: form.id || 0, providerId: form.providerId, slug: form.slug, title: form.title, summary: form.summary, deliveryModes: modes, coverage: form.coverage, pricingMode: form.pricingMode, price: form.price, unit: form.unit, onlineResponse: form.onlineResponse, onsiteArrival: form.onsiteArrival, serviceIncludesText: form.serviceIncludesText, deliveryNotesText: form.deliveryNotesText, homepageFeatured: form.homepageFeatured ? 1 : 0, sortOrder: form.sortOrder, status: form.status }); if (ok) setForm(null); }}><div className="admin-form-grid"><Field label="技术人员"><select value={form.providerId} onChange={(e) => setForm({ ...form, providerId: e.target.value })}>{data.providers.filter((item) => text(item.status) === "active").map((item) => <option value={text(item.id)} key={text(item.id)}>{text(item.name)} · {text(item.city)}</option>)}</select></Field><Field label="服务名称"><input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /></Field><Field label="服务 Slug"><input value={form.slug} onChange={(e) => setForm({ ...form, slug: e.target.value.replace(/[^a-zA-Z0-9-_]/g, "").toLowerCase() })} placeholder="ai-site-deployment" /></Field><Field label="服务状态"><select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}><option value="inactive">暂不上架</option><option value="active">立即上架</option></select></Field><Field label="服务简介" wide><textarea value={form.summary} onChange={(e) => setForm({ ...form, summary: e.target.value })} /></Field><Field label="服务方式"><div className="onsite-check-row"><label><input type="checkbox" checked={form.online} onChange={(e) => setForm({ ...form, online: e.target.checked })} /> 在线沟通</label><label><input type="checkbox" checked={form.onsite} onChange={(e) => setForm({ ...form, onsite: e.target.checked })} /> 指定地点服务</label></div></Field><Field label="服务区域"><input value={form.coverage} onChange={(e) => setForm({ ...form, coverage: e.target.value })} placeholder="全市服务 / 上海、苏州、杭州" /></Field><Field label="计价方式"><select value={form.pricingMode} onChange={(e) => setForm({ ...form, pricingMode: e.target.value })}><option value="fixed">固定价格</option><option value="negotiable">价格面议</option></select></Field><Field label="价格"><input type="number" step="0.01" disabled={form.pricingMode === "negotiable"} value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} /></Field><Field label="计价单位"><input value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} placeholder="次 / 小时" /></Field><Field label="在线响应"><input value={form.onlineResponse} onChange={(e) => setForm({ ...form, onlineResponse: e.target.value })} /></Field><Field label="上门到场"><input value={form.onsiteArrival} onChange={(e) => setForm({ ...form, onsiteArrival: e.target.value })} /></Field><Field label="服务内容" wide><textarea value={form.serviceIncludesText} onChange={(e) => setForm({ ...form, serviceIncludesText: e.target.value })} placeholder={"每行一项：\n服务器环境部署：配置运行环境与必要组件\n域名配置：协助域名解析与证书配置"} /></Field><Field label="交付说明" wide><textarea value={form.deliveryNotesText} onChange={(e) => setForm({ ...form, deliveryNotesText: e.target.value })} placeholder={"每行一项：\n需求确认后开始实施\n过程同步与阶段验收"} /></Field><Field label="排序"><input type="number" value={form.sortOrder} onChange={(e) => setForm({ ...form, sortOrder: e.target.value })} /></Field><Field label="首页推荐"><div className="onsite-check-row"><label><input type="checkbox" checked={form.homepageFeatured} onChange={(e) => setForm({ ...form, homepageFeatured: e.target.checked })} /> 在首页技术服务频道推荐</label></div></Field></div><div className="admin-form-actions"><button type="button" className="ghost-button" onClick={() => setForm(null)}>取消</button><button>保存技术服务</button></div></form></Modal>}
+    {paymentService && <Modal title={`${text(paymentService.title)} · ${paymentType === "wechat" ? "微信" : "支付宝"}收款码`} onClose={() => setPaymentService(null)}><div className="technical-payment-admin"><div className="technical-payment-admin-preview">{paymentImage ? <img src={paymentImage} alt="技术服务收款二维码预览" /> : <span>暂未配置二维码</span>}</div><label><span>上传二维码图片</span><input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => readPaymentImage(event.target.files?.[0])} /><small>支持 JPG / PNG / WebP，建议 1MB 以内。</small></label></div><div className="admin-form-actions"><button type="button" className="ghost-button" onClick={() => setPaymentService(null)}>取消</button><button disabled={!paymentImage} onClick={async () => { if (await action({ action: "payment-qr-save", serviceId: Number(paymentService.id), type: paymentType, name: `${text(paymentService.title)} ${paymentType === "wechat" ? "微信" : "支付宝"}收款码`, imageUrl: paymentImage })) setPaymentService(null); }}>保存收款码</button></div></Modal>}
     {deleteTarget && <Modal title="删除技术服务" onClose={() => setDeleteTarget(null)}><div className="confirm-content"><b>确认删除“{text(deleteTarget.title)}”吗？</b><p>已有历史订单的服务不能永久删除，可改为下架。</p></div><div className="admin-form-actions"><button className="ghost-button" onClick={() => setDeleteTarget(null)}>取消</button><button className="danger-button" onClick={async () => { if (await action({ action: "service-delete", id: Number(deleteTarget.id) })) setDeleteTarget(null); }}>确认删除</button></div></Modal>}
   </>;
 }
