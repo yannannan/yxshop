@@ -150,3 +150,7 @@
 
 
 .orders-header-actions{display:flex;align-items:center;gap:12px}.orders-header-actions a{color:#666b73;text-decoration:none;font-size:11px;font-weight:800}.orders-header-actions a:hover{color:#e85c24}@media(max-width:600px){.orders-header-actions{gap:8px}.orders-header-actions a:first-child{display:none}}
+
+
+/* 技术服务支付后台 */
+.onsite-service-actions{display:flex;flex-wrap:wrap;align-items:center;gap:4px;min-width:240px}.technical-payment-admin{display:grid;grid-template-columns:220px 1fr;gap:18px;align-items:start}.technical-payment-admin-preview{display:grid;place-items:center;min-height:220px;border:1px dashed #d9dde3;border-radius:11px;background:#fafbfc;overflow:hidden;color:#9ca1a8;font-size:11px}.technical-payment-admin-preview img{display:block;width:100%;height:auto;max-height:300px;object-fit:contain}.technical-payment-admin>label{display:grid;gap:8px;color:#60666e;font-size:11px;font-weight:800}.technical-payment-admin>label input{padding:10px;border:1px solid #dfe2e6;border-radius:8px;background:#fff}.technical-payment-admin>label small{color:#9ba0a7;font-size:9px;font-weight:500}@media(max-width:700px){.technical-payment-admin{grid-template-columns:1fr}.technical-payment-admin-preview{min-height:180px}}
