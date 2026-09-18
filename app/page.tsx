@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import { TechnicalSupportChat } from "../components/technical-support-chat";
+import { TechnicalProviderApplication } from "../components/technical-provider-application";
 import {
   billingCyclePriceText,
   catalog,
@@ -42,6 +43,7 @@ export default function StorePage() {
   const [codeCooldown, setCodeCooldown] = useState(0);
   const [phoneRegistered, setPhoneRegistered] = useState<boolean | null>(null);
   const [serviceOpen, setServiceOpen] = useState(false);
+  const [providerApplicationOpen, setProviderApplicationOpen] = useState(false);
   const [promoSlide, setPromoSlide] = useState(0);
   const [channel, setChannel] = useState<"mall" | "technical">("mall");
   const [technicalChatOpen, setTechnicalChatOpen] = useState(false);
@@ -805,8 +807,8 @@ export default function StorePage() {
                   <h3>你是技术服务者？</h3>
                   <p>发布擅长服务、服务方式和价格，面向真实需求在线接单。</p>
                 </div>
-                <button type="button" onClick={() => setServiceOpen(true)}>
-                  咨询入驻方式
+                <button type="button" onClick={() => setProviderApplicationOpen(true)}>
+                  申请技术人才入驻
                 </button>
               </section>
             </section>
@@ -847,6 +849,11 @@ export default function StorePage() {
         open={technicalChatOpen}
         services={technicalServiceItems}
         onClose={() => setTechnicalChatOpen(false)}
+      />
+
+      <TechnicalProviderApplication
+        open={providerApplicationOpen}
+        onClose={() => setProviderApplicationOpen(false)}
       />
 
       <div className="service-widget">
