@@ -28,9 +28,10 @@ function normalizeServiceIncludes(value: unknown) {
 }
 
 async function readData() {
-  const [providers, services, orders, appointments, consultations, messages, contactRequests, applications] = await Promise.all([
+  const [providers, services, paymentQrs, orders, appointments, consultations, messages, contactRequests, applications] = await Promise.all([
     env.DB.prepare('SELECT * FROM technical_providers ORDER BY sort_order,id').all(),
     env.DB.prepare("SELECT s.*,p.name AS provider_name,p.provider_code,p.avatar,p.city,p.experience,p.role_name,p.intro,p.skills_json,p.certification_status,p.online_status FROM technical_services s JOIN technical_providers p ON p.id=s.provider_id ORDER BY s.sort_order,s.id").all(),
+    env.DB.prepare("SELECT q.*,s.title AS service_title FROM technical_payment_qrs q JOIN technical_services s ON s.id=q.service_id ORDER BY q.service_id,q.type,q.id").all(),
     env.DB.prepare("SELECT o.*,s.title AS service_title,s.slug AS service_slug,p.name AS provider_name FROM technical_service_orders o JOIN technical_services s ON s.id=o.service_id JOIN technical_providers p ON p.id=o.provider_id ORDER BY o.created_at DESC").all(),
     env.DB.prepare("SELECT a.*,s.title AS service_title,p.name AS provider_name FROM technical_service_appointments a JOIN technical_services s ON s.id=a.service_id JOIN technical_providers p ON p.id=a.provider_id ORDER BY a.scheduled_at DESC,a.id DESC").all(),
     env.DB.prepare("SELECT c.*,s.title AS service_title,s.slug AS service_slug,p.name AS provider_name FROM technical_consultations c JOIN technical_services s ON s.id=c.service_id JOIN technical_providers p ON p.id=c.provider_id ORDER BY c.last_message_at DESC,c.id DESC").all(),
@@ -42,6 +43,7 @@ async function readData() {
     initialized: true,
     providers: providers.results,
     services: services.results,
+    paymentQrs: paymentQrs.results,
     orders: orders.results,
     appointments: appointments.results,
     consultations: consultations.results,
@@ -151,6 +153,27 @@ export async function POST(request: Request) {
         await env.DB.prepare('DELETE FROM technical_services WHERE id=?').bind(id).run();
         break;
       }
+      case 'payment-qr-save': {
+        const serviceId = Number(body.serviceId || 0);
+        const type = body.type === 'alipay' ? 'alipay' : 'wechat';
+        const name = String(body.name || (type === 'alipay' ? '支付宝收款码' : '微信收款码')).trim().slice(0, 80);
+        const imageUrl = String(body.imageUrl || '').trim();
+        if (!serviceId) return Response.json({ message: '请选择技术服务' }, { status: 400 });
+        if (!imageUrl) return Response.json({ message: '请上传收款二维码' }, { status: 400 });
+        if (imageUrl.length > 2_000_000) return Response.json({ message: '二维码图片过大，请压缩后重试' }, { status: 400 });
+        const service = await env.DB.prepare('SELECT id FROM technical_services WHERE id=?').bind(serviceId).first();
+        if (!service) return Response.json({ message: '技术服务不存在' }, { status: 404 });
+        const existing = await env.DB.prepare('SELECT id FROM technical_payment_qrs WHERE service_id=? AND type=?').bind(serviceId, type).first<{ id: number }>();
+        if (existing) {
+          await env.DB.prepare("UPDATE technical_payment_qrs SET name=?,image_url=?,status='active',updated_at=? WHERE id=?").bind(name, imageUrl, now, existing.id).run();
+        } else {
+          await env.DB.prepare("INSERT INTO technical_payment_qrs (service_id,name,type,image_url,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?)").bind(serviceId, name, type, imageUrl, 'active', now, now).run();
+        }
+        break;
+      }
+      case 'payment-qr-delete':
+        await env.DB.prepare('DELETE FROM technical_payment_qrs WHERE id=?').bind(body.id).run();
+        break;
       case 'order-quote': {
         const id = String(body.id || '').trim();
         const amount = Number(body.amount || 0);
@@ -219,7 +242,7 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error('上门服务后台操作失败', error);
     const message = error instanceof Error ? error.message : '';
-    if (/technical_providers|technical_services|technical_service_orders|technical_service_appointments|technical_consultations|technical_consultation_messages|technical_contact_requests|technical_provider_applications|doesn't exist|does not exist|no such table/i.test(message)) {
+    if (/technical_providers|technical_services|technical_payment_qrs|technical_service_orders|technical_service_appointments|technical_consultations|technical_consultation_messages|technical_contact_requests|technical_provider_applications|doesn't exist|does not exist|no such table/i.test(message)) {
       return Response.json({ message: '上门服务数据表尚未初始化，请先执行上门服务 SQL。' }, { status: 503 });
     }
     return Response.json({ message: '上门服务操作失败，请检查数据和数据库配置' }, { status: 500 });
