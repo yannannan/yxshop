@@ -13,7 +13,7 @@ function parseJsonArray<T>(value: unknown, fallback: T[] = []) {
 }
 
 function normalizeList(value: unknown, max = 20) {
-  return String(value || '').split(/[\n,，]+/).map((item) => item.trim()).filter(Boolean).slice(0, max);
+  return String(value || '').split(/[\n,，、]+/).map((item) => item.trim()).filter(Boolean).slice(0, max);
 }
 
 function normalizeServiceIncludes(value: unknown) {
