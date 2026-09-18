@@ -28,11 +28,27 @@ function normalizeServiceIncludes(value: unknown) {
 }
 
 async function readData() {
-  const [providers, services] = await Promise.all([
+  const [providers, services, orders, appointments, consultations, messages, contactRequests, applications] = await Promise.all([
     env.DB.prepare('SELECT * FROM technical_providers ORDER BY sort_order,id').all(),
     env.DB.prepare("SELECT s.*,p.name AS provider_name,p.provider_code,p.avatar,p.city,p.experience,p.role_name,p.intro,p.skills_json,p.certification_status,p.online_status FROM technical_services s JOIN technical_providers p ON p.id=s.provider_id ORDER BY s.sort_order,s.id").all(),
+    env.DB.prepare("SELECT o.*,s.title AS service_title,s.slug AS service_slug,p.name AS provider_name FROM technical_service_orders o JOIN technical_services s ON s.id=o.service_id JOIN technical_providers p ON p.id=o.provider_id ORDER BY o.created_at DESC").all(),
+    env.DB.prepare("SELECT a.*,s.title AS service_title,p.name AS provider_name FROM technical_service_appointments a JOIN technical_services s ON s.id=a.service_id JOIN technical_providers p ON p.id=a.provider_id ORDER BY a.scheduled_at DESC,a.id DESC").all(),
+    env.DB.prepare("SELECT c.*,s.title AS service_title,s.slug AS service_slug,p.name AS provider_name FROM technical_consultations c JOIN technical_services s ON s.id=c.service_id JOIN technical_providers p ON p.id=c.provider_id ORDER BY c.last_message_at DESC,c.id DESC").all(),
+    env.DB.prepare("SELECT m.*,c.service_id,c.provider_id FROM technical_consultation_messages m JOIN technical_consultations c ON c.id=m.consultation_id ORDER BY m.created_at,m.id").all(),
+    env.DB.prepare("SELECT r.*,s.title AS service_title,p.name AS provider_name FROM technical_contact_requests r JOIN technical_services s ON s.id=r.service_id JOIN technical_providers p ON p.id=r.provider_id ORDER BY r.requested_at DESC,r.id DESC").all(),
+    env.DB.prepare("SELECT * FROM technical_provider_applications ORDER BY created_at DESC,id DESC").all(),
   ]);
-  return { initialized: true, providers: providers.results, services: services.results };
+  return {
+    initialized: true,
+    providers: providers.results,
+    services: services.results,
+    orders: orders.results,
+    appointments: appointments.results,
+    consultations: consultations.results,
+    messages: messages.results,
+    contactRequests: contactRequests.results,
+    applications: applications.results,
+  };
 }
 
 export async function GET() {
@@ -135,6 +151,67 @@ export async function POST(request: Request) {
         await env.DB.prepare('DELETE FROM technical_services WHERE id=?').bind(id).run();
         break;
       }
+      case 'order-quote': {
+        const id = String(body.id || '').trim();
+        const amount = Number(body.amount || 0);
+        if (!id || !Number.isFinite(amount) || amount <= 0) return Response.json({ message: '请输入有效服务报价' }, { status: 400 });
+        const order = await env.DB.prepare("SELECT id,status,pricing_mode FROM technical_service_orders WHERE id=?").bind(id).first<{ id: string; status: string; pricing_mode: string }>();
+        if (!order) return Response.json({ message: '服务订单不存在' }, { status: 404 });
+        if (['completed','closed','cancelled'].includes(order.status)) return Response.json({ message: '当前订单状态不能重新报价' }, { status: 400 });
+        await env.DB.prepare("UPDATE technical_service_orders SET amount=?,status='pending_payment',updated_at=? WHERE id=?").bind(amount, now, id).run();
+        break;
+      }
+      case 'order-status': {
+        const id = String(body.id || '').trim();
+        const status = String(body.status || '');
+        const allowed = ['pending_quote','pending_payment','paid','accepted','in_service','completed','closed','cancelled'];
+        if (!allowed.includes(status)) return Response.json({ message: '服务订单状态不正确' }, { status: 400 });
+        const timestamps: Record<string, string | null> = {
+          paid: 'paid_at',
+          accepted: 'accepted_at',
+          in_service: 'started_at',
+          completed: 'completed_at',
+        };
+        const field = timestamps[status];
+        if (field) await env.DB.prepare(`UPDATE technical_service_orders SET status=?,${field}=?,updated_at=? WHERE id=?`).bind(status, now, now, id).run();
+        else await env.DB.prepare('UPDATE technical_service_orders SET status=?,updated_at=? WHERE id=?').bind(status, now, id).run();
+        break;
+      }
+      case 'appointment-status': {
+        const status = String(body.status || '');
+        if (!['pending','confirmed','arrived','in_service','completed','cancelled'].includes(status)) return Response.json({ message: '预约状态不正确' }, { status: 400 });
+        await env.DB.prepare('UPDATE technical_service_appointments SET status=?,updated_at=? WHERE id=?').bind(status, now, body.id).run();
+        break;
+      }
+      case 'consultation-reply': {
+        const consultationId = Number(body.consultationId || 0);
+        const content = String(body.content || '').trim().slice(0, 4000);
+        if (!consultationId || !content) return Response.json({ message: '请输入回复内容' }, { status: 400 });
+        const consultation = await env.DB.prepare('SELECT id FROM technical_consultations WHERE id=?').bind(consultationId).first();
+        if (!consultation) return Response.json({ message: '咨询会话不存在' }, { status: 404 });
+        await env.DB.batch([
+          env.DB.prepare("INSERT INTO technical_consultation_messages (consultation_id,sender_type,sender_id,content,read_at,created_at) VALUES (?,?,?,?,?,?)").bind(consultationId, 'provider', null, content, null, now),
+          env.DB.prepare("UPDATE technical_consultations SET status='open',last_message_at=?,updated_at=? WHERE id=?").bind(now, now, consultationId),
+        ]);
+        break;
+      }
+      case 'consultation-status': {
+        const status = body.status === 'closed' ? 'closed' : 'open';
+        await env.DB.prepare('UPDATE technical_consultations SET status=?,updated_at=? WHERE id=?').bind(status, now, body.id).run();
+        break;
+      }
+      case 'contact-request-review': {
+        const status = body.status === 'approved' ? 'approved' : body.status === 'rejected' ? 'rejected' : 'pending';
+        await env.DB.prepare('UPDATE technical_contact_requests SET status=?,reviewed_at=?,reviewed_by=?,note=? WHERE id=?')
+          .bind(status, status === 'pending' ? null : now, null, String(body.note || '').trim().slice(0, 500), body.id).run();
+        break;
+      }
+      case 'application-review': {
+        const status = body.status === 'approved' ? 'approved' : body.status === 'rejected' ? 'rejected' : 'pending';
+        await env.DB.prepare('UPDATE technical_provider_applications SET status=?,review_note=?,reviewed_at=?,reviewed_by=?,updated_at=? WHERE id=?')
+          .bind(status, String(body.reviewNote || '').trim().slice(0, 1000), status === 'pending' ? null : now, null, now, body.id).run();
+        break;
+      }
       default:
         return Response.json({ message: '未知上门服务操作' }, { status: 400 });
     }
@@ -142,7 +219,7 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error('上门服务后台操作失败', error);
     const message = error instanceof Error ? error.message : '';
-    if (/technical_providers|technical_services|technical_service_orders|doesn't exist|does not exist|no such table/i.test(message)) {
+    if (/technical_providers|technical_services|technical_service_orders|technical_service_appointments|technical_consultations|technical_consultation_messages|technical_contact_requests|technical_provider_applications|doesn't exist|does not exist|no such table/i.test(message)) {
       return Response.json({ message: '上门服务数据表尚未初始化，请先执行上门服务 SQL。' }, { status: 503 });
     }
     return Response.json({ message: '上门服务操作失败，请检查数据和数据库配置' }, { status: 500 });
