@@ -1,19 +1,31 @@
 import { env } from '@/db/mysql-runtime';
 import { ensureDatabase } from '../../../../db/setup';
+import { adminDenied, getAdminContext, hasAdminPermission } from '../../../../lib/admin-auth';
 
-export async function GET() {
+export async function GET(request: Request) {
   await ensureDatabase();
+  const admin = await getAdminContext(request);
+  if (!admin) return adminDenied();
+
+  const canProducts = hasAdminPermission(admin, 'products');
+  const canCategories = hasAdminPermission(admin, 'categories');
+  const canOrders = hasAdminPermission(admin, 'orders');
+  const canUsers = hasAdminPermission(admin, 'users');
+  const canCredentials = hasAdminPermission(admin, 'credentials');
+  const canNotifications = hasAdminPermission(admin, 'notifications');
+  const empty = Promise.resolve({ results: [] as Record<string, unknown>[] });
+
   const [products, users, orders, credentials, credentialAssignments, qrs, categories, notificationSettings, emailConfig] = await Promise.all([
-    env.DB.prepare('SELECT * FROM products ORDER BY sort_order,id').all(),
-    env.DB.prepare('SELECT * FROM users ORDER BY id DESC').all(),
-    env.DB.prepare('SELECT o.*,p.name AS product_name,p.category,p.subcategory,u.phone,u.email FROM orders o JOIN products p ON p.id=o.product_id JOIN users u ON u.id=o.user_id ORDER BY o.created_at DESC').all(),
-    env.DB.prepare('SELECT c.*,p.name AS product_name,p.price AS product_price FROM credentials c JOIN products p ON p.id=c.product_id ORDER BY c.id DESC').all(),
-    env.DB.prepare("SELECT ca.id,ca.credential_id,ca.order_id,ca.status AS assignment_status,ca.assigned_at,ca.released_at,u.phone,u.email,COALESCE(o.status,'deleted') AS order_status,COALESCE(NULLIF(ca.product_name,''),op.name,cp.name,'—') AS product_name,COALESCE(NULLIF(ca.category,''),op.category,cp.category,'—') AS category,COALESCE(NULLIF(ca.subcategory,''),op.subcategory,cp.subcategory,'—') AS subcategory,COALESCE(NULLIF(ca.billing_cycle,''),op.billing_cycle,cp.billing_cycle,'once') AS billing_cycle FROM credential_assignments ca JOIN users u ON u.id=ca.user_id LEFT JOIN orders o ON o.id=ca.order_id LEFT JOIN products op ON op.id=o.product_id LEFT JOIN credentials c ON c.id=ca.credential_id LEFT JOIN products cp ON cp.id=c.product_id ORDER BY ca.assigned_at DESC").all(),
+    canProducts ? env.DB.prepare('SELECT * FROM products ORDER BY sort_order,id').all() : empty,
+    canUsers ? env.DB.prepare('SELECT * FROM users ORDER BY id DESC').all() : empty,
+    canOrders ? env.DB.prepare('SELECT o.*,p.name AS product_name,p.category,p.subcategory,u.phone,u.email FROM orders o JOIN products p ON p.id=o.product_id JOIN users u ON u.id=o.user_id ORDER BY o.created_at DESC').all() : empty,
+    (canCredentials || canOrders) ? env.DB.prepare('SELECT c.*,p.name AS product_name,p.price AS product_price FROM credentials c JOIN products p ON p.id=c.product_id ORDER BY c.id DESC').all() : empty,
+    canCredentials ? env.DB.prepare("SELECT ca.id,ca.credential_id,ca.order_id,ca.status AS assignment_status,ca.assigned_at,ca.released_at,u.phone,u.email,COALESCE(o.status,'deleted') AS order_status,COALESCE(NULLIF(ca.product_name,''),op.name,cp.name,'—') AS product_name,COALESCE(NULLIF(ca.category,''),op.category,cp.category,'—') AS category,COALESCE(NULLIF(ca.subcategory,''),op.subcategory,cp.subcategory,'—') AS subcategory,COALESCE(NULLIF(ca.billing_cycle,''),op.billing_cycle,cp.billing_cycle,'once') AS billing_cycle FROM credential_assignments ca JOIN users u ON u.id=ca.user_id LEFT JOIN orders o ON o.id=ca.order_id LEFT JOIN products op ON op.id=o.product_id LEFT JOIN credentials c ON c.id=ca.credential_id LEFT JOIN products cp ON cp.id=c.product_id ORDER BY ca.assigned_at DESC").all() : empty,
     // 二维码图片可能是大尺寸 Base64；汇总页只需配置状态，图片在打开单个商品二维码弹窗时再按需读取。
-    env.DB.prepare("SELECT id,product_id,name,type,amount,status,CASE WHEN image_url IS NULL OR image_url='' THEN '' ELSE '1' END AS image_url FROM payment_qrs ORDER BY id DESC").all(),
-    env.DB.prepare('SELECT c.*,p.name AS parent_name FROM categories c LEFT JOIN categories p ON p.id=c.parent_id ORDER BY c.parent_id,c.sort,c.id').all(),
-    env.DB.prepare('SELECT * FROM notification_settings ORDER BY type').all(),
-    env.DB.prepare('SELECT * FROM email_config WHERE id=1').all(),
+    canProducts ? env.DB.prepare("SELECT id,product_id,name,type,amount,status,CASE WHEN image_url IS NULL OR image_url='' THEN '' ELSE '1' END AS image_url FROM payment_qrs ORDER BY id DESC").all() : empty,
+    (canCategories || canProducts) ? env.DB.prepare('SELECT c.*,p.name AS parent_name FROM categories c LEFT JOIN categories p ON p.id=c.parent_id ORDER BY c.parent_id,c.sort,c.id').all() : empty,
+    canNotifications ? env.DB.prepare('SELECT * FROM notification_settings ORDER BY type').all() : empty,
+    canNotifications ? env.DB.prepare('SELECT * FROM email_config WHERE id=1').all() : empty,
   ]);
   return Response.json({ products: products.results, users: users.results, orders: orders.results, credentials: credentials.results, credentialAssignments: credentialAssignments.results, qrs: qrs.results, categories: categories.results, notificationSettings: notificationSettings.results, emailConfig: emailConfig.results[0] || null }, { headers: { 'Cache-Control': 'no-store, max-age=0, must-revalidate', 'CDN-Cache-Control': 'no-store' } });
 }

@@ -1,5 +1,6 @@
 import { env } from '@/db/mysql-runtime';
 import { ensureDatabase } from '../../../../db/setup';
+import { adminDenied, getAdminContext, hasAdminPermission } from '../../../../lib/admin-auth';
 
 type MenuRow = {
   id: number;
@@ -33,10 +34,12 @@ function buildMenuTree(rows: MenuRow[]) {
 }
 
 async function readSystemData() {
-  const [menus, roles, roleMenus] = await Promise.all([
+  const [menus, roles, roleMenus, admins, adminRoles] = await Promise.all([
     env.DB.prepare('SELECT id,parent_id,menu_code,menu_name,component_key,icon,menu_type,sort_order,visible,status FROM sys_menu ORDER BY sort_order,id').all<MenuRow>(),
     env.DB.prepare('SELECT id,role_code,role_name,description,status,created_at,updated_at FROM sys_role ORDER BY id').all(),
     env.DB.prepare('SELECT role_id,menu_id FROM sys_role_menu ORDER BY role_id,menu_id').all(),
+    env.DB.prepare('SELECT id,username,display_name,status,created_at,updated_at FROM sys_admin_user ORDER BY id').all(),
+    env.DB.prepare('SELECT admin_user_id,role_id FROM sys_admin_user_role ORDER BY admin_user_id,role_id').all(),
   ]);
   return {
     initialized: true,
@@ -44,28 +47,41 @@ async function readSystemData() {
     menuTree: buildMenuTree(menus.results),
     roles: roles.results,
     roleMenus: roleMenus.results,
+    admins: admins.results,
+    adminRoles: adminRoles.results,
   };
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   await ensureDatabase();
+  const admin = await getAdminContext(request);
+  if (!admin) return adminDenied();
+  if (!hasAdminPermission(admin, ['system-menu-management', 'system-role-management', 'system-admin-management'])) return adminDenied('无系统设置访问权限');
   try {
     return Response.json(await readSystemData(), { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     const message = error instanceof Error ? error.message : '系统菜单读取失败';
-    if (/sys_menu|sys_role|doesn't exist|does not exist|no such table/i.test(message)) {
-      return Response.json({ initialized: false, menus: [], menuTree: [], roles: [], roleMenus: [], message: '系统设置数据表尚未初始化，请先执行 RBAC SQL。' }, { headers: { 'Cache-Control': 'no-store' } });
+    if (/sys_menu|sys_role|sys_admin_user|sys_admin_user_role|doesn't exist|does not exist|no such table/i.test(message)) {
+      return Response.json({ initialized: false, menus: [], menuTree: [], roles: [], roleMenus: [], admins: [], adminRoles: [], message: '系统设置数据表尚未初始化，请先执行 RBAC SQL。' }, { headers: { 'Cache-Control': 'no-store' } });
     }
     console.error('读取系统设置失败', error);
-    return Response.json({ initialized: false, menus: [], menuTree: [], roles: [], roleMenus: [], message: '系统设置读取失败' }, { status: 500 });
+    return Response.json({ initialized: false, menus: [], menuTree: [], roles: [], roleMenus: [], admins: [], adminRoles: [], message: '系统设置读取失败' }, { status: 500 });
   }
 }
 
 export async function POST(request: Request) {
   await ensureDatabase();
+  const admin = await getAdminContext(request);
+  if (!admin) return adminDenied();
   const body = await request.json() as Record<string, string | number>;
   const action = String(body.action || '');
   const now = new Date().toISOString();
+
+  const requiredPermission =
+    action.startsWith('menu-') ? 'system-menu-management' :
+    action.startsWith('role-') ? 'system-role-management' :
+    action.startsWith('admin-') ? 'system-admin-management' : '';
+  if (!requiredPermission || !hasAdminPermission(admin, requiredPermission)) return adminDenied('无此系统设置操作权限');
 
   try {
     switch (action) {
@@ -121,6 +137,8 @@ export async function POST(request: Request) {
         const duplicate = await env.DB.prepare('SELECT id FROM sys_role WHERE role_code=? AND id<>?').bind(roleCode, Number(body.id || 0)).first();
         if (duplicate) return Response.json({ message: '角色编码已存在' }, { status: 400 });
         if (body.id) {
+          const currentRole = await env.DB.prepare('SELECT role_code FROM sys_role WHERE id=?').bind(body.id).first<{ role_code: string }>();
+          if (currentRole?.role_code === 'super_admin' && (roleCode !== 'super_admin' || status !== 'active')) return Response.json({ message: '超级管理员角色编码和启用状态不能修改' }, { status: 400 });
           await env.DB.prepare('UPDATE sys_role SET role_code=?,role_name=?,description=?,status=?,updated_at=? WHERE id=?').bind(roleCode, roleName, description, status, now, body.id).run();
         } else {
           await env.DB.prepare('INSERT INTO sys_role (role_code,role_name,description,status,created_at,updated_at) VALUES (?,?,?,?,?,?)').bind(roleCode, roleName, description, status, now, now).run();
@@ -137,9 +155,12 @@ export async function POST(request: Request) {
         await env.DB.batch(statements);
         break;
       }
-      case 'role-status':
+      case 'role-status': {
+        const role = await env.DB.prepare('SELECT role_code FROM sys_role WHERE id=?').bind(body.id).first<{ role_code: string }>();
+        if (role?.role_code === 'super_admin' && body.status === 'disabled') return Response.json({ message: '超级管理员角色不能停用' }, { status: 400 });
         await env.DB.prepare('UPDATE sys_role SET status=?,updated_at=? WHERE id=?').bind(body.status === 'disabled' ? 'disabled' : 'active', now, body.id).run();
         break;
+      }
       case 'role-delete': {
         const id = Number(body.id || 0);
         const role = await env.DB.prepare('SELECT role_code FROM sys_role WHERE id=?').bind(id).first<{ role_code: string }>();
@@ -152,6 +173,57 @@ export async function POST(request: Request) {
         ]);
         break;
       }
+      case 'admin-save': {
+        const id = Number(body.id || 0);
+        const username = String(body.username || '').trim();
+        const displayName = String(body.displayName || '').trim().slice(0, 50);
+        const status = body.status === 'disabled' ? 'disabled' : 'active';
+        if (!/^1\d{10}$/.test(username)) return Response.json({ message: '管理员账号请填写 11 位登录手机号' }, { status: 400 });
+        if (!displayName) return Response.json({ message: '请填写管理员名称' }, { status: 400 });
+        const duplicate = await env.DB.prepare('SELECT id FROM sys_admin_user WHERE username=? AND id<>?').bind(username, id).first();
+        if (duplicate) return Response.json({ message: '该手机号已经是管理员' }, { status: 400 });
+        if (id) {
+          if (id === admin.admin.id && status === 'disabled') return Response.json({ message: '不能停用当前登录管理员' }, { status: 400 });
+          if (id === admin.admin.id && username !== admin.admin.username) return Response.json({ message: '不能直接修改当前登录管理员的登录手机号，请使用其他超级管理员调整' }, { status: 400 });
+          await env.DB.prepare('UPDATE sys_admin_user SET username=?,display_name=?,status=?,updated_at=? WHERE id=?').bind(username, displayName, status, now, id).run();
+        } else {
+          await env.DB.prepare("INSERT INTO sys_admin_user (username,display_name,password_hash,status,created_at,updated_at) VALUES (?,?,?,?,?,?)").bind(username, displayName, '', status, now, now).run();
+        }
+        break;
+      }
+      case 'admin-role-save': {
+        const adminUserId = Number(body.adminUserId || 0);
+        const target = await env.DB.prepare('SELECT id FROM sys_admin_user WHERE id=?').bind(adminUserId).first();
+        if (!target) return Response.json({ message: '管理员不存在' }, { status: 404 });
+        const roleIds = Array.from(new Set(String(body.roleIds || '').split(',').map((value) => Number(value.trim())).filter((value) => Number.isInteger(value) && value > 0)));
+        if (!roleIds.length) return Response.json({ message: '请至少分配一个角色' }, { status: 400 });
+        const placeholders = roleIds.map(() => '?').join(',');
+        const { results: validRoles } = await env.DB.prepare(`SELECT id,role_code FROM sys_role WHERE id IN (${placeholders}) AND status='active'`).bind(...roleIds).all<{ id: number; role_code: string }>();
+        if (validRoles.length !== roleIds.length) return Response.json({ message: '包含不存在或已停用的角色' }, { status: 400 });
+        if (adminUserId === admin.admin.id && !validRoles.some((role) => role.role_code === 'super_admin')) return Response.json({ message: '当前登录管理员必须保留超级管理员角色' }, { status: 400 });
+        const statements = [env.DB.prepare('DELETE FROM sys_admin_user_role WHERE admin_user_id=?').bind(adminUserId)];
+        for (const roleId of roleIds) statements.push(env.DB.prepare('INSERT INTO sys_admin_user_role (admin_user_id,role_id) VALUES (?,?)').bind(adminUserId, roleId));
+        await env.DB.batch(statements);
+        break;
+      }
+      case 'admin-status': {
+        const id = Number(body.id || 0);
+        const status = body.status === 'disabled' ? 'disabled' : 'active';
+        if (id === admin.admin.id && status === 'disabled') return Response.json({ message: '不能停用当前登录管理员' }, { status: 400 });
+        await env.DB.prepare('UPDATE sys_admin_user SET status=?,updated_at=? WHERE id=?').bind(status, now, id).run();
+        break;
+      }
+      case 'admin-delete': {
+        const id = Number(body.id || 0);
+        if (id === admin.admin.id) return Response.json({ message: '不能删除当前登录管理员' }, { status: 400 });
+        const target = await env.DB.prepare('SELECT id FROM sys_admin_user WHERE id=?').bind(id).first();
+        if (!target) return Response.json({ message: '管理员不存在' }, { status: 404 });
+        await env.DB.batch([
+          env.DB.prepare('DELETE FROM sys_admin_user_role WHERE admin_user_id=?').bind(id),
+          env.DB.prepare('DELETE FROM sys_admin_user WHERE id=?').bind(id),
+        ]);
+        break;
+      }
       default:
         return Response.json({ message: '未知系统设置操作' }, { status: 400 });
     }
@@ -159,7 +231,7 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error('系统设置操作失败', error);
     const message = error instanceof Error ? error.message : '系统设置操作失败';
-    if (/sys_menu|sys_role|doesn't exist|does not exist|no such table/i.test(message)) {
+    if (/sys_menu|sys_role|sys_admin_user|sys_admin_user_role|doesn't exist|does not exist|no such table/i.test(message)) {
       return Response.json({ message: '系统设置数据表尚未初始化，请先执行 RBAC SQL。' }, { status: 503 });
     }
     return Response.json({ message: '系统设置操作失败，请检查数据库配置' }, { status: 500 });

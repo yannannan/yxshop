@@ -18,9 +18,11 @@ type OrderListTab = 'all' | 'pending' | 'paid' | 'pending_delivery' | 'delivered
 type ProductListTab = 'all' | 'active' | 'inactive' | 'closed';
 type CredentialListTab = 'all' | 'used' | 'disabled' | 'closed';
 type AdminMenu = { id: number; parent_id: number | null; menu_code: string; menu_name: string; component_key: string; icon: string; menu_type: 'directory' | 'menu'; sort_order: number; visible: number; status: 'active' | 'disabled'; children?: AdminMenu[] };
-type SystemData = { initialized: boolean; menus: AdminMenu[]; menuTree: AdminMenu[]; roles: Row[]; roleMenus: Row[]; message?: string };
+type SystemData = { initialized: boolean; menus: AdminMenu[]; menuTree: AdminMenu[]; roles: Row[]; roleMenus: Row[]; admins: Row[]; adminRoles: Row[]; message?: string };
 type MenuForm = { id?: number; parentId: string; menuCode: string; menuName: string; componentKey: string; icon: string; menuType: 'directory' | 'menu'; sortOrder: string; visible: boolean; status: 'active' | 'disabled' };
 type RoleForm = { id?: number; roleCode: string; roleName: string; description: string; status: 'active' | 'disabled' };
+type AdminForm = { id?: number; username: string; displayName: string; status: 'active' | 'disabled' };
+type AdminSession = { authenticated: true; admin: { id: number; username: string; displayName: string }; roleCodes: string[]; menuCodes: string[]; menuTree: AdminMenu[]; superAdmin: boolean };
 
 const tabs = [
   { key: 'products', label: '商品管理', icon: '◇' },
@@ -44,10 +46,11 @@ const fallbackMenuTree: AdminMenu[] = [
   { id: 200, parent_id: null, menu_code: 'system-settings', menu_name: '系统设置', component_key: '', icon: '⚙', menu_type: 'directory', sort_order: 900, visible: 1, status: 'active', children: [
     { id: 201, parent_id: 200, menu_code: 'system-menu-management', menu_name: '菜单管理', component_key: 'menu-management', icon: '菜', menu_type: 'menu', sort_order: 910, visible: 1, status: 'active', children: [] },
     { id: 202, parent_id: 200, menu_code: 'system-role-management', menu_name: '角色管理', component_key: 'role-management', icon: '角', menu_type: 'menu', sort_order: 920, visible: 1, status: 'active', children: [] },
+    { id: 203, parent_id: 200, menu_code: 'system-admin-management', menu_name: '管理员管理', component_key: 'admin-management', icon: '管', menu_type: 'menu', sort_order: 930, visible: 1, status: 'active', children: [] },
   ] },
 ];
 
-const emptySystemData: SystemData = { initialized: false, menus: [], menuTree: [], roles: [], roleMenus: [] };
+const emptySystemData: SystemData = { initialized: false, menus: [], menuTree: [], roles: [], roleMenus: [], admins: [], adminRoles: [] };
 const flattenMenus = (menus: AdminMenu[], depth = 0): { menu: AdminMenu; depth: number }[] => menus.flatMap((menu) => [{ menu, depth }, ...flattenMenus(menu.children || [], depth + 1)]);
 const findMenu = (menus: AdminMenu[], componentKey: string): AdminMenu | undefined => {
   for (const menu of menus) {
@@ -56,6 +59,15 @@ const findMenu = (menus: AdminMenu[], componentKey: string): AdminMenu | undefin
     if (child) return child;
   }
   return undefined;
+};
+const firstMenuComponent = (menus: AdminMenu[]): string => {
+  for (const menu of menus) {
+    if (menu.status !== 'active' || !menu.visible) continue;
+    if (menu.menu_type === 'menu' && menu.component_key) return menu.component_key;
+    const child = firstMenuComponent(menu.children || []);
+    if (child) return child;
+  }
+  return '';
 };
 
 const emptyData: Data = { products: [], users: [], orders: [], credentials: [], credentialAssignments: [], qrs: [], categories: [], notificationSettings: [], emailConfig: null };
@@ -104,6 +116,28 @@ export default function AdminPage() {
   const [rechargeJsonView, setRechargeJsonView] = useState<{ id: string; json: string } | null>(null);
   const [systemData, setSystemData] = useState<SystemData>(emptySystemData);
   const [systemLoading, setSystemLoading] = useState(false);
+  const [adminSession, setAdminSession] = useState<AdminSession | null>(null);
+  const [adminAccessLoading, setAdminAccessLoading] = useState(true);
+
+  const loadSession = useCallback(async () => {
+    setAdminAccessLoading(true);
+    try {
+      const response = await fetch(`/api/admin/session?refresh=${Date.now()}`, { cache: 'no-store' });
+      if (!response.ok) {
+        setAdminSession(null);
+        return null;
+      }
+      const result = await response.json() as AdminSession;
+      setAdminSession(result);
+      setActive((current) => findMenu(result.menuTree, current) ? current : (firstMenuComponent(result.menuTree) || current));
+      return result;
+    } catch {
+      setAdminSession(null);
+      return null;
+    } finally {
+      setAdminAccessLoading(false);
+    }
+  }, []);
 
   const loadSystem = useCallback(async () => {
     setSystemLoading(true);
@@ -147,9 +181,17 @@ export default function AdminPage() {
   }, []);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => { void load(); void loadSystem(); }, 0);
-    return () => window.clearTimeout(timer);
-  }, [load, loadSystem]);
+    let activeRequest = true;
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        const session = await loadSession();
+        if (!activeRequest || !session) return;
+        await load();
+        if (session.menuCodes.some((code) => ['system-menu-management','system-role-management','system-admin-management'].includes(code)) || session.superAdmin) await loadSystem();
+      })();
+    }, 0);
+    return () => { activeRequest = false; window.clearTimeout(timer); };
+  }, [load, loadSession, loadSystem]);
 
   useEffect(() => {
     const refreshWhenBack = () => {
@@ -357,25 +399,35 @@ export default function AdminPage() {
     }
   }
 
-  const navigationMenus = systemData.initialized && systemData.menuTree.length ? systemData.menuTree : fallbackMenuTree;
+  const navigationMenus = adminSession?.menuTree?.length ? adminSession.menuTree : fallbackMenuTree;
   const currentMenu = findMenu(navigationMenus, active);
   const showStoreStats = tabs.some((tab) => tab.key === active);
+
+  if (adminAccessLoading) return <main className="admin-access-page"><section><span className="brand-mark"><Image src="/yxstar_logo.png" alt="宇星商城 Logo" fill sizes="52px" /></span><h1>正在验证管理权限…</h1><p>正在读取当前账号的后台角色与菜单权限。</p></section></main>;
+  if (!adminSession) return <main className="admin-access-page"><section><span className="brand-mark"><Image src="/yxstar_logo.png" alt="宇星商城 Logo" fill sizes="52px" /></span><h1>无后台访问权限</h1><p>请先使用已配置为管理员的手机号登录宇星商城，再进入管理后台。</p><Link href="/">返回商城登录</Link></section></main>;
+
+  async function adminLogout() {
+    await fetch('/api/auth/logout', { method: 'POST' }).catch(() => null);
+    window.localStorage.removeItem('mall_phone');
+    window.location.href = '/';
+  }
 
   return <main className="admin-shell">
     <aside className="admin-sidebar">
       <Link className="brand admin-brand" href="/"><span className="brand-mark"><Image src="/yxstar_logo.png" alt="宇星商城 Logo" fill sizes="34px" /></span><span>宇星商城</span></Link>
       <small>商城管理</small>
       <AdminNavigation menus={navigationMenus} active={active} pendingOrders={pendingOrders} onSelect={(key) => { setActive(key); if (tabs.some((tab) => tab.key === key)) void load(true); }} />
-      <div className="admin-user"><span>管</span><div><b>管理员</b><small>admin@qx.shop</small></div></div>
+      <div className="admin-user"><span>管</span><div><b>{adminSession.admin.displayName}</b><small>{adminSession.admin.username}</small></div></div>
     </aside>
     <section className="admin-main">
-      <header><div><span className="section-kicker">STORE CONSOLE</span><h1>{currentMenu?.menu_name || tabs.find((item) => item.key === active)?.label || '宇星商城'}</h1></div><div><Link href="/" target="_blank" rel="noopener noreferrer">查看商城</Link><button disabled={refreshing || systemLoading} onClick={() => { void load(true); void loadSystem(); }}>{refreshing || systemLoading ? '正在刷新…' : '↻ 刷新数据'}</button></div></header>
+      <header><div><span className="section-kicker">STORE CONSOLE</span><h1>{currentMenu?.menu_name || tabs.find((item) => item.key === active)?.label || '宇星商城'}</h1></div><div><Link href="/" target="_blank" rel="noopener noreferrer">查看商城</Link><button disabled={refreshing || systemLoading} onClick={() => { void load(true); if (adminSession.superAdmin || adminSession.menuCodes.some((code) => code.startsWith('system-'))) void loadSystem(); }}>{refreshing || systemLoading ? '正在刷新…' : '↻ 刷新数据'}</button><button className="admin-logout-button" onClick={() => void adminLogout()}>退出后台</button></div></header>
       {active === 'orders' ? <div className="order-stat-grid">{orderStatTabs.map((tab) => <button type="button" key={tab.key} className={`order-stat-card ${tab.key}${orderListTab === tab.key ? ' active' : ''}`} onClick={() => setOrderListTab(tab.key)}><span>{tab.label}</span><b>{tab.key === 'all' ? data.orders.filter((order) => text(order.status) !== 'closed').length : data.orders.filter((order) => text(order.status) === tab.key).length}</b><small>{orderStatDescription[tab.key]}</small><i>→</i></button>)}</div> : showStoreStats ? <div className="stat-grid"><article><span>商品总数</span><b>{data.products.filter((item) => item.status !== 'closed').length}</b><small>在售 {data.products.filter((item) => item.status === 'active').length} 件</small></article><article><span>分类数量</span><b>{data.categories.length}</b><small>支持一级、二级分类</small></article><article><span>待处理订单</span><b>{pendingOrders}</b><small>请及时核对支付</small></article><article><span>可用卡密</span><b>{availableCards}</b><small>库存不足请补充</small></article></div> : null}
       <div className="admin-panel">
         {notice && <div className="admin-message">{notice}</div>}
         {loading ? <div className="admin-loading">正在读取数据…</div> : <>
           {active === 'menu-management' && <SystemMenuPanel data={systemData} loading={systemLoading} onAction={systemAction} />}
           {active === 'role-management' && <SystemRolePanel data={systemData} loading={systemLoading} onAction={systemAction} />}
+          {active === 'admin-management' && <SystemAdminPanel data={systemData} loading={systemLoading} currentAdminId={adminSession.admin.id} onAction={systemAction} />}
           {active === 'service-management' && <OnsiteServiceManagement />}
           {active === 'provider-management' && <OnsiteProviderManagement />}
           {active === 'service-orders' && <OnsiteOrderManagement />}
@@ -516,6 +568,31 @@ function SystemRolePanel({ data, loading, onAction }: { data: SystemData; loadin
     {form && <Modal title={form.id ? '编辑角色' : '新增角色'} onClose={() => setForm(null)}><form onSubmit={async (event) => { event.preventDefault(); const ok = await onAction({ action: 'role-save', id: form.id || 0, roleCode: form.roleCode, roleName: form.roleName, description: form.description, status: form.status }); if (ok) setForm(null); }}><div className="admin-form-grid"><Field label="角色名称"><input value={form.roleName} onChange={(e) => setForm({ ...form, roleName: e.target.value })} /></Field><Field label="角色编码"><input value={form.roleCode} onChange={(e) => setForm({ ...form, roleCode: e.target.value })} disabled={form.roleCode === 'super_admin'} /></Field><Field label="状态"><select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as 'active' | 'disabled' })}><option value="active">启用</option><option value="disabled">停用</option></select></Field><Field label="角色说明" wide><textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></Field></div><div className="admin-form-actions"><button type="button" className="ghost-button" onClick={() => setForm(null)}>取消</button><button>保存角色</button></div></form></Modal>}
     {permissionRole && <Modal title={`${text(permissionRole.role_name)} · 菜单权限`} onClose={() => setPermissionRole(null)}><div className="system-permission-tree">{rows.map(({ menu, depth }) => <label key={menu.id} style={{ paddingLeft: depth * 24 }}><input type="checkbox" checked={selectedMenuIds.includes(Number(menu.id))} onChange={(event) => setSelectedMenuIds((current) => event.target.checked ? Array.from(new Set([...current, Number(menu.id)])) : current.filter((id) => id !== Number(menu.id)))} /><span>{menu.icon || '·'} {menu.menu_name}</span><small>{menu.menu_type === 'directory' ? '目录' : menu.component_key}</small></label>)}</div><div className="admin-form-actions"><button className="ghost-button" onClick={() => setPermissionRole(null)}>取消</button><button onClick={async () => { if (await onAction({ action: 'role-menu-save', roleId: Number(permissionRole.id), menuIds: selectedMenuIds.join(',') })) setPermissionRole(null); }}>保存权限</button></div></Modal>}
     {deleteRole && <Modal title="删除角色" onClose={() => setDeleteRole(null)} compact><div className="confirm-content"><b>确认删除“{text(deleteRole.role_name)}”吗？</b><p>角色菜单权限和管理员角色关联会同步清除。</p></div><div className="admin-form-actions"><button className="ghost-button" onClick={() => setDeleteRole(null)}>取消</button><button className="danger-button" onClick={async () => { if (await onAction({ action: 'role-delete', id: Number(deleteRole.id) })) setDeleteRole(null); }}>确认删除</button></div></Modal>}
+  </>;
+}
+
+function SystemAdminPanel({ data, loading, currentAdminId, onAction }: { data: SystemData; loading: boolean; currentAdminId: number; onAction: (body: Record<string, string | number>) => Promise<boolean> }) {
+  const emptyAdmin = (): AdminForm => ({ username: '', displayName: '', status: 'active' });
+  const [form, setForm] = useState<AdminForm | null>(null);
+  const [roleAdmin, setRoleAdmin] = useState<Row | null>(null);
+  const [selectedRoleIds, setSelectedRoleIds] = useState<number[]>([]);
+  const [deleteAdmin, setDeleteAdmin] = useState<Row | null>(null);
+
+  if (!data.initialized) return <><div className="panel-title"><div><h2>管理员管理</h2><p>管理员通过商城手机号登录，并根据角色获得后台菜单权限。</p></div></div><div className="system-init-empty"><b>管理员权限表尚未初始化</b><p>{data.message || '请先执行系统权限初始化 SQL。'}</p></div></>;
+
+  return <><div className="panel-title"><div><h2>管理员管理</h2><p>维护后台管理员手机号、显示名称、启停状态，并分配一个或多个角色</p></div><div className="panel-title-actions"><button disabled={loading} onClick={() => setForm(emptyAdmin())}>＋ 新增管理员</button></div></div>
+    <div className="table-wrap"><table><thead><tr><th>管理员</th><th>登录手机号</th><th>角色</th><th>状态</th><th>创建时间</th><th>操作</th></tr></thead><tbody>{data.admins.map((admin) => {
+      const roleIds = data.adminRoles.filter((item) => Number(item.admin_user_id) === Number(admin.id)).map((item) => Number(item.role_id));
+      const roles = data.roles.filter((role) => roleIds.includes(Number(role.id)));
+      const isCurrent = Number(admin.id) === currentAdminId;
+      return <tr key={text(admin.id)}><td><b>{text(admin.display_name) || '管理员'}</b>{isCurrent && <small>当前登录账号</small>}</td><td><code>{text(admin.username)}</code></td><td><div className="onsite-skill-list">{roles.length ? roles.map((role) => <span key={text(role.id)}>{text(role.role_name)}</span>) : <span>未分配</span>}</div></td><td><Status value={text(admin.status)} /></td><td>{formatTime(text(admin.created_at))}</td><td><button className="text-action" onClick={() => setForm({ id: Number(admin.id), username: text(admin.username), displayName: text(admin.display_name), status: text(admin.status) === 'disabled' ? 'disabled' : 'active' })}>编辑</button><button className="text-action" onClick={() => { setRoleAdmin(admin); setSelectedRoleIds(roleIds); }}>分配角色</button><button className="text-action" disabled={isCurrent} onClick={() => void onAction({ action: 'admin-status', id: Number(admin.id), status: text(admin.status) === 'active' ? 'disabled' : 'active' })}>{text(admin.status) === 'active' ? '停用' : '启用'}</button>{!isCurrent && <button className="text-action danger-action" onClick={() => setDeleteAdmin(admin)}>删除</button>}</td></tr>;
+    })}</tbody></table>{data.admins.length === 0 && <Empty text="暂无管理员，请先添加" />}</div>
+
+    {form && <Modal title={form.id ? '编辑管理员' : '新增管理员'} onClose={() => setForm(null)}><form onSubmit={async (event) => { event.preventDefault(); const ok = await onAction({ action: 'admin-save', id: form.id || 0, username: form.username, displayName: form.displayName, status: form.status }); if (ok) setForm(null); }}><div className="admin-form-grid"><Field label="管理员名称"><input value={form.displayName} onChange={(e) => setForm({ ...form, displayName: e.target.value })} placeholder="例如：商城管理员" /></Field><Field label="登录手机号"><input value={form.username} disabled={form.id === currentAdminId} maxLength={11} inputMode="numeric" onChange={(e) => setForm({ ...form, username: e.target.value.replace(/\D/g, '') })} placeholder="使用商城登录手机号" /></Field><Field label="状态"><select value={form.status} disabled={form.id === currentAdminId} onChange={(e) => setForm({ ...form, status: e.target.value as 'active' | 'disabled' })}><option value="active">启用</option><option value="disabled">停用</option></select></Field></div><div className="admin-form-actions"><button type="button" className="ghost-button" onClick={() => setForm(null)}>取消</button><button>保存管理员</button></div></form></Modal>}
+
+    {roleAdmin && <Modal title={`${text(roleAdmin.display_name) || text(roleAdmin.username)} · 角色分配`} onClose={() => setRoleAdmin(null)}><div className="system-permission-tree">{data.roles.filter((role) => text(role.status) === 'active').map((role) => <label key={text(role.id)}><input type="checkbox" checked={selectedRoleIds.includes(Number(role.id))} onChange={(event) => setSelectedRoleIds((current) => event.target.checked ? Array.from(new Set([...current, Number(role.id)])) : current.filter((id) => id !== Number(role.id)))} /><span>{text(role.role_name)}</span><small>{text(role.role_code)}</small></label>)}</div><div className="admin-form-actions"><button className="ghost-button" onClick={() => setRoleAdmin(null)}>取消</button><button disabled={!selectedRoleIds.length} onClick={async () => { if (await onAction({ action: 'admin-role-save', adminUserId: Number(roleAdmin.id), roleIds: selectedRoleIds.join(',') })) setRoleAdmin(null); }}>保存角色</button></div></Modal>}
+
+    {deleteAdmin && <Modal title="删除管理员" onClose={() => setDeleteAdmin(null)} compact><div className="confirm-content"><b>确认删除“{text(deleteAdmin.display_name) || text(deleteAdmin.username)}”吗？</b><p>删除后该手机号将立即失去后台访问权限，商城普通用户账号不受影响。</p></div><div className="admin-form-actions"><button className="ghost-button" onClick={() => setDeleteAdmin(null)}>取消</button><button className="danger-button" onClick={async () => { if (await onAction({ action: 'admin-delete', id: Number(deleteAdmin.id) })) setDeleteAdmin(null); }}>确认删除</button></div></Modal>}
   </>;
 }
 

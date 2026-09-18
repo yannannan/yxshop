@@ -1,5 +1,6 @@
 import { env } from '@/db/mysql-runtime';
 import { ensureDatabase } from '../../../../db/setup';
+import { type AdminContext, adminDenied, getAdminContext, hasAdminPermission } from '../../../../lib/admin-auth';
 
 function parseJsonArray<T>(value: unknown, fallback: T[] = []) {
   if (Array.isArray(value)) return value as T[];
@@ -64,10 +65,34 @@ async function readData() {
   };
 }
 
-export async function GET() {
+function scopeData(admin: AdminContext, data: Awaited<ReturnType<typeof readData>>) {
+  const canProviders = hasAdminPermission(admin, 'onsite-provider-management');
+  const canServices = hasAdminPermission(admin, 'onsite-service-management');
+  const canOrders = hasAdminPermission(admin, 'onsite-service-orders');
+  const canAppointments = hasAdminPermission(admin, 'onsite-appointments');
+  const canConsultations = hasAdminPermission(admin, 'onsite-consultations');
+  const canApplications = hasAdminPermission(admin, 'onsite-provider-applications');
+  return {
+    initialized: data.initialized,
+    providers: canProviders || canServices ? data.providers : [],
+    services: canServices ? data.services : [],
+    paymentQrs: canServices ? data.paymentQrs : [],
+    orders: canOrders ? data.orders : [],
+    appointments: canAppointments ? data.appointments : [],
+    consultations: canConsultations ? data.consultations : [],
+    messages: canConsultations ? data.messages : [],
+    contactRequests: canConsultations ? data.contactRequests : [],
+    applications: canApplications ? data.applications : [],
+  };
+}
+
+export async function GET(request: Request) {
   await ensureDatabase();
+  const admin = await getAdminContext(request);
+  if (!admin) return adminDenied();
+  if (!hasAdminPermission(admin, ['onsite-provider-management','onsite-service-management','onsite-service-orders','onsite-appointments','onsite-consultations','onsite-provider-applications'])) return adminDenied('无上门服务后台权限');
   try {
-    return Response.json(await readData(), { headers: { 'Cache-Control': 'no-store' } });
+    return Response.json(scopeData(admin, await readData()), { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     const message = error instanceof Error ? error.message : '';
     if (/technical_providers|technical_services|doesn't exist|does not exist|no such table/i.test(message)) {
@@ -80,9 +105,32 @@ export async function GET() {
 
 export async function POST(request: Request) {
   await ensureDatabase();
+  const admin = await getAdminContext(request);
+  if (!admin) return adminDenied();
   const body = await request.json() as Record<string, string | number>;
   const action = String(body.action || '');
   const now = new Date().toISOString();
+
+  const permissionByAction: Record<string, string> = {
+    'provider-save': 'onsite-provider-management',
+    'provider-status': 'onsite-provider-management',
+    'provider-delete': 'onsite-provider-management',
+    'service-save': 'onsite-service-management',
+    'service-status': 'onsite-service-management',
+    'service-delete': 'onsite-service-management',
+    'payment-qr-save': 'onsite-service-management',
+    'payment-qr-delete': 'onsite-service-management',
+    'order-quote': 'onsite-service-orders',
+    'order-status': 'onsite-service-orders',
+    'appointment-status': 'onsite-appointments',
+    'consultation-reply': 'onsite-consultations',
+    'consultation-status': 'onsite-consultations',
+    'contact-request-review': 'onsite-consultations',
+    'application-review': 'onsite-provider-applications',
+  };
+  const requiredPermission = permissionByAction[action];
+  if (!requiredPermission || !hasAdminPermission(admin, requiredPermission)) return adminDenied('无此上门服务操作权限');
+
   try {
     switch (action) {
       case 'provider-save': {
@@ -249,7 +297,7 @@ export async function POST(request: Request) {
       default:
         return Response.json({ message: '未知上门服务操作' }, { status: 400 });
     }
-    return Response.json({ ok: true, ...(await readData()) });
+    return Response.json({ ok: true, ...scopeData(admin, await readData()) });
   } catch (error) {
     console.error('上门服务后台操作失败', error);
     const message = error instanceof Error ? error.message : '';

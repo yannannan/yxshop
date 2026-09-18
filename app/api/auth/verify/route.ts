@@ -1,5 +1,5 @@
 import { env } from '@/db/mysql-runtime';
-import { ensureDatabase } from '../../../../db/setup';
+import { createMallSession, ensureDatabase } from '../../../../db/setup';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 
 function hashCode(phone: string, code: string) {
@@ -25,6 +25,6 @@ export async function POST(request: Request) {
     await env.DB.prepare('INSERT INTO users (phone,email,status,created_at) VALUES (?,?,?,?)').bind(phone, email, 'active', new Date().toISOString()).run();
   }
   return new Response(JSON.stringify({ ok: true, phone, email: existing?.email || email }), {
-    headers: { 'content-type': 'application/json', 'set-cookie': `mall_session=${encodeURIComponent(phone)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000` },
+    headers: { 'content-type': 'application/json', 'set-cookie': `mall_session=${encodeURIComponent(createMallSession(phone))}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000` },
   });
 }
