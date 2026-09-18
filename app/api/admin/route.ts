@@ -39,6 +39,7 @@ export async function POST(request: Request) {
     'category-status': 'categories',
     'category-delete': 'categories',
     'user-status': 'users',
+    'user-permission': 'users',
     'order-status': 'orders',
     'order-batch-status': 'orders',
     'order-delete': 'orders',
@@ -174,6 +175,31 @@ export async function POST(request: Request) {
     }
     case 'user-status':
       await env.DB.prepare('UPDATE users SET status=? WHERE id=?').bind(body.status, body.id).run(); break;
+    case 'user-permission': {
+      const id = Number(body.id || 0);
+      const permissionType = String(body.permissionType || '');
+      if (!['10001','10002'].includes(permissionType)) return Response.json({ message: '用户权限类型不正确' }, { status: 400 });
+      const user = await env.DB.prepare('SELECT id,phone FROM users WHERE id=?').bind(id).first<{ id: number; phone: string }>();
+      if (!user) return Response.json({ message: '用户不存在' }, { status: 404 });
+      if (user.phone === admin.admin.username && permissionType !== '10002') return Response.json({ message: '不能取消当前登录超级管理员的管理权限' }, { status: 400 });
+      const permissionTypeName = permissionType === '10002' ? '超级管理员' : '普通用户';
+      await env.DB.prepare('UPDATE users SET permission_type=?,permission_type_name=? WHERE id=?').bind(permissionType, permissionTypeName, id).run();
+      if (permissionType === '10002') {
+        const role = await env.DB.prepare("SELECT id FROM sys_role WHERE role_code='super_admin' AND status='active'").first<{ id: number }>();
+        if (role) {
+          const now2 = new Date().toISOString();
+          let adminUser = await env.DB.prepare('SELECT id FROM sys_admin_user WHERE username=?').bind(user.phone).first<{ id: number }>();
+          if (!adminUser) {
+            const created = await env.DB.prepare("INSERT INTO sys_admin_user (username,display_name,password_hash,status,created_at,updated_at) VALUES (?,?,?,?,?,?)").bind(user.phone, '超级管理员', '', 'active', now2, now2).run();
+            adminUser = { id: Number(created.meta.last_row_id) };
+          } else {
+            await env.DB.prepare("UPDATE sys_admin_user SET status='active',updated_at=? WHERE id=?").bind(now2, adminUser.id).run();
+          }
+          await env.DB.prepare('INSERT IGNORE INTO sys_admin_user_role (admin_user_id,role_id) VALUES (?,?)').bind(adminUser.id, role.id).run();
+        }
+      }
+      break;
+    }
     case 'order-status': {
       const status = String(body.status || '');
       if (!['pending', 'paid', 'pending_delivery', 'delivered', 'closed'].includes(status)) return Response.json({ message: '订单状态不正确' }, { status: 400 });
