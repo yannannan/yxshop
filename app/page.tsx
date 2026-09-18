@@ -13,7 +13,6 @@ import {
 import { categoryTree } from "../lib/categories";
 import {
   formatServicePrice,
-  homepageTechnicalServices,
   serviceDeliveryLabels,
   servicePriceText,
   technicalServices,
@@ -48,6 +47,12 @@ export default function StorePage() {
   const [technicalChatOpen, setTechnicalChatOpen] = useState(false);
   const [technicalChatService, setTechnicalChatService] =
     useState<TechnicalService | null>(null);
+  const [technicalServiceItems, setTechnicalServiceItems] =
+    useState<TechnicalService[]>(technicalServices);
+  const homepageTechnicalServices = useMemo(
+    () => technicalServiceItems.filter((service) => service.homepageFeatured),
+    [technicalServiceItems],
+  );
   const homepageTechnicalProviderCount = new Set(
     homepageTechnicalServices.map((service) => service.providerId),
   ).size;
@@ -88,6 +93,12 @@ export default function StorePage() {
           ]),
         );
         setCategoryGroups(next);
+      })
+      .catch(() => null);
+    fetch("/api/technical-services", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : []))
+      .then((result: unknown) => {
+        if (Array.isArray(result) && result.length) setTechnicalServiceItems(result as TechnicalService[]);
       })
       .catch(() => null);
   }, []);
@@ -834,7 +845,7 @@ export default function StorePage() {
       <TechnicalSupportChat
         activeService={technicalChatService}
         open={technicalChatOpen}
-        services={technicalServices}
+        services={technicalServiceItems}
         onClose={() => setTechnicalChatOpen(false)}
       />
 
