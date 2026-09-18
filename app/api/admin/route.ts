@@ -1,9 +1,13 @@
 import { env } from '@/db/mysql-runtime';
 import { ensureDatabase, ensurePaymentQrRecords } from '../../../db/setup';
 import { sendConfiguredEmail, sendOrderNotification } from '../../../lib/order-notifications';
+import { adminDenied, getAdminContext, hasAdminPermission } from '../../../lib/admin-auth';
 
 export async function GET(request: Request) {
   await ensureDatabase();
+  const admin = await getAdminContext(request);
+  if (!admin) return adminDenied();
+  if (!hasAdminPermission(admin, 'products')) return adminDenied('无商品管理权限');
   const url = new URL(request.url);
   if (url.searchParams.get('resource') !== 'payment-qrs') return Response.json({ message: '资源不存在' }, { status: 404 });
   const productId = Number(url.searchParams.get('productId'));
@@ -15,9 +19,44 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   await ensureDatabase();
+  const admin = await getAdminContext(request);
+  if (!admin) return adminDenied();
   const body = await request.json() as Record<string, string | number>;
+  const action = String(body.action || '');
   const now = new Date().toISOString();
-  switch (body.action) {
+
+  const permissionByAction: Record<string, string> = {
+    'product-save': 'products',
+    'product-sort': 'products',
+    'product-status': 'products',
+    'product-delete': 'products',
+    'product-batch-delete': 'products',
+    'product-clone': 'products',
+    'qr-save': 'products',
+    'qr-status': 'products',
+    'qr-delete': 'products',
+    'category-save': 'categories',
+    'category-status': 'categories',
+    'category-delete': 'categories',
+    'user-status': 'users',
+    'order-status': 'orders',
+    'order-batch-status': 'orders',
+    'order-delete': 'orders',
+    'order-batch-delete': 'orders',
+    'order-delivery': 'orders',
+    'notification-settings-save': 'notifications',
+    'email-config-save': 'notifications',
+    'email-config-test': 'notifications',
+    'email-send-custom': 'notifications',
+    'credential-save': 'credentials',
+    'credential-status': 'credentials',
+    'credential-delete': 'credentials',
+    'credential-batch-delete': 'credentials',
+  };
+  const requiredPermission = permissionByAction[action];
+  if (!requiredPermission || !hasAdminPermission(admin, requiredPermission)) return adminDenied('无此后台操作权限');
+
+  switch (action) {
     case 'product-save': {
       const name = String(body.name || '').trim();
       const category = String(body.category || '').trim();
