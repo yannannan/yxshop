@@ -571,6 +571,31 @@ function SystemRolePanel({ data, loading, onAction }: { data: SystemData; loadin
   </>;
 }
 
+function SystemAdminPanel({ data, loading, currentAdminId, onAction }: { data: SystemData; loading: boolean; currentAdminId: number; onAction: (body: Record<string, string | number>) => Promise<boolean> }) {
+  const emptyAdmin = (): AdminForm => ({ username: '', displayName: '', status: 'active' });
+  const [form, setForm] = useState<AdminForm | null>(null);
+  const [roleAdmin, setRoleAdmin] = useState<Row | null>(null);
+  const [selectedRoleIds, setSelectedRoleIds] = useState<number[]>([]);
+  const [deleteAdmin, setDeleteAdmin] = useState<Row | null>(null);
+
+  if (!data.initialized) return <><div className="panel-title"><div><h2>管理员管理</h2><p>管理员通过商城手机号登录，并根据角色获得后台菜单权限。</p></div></div><div className="system-init-empty"><b>管理员权限表尚未初始化</b><p>{data.message || '请先执行系统权限初始化 SQL。'}</p></div></>;
+
+  return <><div className="panel-title"><div><h2>管理员管理</h2><p>维护后台管理员手机号、显示名称、启停状态，并分配一个或多个角色</p></div><div className="panel-title-actions"><button disabled={loading} onClick={() => setForm(emptyAdmin())}>＋ 新增管理员</button></div></div>
+    <div className="table-wrap"><table><thead><tr><th>管理员</th><th>登录手机号</th><th>角色</th><th>状态</th><th>创建时间</th><th>操作</th></tr></thead><tbody>{data.admins.map((admin) => {
+      const roleIds = data.adminRoles.filter((item) => Number(item.admin_user_id) === Number(admin.id)).map((item) => Number(item.role_id));
+      const roles = data.roles.filter((role) => roleIds.includes(Number(role.id)));
+      const isCurrent = Number(admin.id) === currentAdminId;
+      return <tr key={text(admin.id)}><td><b>{text(admin.display_name) || '管理员'}</b>{isCurrent && <small>当前登录账号</small>}</td><td><code>{text(admin.username)}</code></td><td><div className="onsite-skill-list">{roles.length ? roles.map((role) => <span key={text(role.id)}>{text(role.role_name)}</span>) : <span>未分配</span>}</div></td><td><Status value={text(admin.status)} /></td><td>{formatTime(text(admin.created_at))}</td><td><button className="text-action" onClick={() => setForm({ id: Number(admin.id), username: text(admin.username), displayName: text(admin.display_name), status: text(admin.status) === 'disabled' ? 'disabled' : 'active' })}>编辑</button><button className="text-action" onClick={() => { setRoleAdmin(admin); setSelectedRoleIds(roleIds); }}>分配角色</button><button className="text-action" disabled={isCurrent} onClick={() => void onAction({ action: 'admin-status', id: Number(admin.id), status: text(admin.status) === 'active' ? 'disabled' : 'active' })}>{text(admin.status) === 'active' ? '停用' : '启用'}</button>{!isCurrent && <button className="text-action danger-action" onClick={() => setDeleteAdmin(admin)}>删除</button>}</td></tr>;
+    })}</tbody></table>{data.admins.length === 0 && <Empty text="暂无管理员，请先添加" />}</div>
+
+    {form && <Modal title={form.id ? '编辑管理员' : '新增管理员'} onClose={() => setForm(null)}><form onSubmit={async (event) => { event.preventDefault(); const ok = await onAction({ action: 'admin-save', id: form.id || 0, username: form.username, displayName: form.displayName, status: form.status }); if (ok) setForm(null); }}><div className="admin-form-grid"><Field label="管理员名称"><input value={form.displayName} onChange={(e) => setForm({ ...form, displayName: e.target.value })} placeholder="例如：商城管理员" /></Field><Field label="登录手机号"><input value={form.username} maxLength={11} inputMode="numeric" onChange={(e) => setForm({ ...form, username: e.target.value.replace(/\D/g, '') })} placeholder="使用商城登录手机号" /></Field><Field label="状态"><select value={form.status} disabled={form.id === currentAdminId} onChange={(e) => setForm({ ...form, status: e.target.value as 'active' | 'disabled' })}><option value="active">启用</option><option value="disabled">停用</option></select></Field></div><div className="admin-form-actions"><button type="button" className="ghost-button" onClick={() => setForm(null)}>取消</button><button>保存管理员</button></div></form></Modal>}
+
+    {roleAdmin && <Modal title={`${text(roleAdmin.display_name) || text(roleAdmin.username)} · 角色分配`} onClose={() => setRoleAdmin(null)}><div className="system-permission-tree">{data.roles.filter((role) => text(role.status) === 'active').map((role) => <label key={text(role.id)}><input type="checkbox" checked={selectedRoleIds.includes(Number(role.id))} onChange={(event) => setSelectedRoleIds((current) => event.target.checked ? Array.from(new Set([...current, Number(role.id)])) : current.filter((id) => id !== Number(role.id)))} /><span>{text(role.role_name)}</span><small>{text(role.role_code)}</small></label>)}</div><div className="admin-form-actions"><button className="ghost-button" onClick={() => setRoleAdmin(null)}>取消</button><button disabled={!selectedRoleIds.length} onClick={async () => { if (await onAction({ action: 'admin-role-save', adminUserId: Number(roleAdmin.id), roleIds: selectedRoleIds.join(',') })) setRoleAdmin(null); }}>保存角色</button></div></Modal>}
+
+    {deleteAdmin && <Modal title="删除管理员" onClose={() => setDeleteAdmin(null)} compact><div className="confirm-content"><b>确认删除“{text(deleteAdmin.display_name) || text(deleteAdmin.username)}”吗？</b><p>删除后该手机号将立即失去后台访问权限，商城普通用户账号不受影响。</p></div><div className="admin-form-actions"><button className="ghost-button" onClick={() => setDeleteAdmin(null)}>取消</button><button className="danger-button" onClick={async () => { if (await onAction({ action: 'admin-delete', id: Number(deleteAdmin.id) })) setDeleteAdmin(null); }}>确认删除</button></div></Modal>}
+  </>;
+}
+
 function Modal({ title, children, onClose, compact = false }: { title: string; children: React.ReactNode; onClose: () => void; compact?: boolean }) {
   return <div className="admin-modal-mask" role="presentation"><section className={`admin-modal${compact ? ' compact-modal' : ''}`} role="dialog" aria-modal="true" aria-label={title}><div className="editor-head"><div><span className="section-kicker">STORE CONSOLE</span><b>{title}</b></div><button className="modal-close" aria-label="关闭弹窗" onClick={onClose}>×</button></div>{children}</section></div>;
 }
