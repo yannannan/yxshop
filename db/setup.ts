@@ -1,3 +1,4 @@
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import { env } from './mysql-runtime';
 
 let ready: Promise<void> | null = null;
@@ -19,8 +20,35 @@ export async function ensurePaymentQrRecords(productId: number, amount: number) 
   }
 }
 
-export function getSessionPhone(request: Request) {
+function rawSessionValue(request: Request) {
   const cookie = request.headers.get('cookie') || '';
   const value = cookie.match(/(?:^|;\s*)mall_session=([^;]+)/)?.[1];
-  return value ? decodeURIComponent(value) : null;
+  return value ? decodeURIComponent(value) : '';
+}
+
+function sessionSecret() {
+  return process.env.AUTH_SESSION_SECRET || process.env.AUTH_CODE_SECRET || process.env.MYSQL_PASSWORD || '';
+}
+
+export function createMallSession(phone: string) {
+  const signature = createHmac('sha256', sessionSecret()).update(`mall_session:${phone}`).digest('hex');
+  return `${phone}.${signature}`;
+}
+
+export function getVerifiedSessionPhone(request: Request) {
+  const value = rawSessionValue(request);
+  const match = value.match(/^(1\d{10})\.([a-f0-9]{64})$/i);
+  if (!match) return null;
+  const phone = match[1];
+  const actual = match[2].toLowerCase();
+  const expected = createHmac('sha256', sessionSecret()).update(`mall_session:${phone}`).digest('hex');
+  if (actual.length !== expected.length) return null;
+  return timingSafeEqual(Buffer.from(actual), Buffer.from(expected)) ? phone : null;
+}
+
+export function getSessionPhone(request: Request) {
+  const verified = getVerifiedSessionPhone(request);
+  if (verified) return verified;
+  const legacy = rawSessionValue(request);
+  return /^1\d{10}$/.test(legacy) ? legacy : null;
 }
