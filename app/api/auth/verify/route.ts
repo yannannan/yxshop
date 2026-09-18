@@ -18,13 +18,13 @@ export async function POST(request: Request) {
   const isMatch = Boolean(expectedHash && expectedHash.length === actualHash.length && timingSafeEqual(Buffer.from(expectedHash), Buffer.from(actualHash)));
   if (!verification || new Date(verification.expires_at).getTime() < Date.now() || !isMatch) return Response.json({ message: '验证码不正确或已过期，请重新获取' }, { status: 400 });
   await env.DB.prepare('DELETE FROM yxshop_login_verification_codes WHERE phone=?').bind(phone).run();
-  const existing = await env.DB.prepare('SELECT id,email,status FROM users WHERE phone=?').bind(phone).first<{ id: number; email: string; status: string }>();
+  const existing = await env.DB.prepare('SELECT id,email,status,permission_type,permission_type_name FROM users WHERE phone=?').bind(phone).first<{ id: number; email: string; status: string; permission_type: string; permission_type_name: string }>();
   if (existing?.status === 'disabled') return Response.json({ message: '账号已被停用' }, { status: 403 });
   if (!existing) {
     if (!email || !/^\S+@\S+\.\S+$/.test(email)) return Response.json({ message: '首次注册请填写正确的订单邮箱' }, { status: 400 });
-    await env.DB.prepare('INSERT INTO users (phone,email,status,created_at) VALUES (?,?,?,?)').bind(phone, email, 'active', new Date().toISOString()).run();
+    await env.DB.prepare('INSERT INTO users (phone,email,status,permission_type,permission_type_name,created_at) VALUES (?,?,?,?,?,?)').bind(phone, email, 'active', '10001', '普通用户', new Date().toISOString()).run();
   }
-  return new Response(JSON.stringify({ ok: true, phone, email: existing?.email || email }), {
+  return new Response(JSON.stringify({ ok: true, phone, email: existing?.email || email, permissionType: existing?.permission_type || '10001', permissionTypeName: existing?.permission_type_name || '普通用户' }), {
     headers: { 'content-type': 'application/json', 'set-cookie': `mall_session=${encodeURIComponent(createMallSession(phone))}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000` },
   });
 }
