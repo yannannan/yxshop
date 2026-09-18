@@ -56,11 +56,11 @@ async function bootstrapLegacyAdmin(phone: string) {
   const now = new Date().toISOString();
   const role = await env.DB.prepare("SELECT id FROM sys_role WHERE role_code='super_admin' AND status='active'").first<{ id: number }>();
   if (!role) return null;
-  let admin = await env.DB.prepare("SELECT id,username,display_name FROM sys_admin_user WHERE username=?").bind(phone).first<{ id: number; username: string; display_name: string }>();
+  let admin = await env.DB.prepare("SELECT id,username,display_name,status FROM sys_admin_user WHERE username=?").bind(phone).first<{ id: number; username: string; display_name: string; status: string }>();
   if (!admin) {
     const result = await env.DB.prepare("INSERT INTO sys_admin_user (username,display_name,password_hash,status,created_at,updated_at) VALUES (?,?,?,?,?,?)")
       .bind(phone, '管理员', '', 'active', now, now).run();
-    admin = { id: result.meta.last_row_id, username: phone, display_name: '管理员' };
+    admin = { id: result.meta.last_row_id, username: phone, display_name: '管理员', status: 'active' };
   } else {
     await env.DB.prepare("UPDATE sys_admin_user SET status='active',updated_at=? WHERE id=?").bind(now, admin.id).run();
   }
