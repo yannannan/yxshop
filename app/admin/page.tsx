@@ -4,6 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { parseProductAttributes } from '../../lib/catalog';
+import { OnsiteProviderManagement, OnsiteServiceManagement } from '../../components/admin-onsite-management';
 
 type Row = Record<string, string | number | null>;
 type Data = { products: Row[]; users: Row[]; orders: Row[]; credentials: Row[]; credentialAssignments: Row[]; qrs: Row[]; categories: Row[]; notificationSettings: Row[]; emailConfig: Row | null };
@@ -374,7 +375,9 @@ export default function AdminPage() {
         {loading ? <div className="admin-loading">正在读取数据…</div> : <>
           {active === 'menu-management' && <SystemMenuPanel data={systemData} loading={systemLoading} onAction={systemAction} />}
           {active === 'role-management' && <SystemRolePanel data={systemData} loading={systemLoading} onAction={systemAction} />}
-          {['service-management', 'provider-management', 'service-orders', 'service-appointments', 'service-consultations', 'provider-applications'].includes(active) && <ServiceModulePlaceholder moduleKey={active} />}
+          {active === 'service-management' && <OnsiteServiceManagement />}
+          {active === 'provider-management' && <OnsiteProviderManagement />}
+          {['service-orders', 'service-appointments', 'service-consultations', 'provider-applications'].includes(active) && <ServiceModulePlaceholder moduleKey={active} />}
           {active === 'products' && <>
             <div className="panel-title"><div><h2>商品列表</h2><p>可维护商品分类、价格、库存及前台详情内容</p></div><div className="panel-title-actions"><button className="refresh-list-button" disabled={refreshing} onClick={() => void load(true)}>{refreshing ? '正在刷新…' : '↻ 刷新列表'}</button><button onClick={() => startProduct()}>＋ 新增商品</button></div></div>
             <div className="order-tabs product-tabs">{productListTabs.map((tab) => <button key={tab.key} className={`${productListTab === tab.key ? 'active ' : ''}${tab.key === 'closed' ? 'void-tab' : ''}`} onClick={() => { setProductListTab(tab.key); setProductPage(1); setSelectedProductIds([]); }}>{tab.label} <span>{tab.key === 'all' ? data.products.filter((product) => text(product.status) !== 'closed').length : data.products.filter((product) => text(product.status) === tab.key).length}</span></button>)}</div>
