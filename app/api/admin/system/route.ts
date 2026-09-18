@@ -186,8 +186,10 @@ export async function POST(request: Request) {
         if (duplicate) return Response.json({ message: '该手机号已经是管理员' }, { status: 400 });
         if (id) {
           if (id === admin.admin.id && status === 'disabled') return Response.json({ message: '不能停用当前登录管理员' }, { status: 400 });
-          if (id === admin.admin.id && username !== admin.admin.username) return Response.json({ message: '不能直接修改当前登录管理员的登录手机号' }, { status: 400 });
-          await env.DB.prepare('UPDATE sys_admin_user SET username=?,display_name=?,status=?,updated_at=? WHERE id=?').bind(username, displayName, status, now, id).run();
+          const currentAdmin = await env.DB.prepare('SELECT username FROM sys_admin_user WHERE id=?').bind(id).first<{ username: string }>();
+          if (!currentAdmin) return Response.json({ message: '管理员不存在' }, { status: 404 });
+          if (username !== currentAdmin.username) return Response.json({ message: '已有管理员不能直接修改登录手机号，请先取消原用户管理权限后再设置新用户' }, { status: 400 });
+          await env.DB.prepare('UPDATE sys_admin_user SET display_name=?,status=?,updated_at=? WHERE id=?').bind(displayName, status, now, id).run();
         } else {
           const created = await env.DB.prepare("INSERT INTO sys_admin_user (username,display_name,password_hash,status,created_at,updated_at) VALUES (?,?,?,?,?,?)").bind(username, displayName, '', status, now, now).run();
           const role = await env.DB.prepare("SELECT id FROM sys_role WHERE role_code='super_admin' AND status='active'").first<{ id: number }>();
