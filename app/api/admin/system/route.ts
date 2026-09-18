@@ -61,7 +61,7 @@ export async function GET(request: Request) {
     return Response.json(await readSystemData(), { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     const message = error instanceof Error ? error.message : '系统菜单读取失败';
-    if (/sys_menu|sys_role|doesn't exist|does not exist|no such table/i.test(message)) {
+    if (/sys_menu|sys_role|sys_admin_user|sys_admin_user_role|doesn't exist|does not exist|no such table/i.test(message)) {
       return Response.json({ initialized: false, menus: [], menuTree: [], roles: [], roleMenus: [], admins: [], adminRoles: [], message: '系统设置数据表尚未初始化，请先执行 RBAC SQL。' }, { headers: { 'Cache-Control': 'no-store' } });
     }
     console.error('读取系统设置失败', error);
@@ -225,7 +225,7 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error('系统设置操作失败', error);
     const message = error instanceof Error ? error.message : '系统设置操作失败';
-    if (/sys_menu|sys_role|doesn't exist|does not exist|no such table/i.test(message)) {
+    if (/sys_menu|sys_role|sys_admin_user|sys_admin_user_role|doesn't exist|does not exist|no such table/i.test(message)) {
       return Response.json({ message: '系统设置数据表尚未初始化，请先执行 RBAC SQL。' }, { status: 503 });
     }
     return Response.json({ message: '系统设置操作失败，请检查数据库配置' }, { status: 500 });
