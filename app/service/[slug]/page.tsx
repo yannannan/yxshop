@@ -2,11 +2,10 @@
 
 import Image from "next/image";
 import { useParams, useSearchParams } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { TechnicalSupportChat } from "../../../components/technical-support-chat";
 import {
   formatServicePrice,
-  getProviderOtherServices,
   getTechnicalService,
   serviceDeliveryLabels,
   servicePriceText,
@@ -34,9 +33,13 @@ const providerDetailTabs: { id: ProviderDetailTab; label: string }[] = [
 export default function TechnicalServiceDetailPage() {
   const params = useParams<{ slug: string }>();
   const searchParams = useSearchParams();
+  const [serviceItems, setServiceItems] = useState<TechnicalService[]>(technicalServices);
+  const [servicesLoaded, setServicesLoaded] = useState(false);
   const service = useMemo(
-    () => getTechnicalService(params.slug),
-    [params.slug],
+    () => servicesLoaded
+      ? serviceItems.find((item) => item.slug === params.slug)
+      : getTechnicalService(params.slug),
+    [params.slug, serviceItems, servicesLoaded],
   );
   const [selectedMode, setSelectedMode] = useState<ServiceDeliveryMode | null>(
     null,
@@ -50,6 +53,19 @@ export default function TechnicalServiceDetailPage() {
   const [technicalChatService, setTechnicalChatService] =
     useState<TechnicalService | null>(null);
   const [purchaseOpen, setPurchaseOpen] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/technical-services", { cache: "no-store" })
+      .then((response) => response.ok ? response.json() : [])
+      .then((result: unknown) => {
+        if (!active || !Array.isArray(result)) return;
+        setServiceItems(result as TechnicalService[]);
+        setServicesLoaded(true);
+      })
+      .catch(() => null);
+    return () => { active = false; };
+  }, []);
 
   if (!service) {
     return (
@@ -68,7 +84,7 @@ export default function TechnicalServiceDetailPage() {
       ? selectedMode
       : service.deliveryModes[0];
   const selectedModeLabel = serviceDeliveryLabels[currentMode];
-  const providerOtherServices = getProviderOtherServices(service);
+  const providerOtherServices = serviceItems.filter((item) => item.providerId === service.providerId && item.slug !== service.slug);
   const relatedServices = providerOtherServices.slice(0, 2);
 
   function renderPrice() {
@@ -718,7 +734,7 @@ export default function TechnicalServiceDetailPage() {
       <TechnicalSupportChat
         activeService={technicalChatService ?? service}
         open={technicalChatOpen}
-        services={technicalServices}
+        services={serviceItems}
         onClose={() => setTechnicalChatOpen(false)}
       />
 
