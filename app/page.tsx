@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import { TechnicalSupportChat } from "../components/technical-support-chat";
+import { TechnicalProviderApplication } from "../components/technical-provider-application";
 import {
   billingCyclePriceText,
   catalog,
@@ -13,7 +14,6 @@ import {
 import { categoryTree } from "../lib/categories";
 import {
   formatServicePrice,
-  homepageTechnicalServices,
   serviceDeliveryLabels,
   servicePriceText,
   technicalServices,
@@ -43,11 +43,18 @@ export default function StorePage() {
   const [codeCooldown, setCodeCooldown] = useState(0);
   const [phoneRegistered, setPhoneRegistered] = useState<boolean | null>(null);
   const [serviceOpen, setServiceOpen] = useState(false);
+  const [providerApplicationOpen, setProviderApplicationOpen] = useState(false);
   const [promoSlide, setPromoSlide] = useState(0);
   const [channel, setChannel] = useState<"mall" | "technical">("mall");
   const [technicalChatOpen, setTechnicalChatOpen] = useState(false);
   const [technicalChatService, setTechnicalChatService] =
     useState<TechnicalService | null>(null);
+  const [technicalServiceItems, setTechnicalServiceItems] =
+    useState<TechnicalService[]>(technicalServices);
+  const homepageTechnicalServices = useMemo(
+    () => technicalServiceItems.filter((service) => service.homepageFeatured),
+    [technicalServiceItems],
+  );
   const homepageTechnicalProviderCount = new Set(
     homepageTechnicalServices.map((service) => service.providerId),
   ).size;
@@ -88,6 +95,12 @@ export default function StorePage() {
           ]),
         );
         setCategoryGroups(next);
+      })
+      .catch(() => null);
+    fetch("/api/technical-services", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : []))
+      .then((result: unknown) => {
+        if (Array.isArray(result)) setTechnicalServiceItems(result as TechnicalService[]);
       })
       .catch(() => null);
   }, []);
@@ -794,8 +807,8 @@ export default function StorePage() {
                   <h3>你是技术服务者？</h3>
                   <p>发布擅长服务、服务方式和价格，面向真实需求在线接单。</p>
                 </div>
-                <button type="button" onClick={() => setServiceOpen(true)}>
-                  咨询入驻方式
+                <button type="button" onClick={() => setProviderApplicationOpen(true)}>
+                  申请技术人才入驻
                 </button>
               </section>
             </section>
@@ -834,8 +847,13 @@ export default function StorePage() {
       <TechnicalSupportChat
         activeService={technicalChatService}
         open={technicalChatOpen}
-        services={technicalServices}
+        services={technicalServiceItems}
         onClose={() => setTechnicalChatOpen(false)}
+      />
+
+      <TechnicalProviderApplication
+        open={providerApplicationOpen}
+        onClose={() => setProviderApplicationOpen(false)}
       />
 
       <div className="service-widget">

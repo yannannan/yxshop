@@ -2,11 +2,10 @@
 
 import Image from "next/image";
 import { useParams, useSearchParams } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { TechnicalSupportChat } from "../../../components/technical-support-chat";
 import {
   formatServicePrice,
-  getProviderOtherServices,
   getTechnicalService,
   serviceDeliveryLabels,
   servicePriceText,
@@ -34,9 +33,13 @@ const providerDetailTabs: { id: ProviderDetailTab; label: string }[] = [
 export default function TechnicalServiceDetailPage() {
   const params = useParams<{ slug: string }>();
   const searchParams = useSearchParams();
+  const [serviceItems, setServiceItems] = useState<TechnicalService[]>(technicalServices);
+  const [servicesLoaded, setServicesLoaded] = useState(false);
   const service = useMemo(
-    () => getTechnicalService(params.slug),
-    [params.slug],
+    () => servicesLoaded
+      ? serviceItems.find((item) => item.slug === params.slug)
+      : getTechnicalService(params.slug),
+    [params.slug, serviceItems, servicesLoaded],
   );
   const [selectedMode, setSelectedMode] = useState<ServiceDeliveryMode | null>(
     null,
@@ -50,6 +53,25 @@ export default function TechnicalServiceDetailPage() {
   const [technicalChatService, setTechnicalChatService] =
     useState<TechnicalService | null>(null);
   const [purchaseOpen, setPurchaseOpen] = useState(false);
+  const [serviceTime, setServiceTime] = useState("");
+  const [serviceAddress, setServiceAddress] = useState("");
+  const [requirementText, setRequirementText] = useState("");
+  const [contactName, setContactName] = useState("");
+  const [creatingOrder, setCreatingOrder] = useState(false);
+  const [purchaseError, setPurchaseError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/technical-services", { cache: "no-store" })
+      .then((response) => response.ok ? response.json() : [])
+      .then((result: unknown) => {
+        if (!active || !Array.isArray(result)) return;
+        setServiceItems(result as TechnicalService[]);
+        setServicesLoaded(true);
+      })
+      .catch(() => null);
+    return () => { active = false; };
+  }, []);
 
   if (!service) {
     return (
@@ -68,7 +90,7 @@ export default function TechnicalServiceDetailPage() {
       ? selectedMode
       : service.deliveryModes[0];
   const selectedModeLabel = serviceDeliveryLabels[currentMode];
-  const providerOtherServices = getProviderOtherServices(service);
+  const providerOtherServices = serviceItems.filter((item) => item.providerId === service.providerId && item.slug !== service.slug);
   const relatedServices = providerOtherServices.slice(0, 2);
 
   function renderPrice() {
@@ -87,6 +109,44 @@ export default function TechnicalServiceDetailPage() {
         <em>/ {service.unit}</em>
       </div>
     );
+  }
+
+  async function createServiceOrder() {
+    if (!service || creatingOrder) return;
+    setPurchaseError("");
+    if (!serviceTime) {
+      setPurchaseError("请选择服务时间");
+      return;
+    }
+    if (currentMode === "onsite" && !serviceAddress.trim()) {
+      setPurchaseError("指定地点服务请填写服务地址");
+      return;
+    }
+    setCreatingOrder(true);
+    try {
+      const response = await fetch("/api/technical-service-orders", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          serviceSlug: service.slug,
+          deliveryMode: currentMode,
+          scheduledAt: serviceTime,
+          serviceAddress,
+          requirementText,
+          contactName,
+        }),
+      });
+      const result = await response.json() as { orderId?: string; message?: string };
+      if (!response.ok || !result.orderId) {
+        setPurchaseError(result.message || "服务订单创建失败");
+        return;
+      }
+      window.location.href = `/service-orders/${encodeURIComponent(result.orderId)}`;
+    } catch {
+      setPurchaseError("服务订单创建失败，请稍后重试");
+    } finally {
+      setCreatingOrder(false);
+    }
   }
 
   function renderReferencePrice() {
@@ -718,55 +778,33 @@ export default function TechnicalServiceDetailPage() {
       <TechnicalSupportChat
         activeService={technicalChatService ?? service}
         open={technicalChatOpen}
-        services={technicalServices}
+        services={serviceItems}
         onClose={() => setTechnicalChatOpen(false)}
       />
 
       {purchaseOpen && (
-        <div
-          className="technical-modal-backdrop"
-          onMouseDown={(event) =>
-            event.target === event.currentTarget && setPurchaseOpen(false)
-          }
-        >
-          <section
-            className="technical-appointment-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-label="服务购买说明"
-          >
-            <button
-              className="modal-close"
-              aria-label="关闭"
-              onClick={() => setPurchaseOpen(false)}
-            >
-              ×
-            </button>
+        <div className="technical-modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && setPurchaseOpen(false)}>
+          <section className="technical-appointment-modal technical-order-modal" role="dialog" aria-modal="true" aria-label="服务订单">
+            <button className="modal-close" aria-label="关闭" onClick={() => setPurchaseOpen(false)}>×</button>
             <span>✓</span>
-            <h2>{fixedPrice ? "确认服务并购买" : "沟通确认价格"}</h2>
-            <p>
-              {fixedPrice
-                ? currentMode === "onsite"
-                  ? `已选择${selectedModeLabel}。请先确认到场时间和指定地点，再确认订单并完成支付；支付成功后服务者将按约到场。`
-                  : `已选择${selectedModeLabel}。请先确认在线服务时间，再确认订单并完成支付。`
-                : "请先通过在线沟通确认需求、服务时间与价格，确认后再完成订单支付。"}
-            </p>
-            <small className="technical-prototype-note">
-              当前为技术服务前端流程展示；技术服务订单将在后端订单模块接入后正式创建。
-            </small>
-            <button
-              type="button"
-              onClick={() => {
-                setPurchaseOpen(false);
-                setTechnicalChatService(service);
-                setTechnicalChatOpen(true);
-              }}
-            >
-              {fixedPrice ? "在线沟通服务细节" : "进入在线沟通"}
-            </button>
+            <h2>{fixedPrice ? "确认服务并创建订单" : "提交需求等待报价"}</h2>
+            <p>{fixedPrice ? `当前选择：${selectedModeLabel}。确认服务时间${currentMode === "onsite" ? "、服务地点" : ""}和需求后创建服务订单。` : "提交需求和预约时间后，平台或技术人员确认服务范围并给出最终报价。"}</p>
+            <div className="technical-order-form">
+              <label><span>{currentMode === "onsite" ? "期望到场时间" : "期望在线服务时间"}</span><input type="datetime-local" value={serviceTime} onChange={(event) => setServiceTime(event.target.value)} /></label>
+              {currentMode === "onsite" && <label><span>服务地点</span><input value={serviceAddress} onChange={(event) => setServiceAddress(event.target.value)} placeholder="请填写详细服务地址" /></label>}
+              <label><span>联系人</span><input value={contactName} onChange={(event) => setContactName(event.target.value)} placeholder="选填，方便技术人员联系" /></label>
+              <label><span>需求说明</span><textarea value={requirementText} onChange={(event) => setRequirementText(event.target.value)} placeholder="请描述问题、当前环境、希望解决的目标等" /></label>
+              {fixedPrice && <div className="technical-order-price-confirm"><span>服务金额</span>{renderReferencePrice()}</div>}
+              {purchaseError && <small className="form-error">{purchaseError}</small>}
+            </div>
+            <div className="technical-order-modal-actions">
+              <button type="button" className="technical-order-consult" onClick={() => { setPurchaseOpen(false); setTechnicalChatService(service); setTechnicalChatOpen(true); }}>先在线沟通</button>
+              <button type="button" disabled={creatingOrder} onClick={() => void createServiceOrder()}>{creatingOrder ? "正在创建…" : fixedPrice ? "创建服务订单" : "提交需求等待报价"}</button>
+            </div>
           </section>
         </div>
       )}
+
     </main>
   );
 }
