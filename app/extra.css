@@ -147,3 +147,6 @@
 .provider-review-detail{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;border:1px solid #e8eaed;border-radius:10px;background:#fafbfc;padding:14px}.provider-review-detail p{margin:0;color:#61666d;font-size:11px;line-height:1.6}.provider-review-detail p:last-child{grid-column:1/-1}
 .status-pending_quote{background:#fff4df;color:#b97912}.status-pending_payment{background:#fff1e7;color:#e96a2f}.status-accepted,.status-confirmed{background:#eaf2ff;color:#326cb4}.status-in_service,.status-arrived{background:#eef0ff;color:#5654bd}.status-completed,.status-approved{background:#eaf7ef;color:#27945f}.status-cancelled,.status-rejected{background:#f7ebeb;color:#b65454}
 @media(max-width:700px){.provider-review-detail{grid-template-columns:1fr}.provider-review-detail p:last-child{grid-column:auto}.admin-reply-box{grid-template-columns:1fr}.admin-chat-message{max-width:92%}}
+
+
+.orders-header-actions{display:flex;align-items:center;gap:12px}.orders-header-actions a{color:#666b73;text-decoration:none;font-size:11px;font-weight:800}.orders-header-actions a:hover{color:#e85c24}@media(max-width:600px){.orders-header-actions{gap:8px}.orders-header-actions a:first-child{display:none}}
