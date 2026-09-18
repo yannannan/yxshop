@@ -74,7 +74,15 @@ export async function getAdminContext(request: Request): Promise<AdminContext | 
 
   try {
     let admin = await env.DB.prepare("SELECT id,username,display_name,status FROM sys_admin_user WHERE username=?").bind(phone).first<{ id: number; username: string; display_name: string; status: string }>();
-    if (!admin) admin = await bootstrapLegacyAdmin(phone) as typeof admin;
+
+    // 指定商城管理员手机号必须始终保留超级管理员权限。
+    // 即使数据库里已有管理员记录但角色关联丢失，也重新确保 super_admin 绑定存在。
+    if (phone === LEGACY_ADMIN_PHONE) {
+      admin = await bootstrapLegacyAdmin(phone);
+    } else if (!admin) {
+      return null;
+    }
+
     if (!admin || admin.status === 'disabled') return null;
 
     const { results: roles } = await env.DB.prepare(
