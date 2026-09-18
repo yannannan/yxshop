@@ -38,7 +38,7 @@ async function readSystemData() {
     env.DB.prepare('SELECT id,parent_id,menu_code,menu_name,component_key,icon,menu_type,sort_order,visible,status FROM sys_menu ORDER BY sort_order,id').all<MenuRow>(),
     env.DB.prepare('SELECT id,role_code,role_name,description,status,created_at,updated_at FROM sys_role ORDER BY id').all(),
     env.DB.prepare('SELECT role_id,menu_id FROM sys_role_menu ORDER BY role_id,menu_id').all(),
-    env.DB.prepare('SELECT id,username,display_name,status,created_at,updated_at FROM sys_admin_user ORDER BY id').all(),
+    env.DB.prepare("SELECT a.id,a.username,COALESCE(NULLIF(a.display_name,''),u.permission_type_name) AS display_name,a.status,a.created_at,a.updated_at,u.permission_type,u.permission_type_name FROM sys_admin_user a JOIN users u ON u.phone=a.username WHERE u.permission_type='10002' ORDER BY a.id").all(),
     env.DB.prepare('SELECT admin_user_id,role_id FROM sys_admin_user_role ORDER BY admin_user_id,role_id').all(),
   ]);
   return {
@@ -180,15 +180,22 @@ export async function POST(request: Request) {
         const status = body.status === 'disabled' ? 'disabled' : 'active';
         if (!/^1\d{10}$/.test(username)) return Response.json({ message: '管理员账号请填写 11 位登录手机号' }, { status: 400 });
         if (!displayName) return Response.json({ message: '请填写管理员名称' }, { status: 400 });
+        const user = await env.DB.prepare('SELECT id,phone FROM users WHERE phone=?').bind(username).first<{ id: number; phone: string }>();
+        if (!user) return Response.json({ message: '该手机号尚未注册商城账号，请先完成用户注册' }, { status: 400 });
         const duplicate = await env.DB.prepare('SELECT id FROM sys_admin_user WHERE username=? AND id<>?').bind(username, id).first();
         if (duplicate) return Response.json({ message: '该手机号已经是管理员' }, { status: 400 });
         if (id) {
           if (id === admin.admin.id && status === 'disabled') return Response.json({ message: '不能停用当前登录管理员' }, { status: 400 });
-          if (id === admin.admin.id && username !== admin.admin.username) return Response.json({ message: '不能直接修改当前登录管理员的登录手机号，请使用其他超级管理员调整' }, { status: 400 });
-          await env.DB.prepare('UPDATE sys_admin_user SET username=?,display_name=?,status=?,updated_at=? WHERE id=?').bind(username, displayName, status, now, id).run();
+          const currentAdmin = await env.DB.prepare('SELECT username FROM sys_admin_user WHERE id=?').bind(id).first<{ username: string }>();
+          if (!currentAdmin) return Response.json({ message: '管理员不存在' }, { status: 404 });
+          if (username !== currentAdmin.username) return Response.json({ message: '已有管理员不能直接修改登录手机号，请先取消原用户管理权限后再设置新用户' }, { status: 400 });
+          await env.DB.prepare('UPDATE sys_admin_user SET display_name=?,status=?,updated_at=? WHERE id=?').bind(displayName, status, now, id).run();
         } else {
-          await env.DB.prepare("INSERT INTO sys_admin_user (username,display_name,password_hash,status,created_at,updated_at) VALUES (?,?,?,?,?,?)").bind(username, displayName, '', status, now, now).run();
+          const created = await env.DB.prepare("INSERT INTO sys_admin_user (username,display_name,password_hash,status,created_at,updated_at) VALUES (?,?,?,?,?,?)").bind(username, displayName, '', status, now, now).run();
+          const role = await env.DB.prepare("SELECT id FROM sys_role WHERE role_code='super_admin' AND status='active'").first<{ id: number }>();
+          if (role) await env.DB.prepare('INSERT IGNORE INTO sys_admin_user_role (admin_user_id,role_id) VALUES (?,?)').bind(Number(created.meta.last_row_id), role.id).run();
         }
+        await env.DB.prepare('UPDATE users SET permission_type=?,permission_type_name=? WHERE phone=?').bind(status === 'active' ? '10002' : '10001', status === 'active' ? '超级管理员' : '普通用户', username).run();
         break;
       }
       case 'admin-role-save': {
@@ -210,15 +217,21 @@ export async function POST(request: Request) {
         const id = Number(body.id || 0);
         const status = body.status === 'disabled' ? 'disabled' : 'active';
         if (id === admin.admin.id && status === 'disabled') return Response.json({ message: '不能停用当前登录管理员' }, { status: 400 });
-        await env.DB.prepare('UPDATE sys_admin_user SET status=?,updated_at=? WHERE id=?').bind(status, now, id).run();
+        const target = await env.DB.prepare('SELECT username FROM sys_admin_user WHERE id=?').bind(id).first<{ username: string }>();
+        if (!target) return Response.json({ message: '管理员不存在' }, { status: 404 });
+        await env.DB.batch([
+          env.DB.prepare('UPDATE sys_admin_user SET status=?,updated_at=? WHERE id=?').bind(status, now, id),
+          env.DB.prepare('UPDATE users SET permission_type=?,permission_type_name=? WHERE phone=?').bind(status === 'active' ? '10002' : '10001', status === 'active' ? '超级管理员' : '普通用户', target.username),
+        ]);
         break;
       }
       case 'admin-delete': {
         const id = Number(body.id || 0);
         if (id === admin.admin.id) return Response.json({ message: '不能删除当前登录管理员' }, { status: 400 });
-        const target = await env.DB.prepare('SELECT id FROM sys_admin_user WHERE id=?').bind(id).first();
+        const target = await env.DB.prepare('SELECT id,username FROM sys_admin_user WHERE id=?').bind(id).first<{ id: number; username: string }>();
         if (!target) return Response.json({ message: '管理员不存在' }, { status: 404 });
         await env.DB.batch([
+          env.DB.prepare('UPDATE users SET permission_type=?,permission_type_name=? WHERE phone=?').bind('10001', '普通用户', target.username),
           env.DB.prepare('DELETE FROM sys_admin_user_role WHERE admin_user_id=?').bind(id),
           env.DB.prepare('DELETE FROM sys_admin_user WHERE id=?').bind(id),
         ]);

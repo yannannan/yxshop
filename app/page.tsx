@@ -36,6 +36,7 @@ export default function StorePage() {
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [loggedIn, setLoggedIn] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [pendingProduct, setPendingProduct] = useState<number | null>(null);
   const [authError, setAuthError] = useState("");
   const [authNotice, setAuthNotice] = useState("");
@@ -75,6 +76,24 @@ export default function StorePage() {
       setAuthOpen(true);
     }
   }, []);
+
+  useEffect(() => {
+    if (!loggedIn) {
+      setIsAdmin(false);
+      return;
+    }
+    let active = true;
+    fetch("/api/admin/session", { cache: "no-store" })
+      .then((response) => {
+        if (active) setIsAdmin(response.ok);
+      })
+      .catch(() => {
+        if (active) setIsAdmin(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [loggedIn]);
 
   useEffect(() => {
     fetch("/api/products", { cache: "no-store" })
@@ -431,6 +450,7 @@ export default function StorePage() {
     await fetch("/api/auth/logout", { method: "POST" }).catch(() => null);
     window.localStorage.removeItem("mall_phone");
     setLoggedIn(false);
+    setIsAdmin(false);
     setPhone("");
     setEmail("");
     setCode("");
@@ -440,7 +460,7 @@ export default function StorePage() {
   return (
     <main className="store-shell refined-store">
       <header
-        className={`topbar refined-topbar compact-topbar${loggedIn && phone === "13564802098" ? " has-admin-entry" : ""}`}
+        className={`topbar refined-topbar compact-topbar${isAdmin ? " has-admin-entry" : ""}`}
       >
         <a className="brand" href="/" aria-label="宇星商城首页">
           <span className="brand-mark">
@@ -476,7 +496,7 @@ export default function StorePage() {
             技术人才入驻
           </a>
         </nav>
-        {loggedIn && phone === "13564802098" && (
+        {isAdmin && (
           <a
             className="admin-entry"
             href="/admin"
@@ -840,7 +860,7 @@ export default function StorePage() {
         </div>
         <div>
           <b>商城信息</b>
-          {loggedIn && phone === "13564802098" && <a href="/admin">管理后台</a>}
+          {isAdmin && <a href="/admin">管理后台</a>}
           <span>© 2026 宇星商城</span>
         </div>
       </footer>
