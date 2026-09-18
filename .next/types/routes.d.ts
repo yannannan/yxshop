@@ -20,16 +20,18 @@ declare global {
 }
 
 declare namespace VinextRouteTypes {
-  type PageRoute = "/" | "/admin" | "/checkout/[id]" | "/orders" | "/product/[id]" | "/service/[slug]";
+  type PageRoute = "/" | "/admin" | "/checkout/[id]" | "/orders" | "/product/[id]" | "/service-orders" | "/service-orders/[id]" | "/service/[slug]";
   type LayoutRoute = "/" | "/product/[id]";
-  type RouteHandlerRoute = "/api/admin" | "/api/admin/summary" | "/api/auth/send-code" | "/api/auth/verify" | "/api/categories" | "/api/order-notifications/reply" | "/api/orders" | "/api/payment-qrs" | "/api/product-images" | "/api/products";
-  type AppRoute = "/" | "/admin" | "/api/admin" | "/api/admin/summary" | "/api/auth/send-code" | "/api/auth/verify" | "/api/categories" | "/api/order-notifications/reply" | "/api/orders" | "/api/payment-qrs" | "/api/product-images" | "/api/products" | "/checkout/[id]" | "/orders" | "/product/[id]" | "/service/[slug]";
+  type RouteHandlerRoute = "/api/admin" | "/api/admin/onsite" | "/api/admin/summary" | "/api/admin/system" | "/api/auth/send-code" | "/api/auth/verify" | "/api/categories" | "/api/order-notifications/reply" | "/api/orders" | "/api/payment-qrs" | "/api/product-images" | "/api/products" | "/api/technical-consultations" | "/api/technical-payment-qrs" | "/api/technical-provider-applications" | "/api/technical-service-orders" | "/api/technical-services";
+  type AppRoute = "/" | "/admin" | "/api/admin" | "/api/admin/onsite" | "/api/admin/summary" | "/api/admin/system" | "/api/auth/send-code" | "/api/auth/verify" | "/api/categories" | "/api/order-notifications/reply" | "/api/orders" | "/api/payment-qrs" | "/api/product-images" | "/api/products" | "/api/technical-consultations" | "/api/technical-payment-qrs" | "/api/technical-provider-applications" | "/api/technical-service-orders" | "/api/technical-services" | "/checkout/[id]" | "/orders" | "/product/[id]" | "/service-orders" | "/service-orders/[id]" | "/service/[slug]";
 
   interface ParamMap {
     "/": {};
     "/admin": {};
     "/api/admin": {};
+    "/api/admin/onsite": {};
     "/api/admin/summary": {};
+    "/api/admin/system": {};
     "/api/auth/send-code": {};
     "/api/auth/verify": {};
     "/api/categories": {};
@@ -38,9 +40,16 @@ declare namespace VinextRouteTypes {
     "/api/payment-qrs": {};
     "/api/product-images": {};
     "/api/products": {};
+    "/api/technical-consultations": {};
+    "/api/technical-payment-qrs": {};
+    "/api/technical-provider-applications": {};
+    "/api/technical-service-orders": {};
+    "/api/technical-services": {};
     "/checkout/[id]": { id: string; };
     "/orders": {};
     "/product/[id]": { id: string; };
+    "/service-orders": {};
+    "/service-orders/[id]": { id: string; };
     "/service/[slug]": { slug: string; };
   }
 
