@@ -1,5 +1,5 @@
 import { env } from '@/db/mysql-runtime';
-import { getSessionPhone } from '@/db/setup';
+import { getVerifiedSessionPhone } from '@/db/setup';
 
 export type AdminMenuRow = {
   id: number;
@@ -69,7 +69,7 @@ async function bootstrapLegacyAdmin(phone: string) {
 }
 
 export async function getAdminContext(request: Request): Promise<AdminContext | null> {
-  const phone = getSessionPhone(request);
+  const phone = getVerifiedSessionPhone(request);
   if (!phone) return null;
 
   try {
