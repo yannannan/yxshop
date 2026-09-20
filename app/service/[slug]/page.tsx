@@ -315,10 +315,10 @@ export default function TechnicalServiceDetailPage() {
                 </div>
               )}
               <div>
-                <dt>预约规则</dt>
+                <dt>服务安排</dt>
                 <dd>
                   {currentMode === "onsite"
-                    ? "确认订单前选择时间和地点"
+                    ? "购买前选择服务时间和上门地址"
                     : "确认订单前选择服务时间"}
                 </dd>
               </div>
@@ -351,18 +351,18 @@ export default function TechnicalServiceDetailPage() {
                   <ol>
                     <li>
                       <b>确认服务方式</b>
-                      <span>选择在线沟通或上门服务</span>
+                      <span>选择在线服务或上门服务</span>
                     </li>
                     <li>
                       <b>
                         {currentMode === "onsite"
-                          ? "选择到场时间和地点"
+                          ? "选择上门时间和地址"
                           : "选择在线服务时间"}
                       </b>
                       <span>
                         {currentMode === "onsite"
                           ? "确认可服务的到场时间和上门地址"
-                          : "确认可在线沟通的服务时间"}
+                          : "确认在线服务时间"}
                       </span>
                     </li>
                     <li>
@@ -413,7 +413,7 @@ export default function TechnicalServiceDetailPage() {
                     <small>
                       {currentMode === "online"
                         ? "确认在线服务时间后，再确认订单并支付"
-                        : "确认到场时间和地点后，再确认订单并支付"}
+                        : "确认上门时间和地址后，再提交订单并支付"}
                     </small>
                   </div>
                   <div className="technical-current-service-actions">
@@ -439,7 +439,7 @@ export default function TechnicalServiceDetailPage() {
 
                 {service.deliveryModes.includes("onsite") && (
                   <p className="technical-current-service-appointment-note">
-                    上门服务请先选择到场时间和地点，再确认订单并完成支付；支付成功后服务者将按约到场。
+                    上门服务请先选择上门时间和地址，再确认订单并完成支付；支付成功后服务者将按约到场。
                   </p>
                 )}
                 </section>
@@ -464,7 +464,7 @@ export default function TechnicalServiceDetailPage() {
                     <li>确认服务方式</li>
                     <li>
                       {currentMode === "onsite"
-                        ? "选择到场时间和地点"
+                        ? "选择上门时间和地址"
                         : "选择在线服务时间"}
                     </li>
                     <li>确认订单并支付</li>
@@ -568,8 +568,8 @@ export default function TechnicalServiceDetailPage() {
                             href={`/service/${project.slug}`}
                           >
                             {project.pricingMode === "fixed"
-                              ? "立即购买"
-                              : "沟通确认价格"}
+                              ? "购买服务"
+                              : "购买服务"}
                           </a>
                         </div>
                       </article>
@@ -625,7 +625,7 @@ export default function TechnicalServiceDetailPage() {
                 </div>
                 {service.deliveryModes.includes("onsite") && (
                   <p className="technical-post-order-note">
-                    上门服务请先确认到场时间和地点，再确认订单并完成支付。
+                    购买上门服务时请确认服务时间和上门地址。
                   </p>
                 )}
               </div>
@@ -696,7 +696,7 @@ export default function TechnicalServiceDetailPage() {
                     </li>
                     <li>
                       {currentMode === "onsite"
-                        ? "选择到场时间和地点"
+                        ? "选择上门时间和地址"
                         : "选择在线服务时间"}
                     </li>
                     <li>确认订单并支付</li>
@@ -727,10 +727,10 @@ export default function TechnicalServiceDetailPage() {
                 <div className="technical-tab-panel">
                   <h2>服务说明</h2>
                   <p>
-                    固定价格服务可直接购买；价格面议服务会先沟通需求，确认服务内容与价格后再生成可支付订单。
+                    固定价格服务可直接购买；价格面议服务提交购买需求后，由技术人员确认服务范围与最终价格。
                     {currentMode === "onsite"
-                      ? " 上门服务会先确认到场时间和地点，再确认订单并完成支付。"
-                      : " 在线沟通服务会先确认服务时间，再确认订单并完成支付。"}
+                      ? " 上门服务下单时选择服务时间和上门地址，再按订单状态完成支付。"
+                      : " 在线服务下单时选择服务时间，再按订单状态完成支付。"}
                   </p>
                 </div>
               )}
@@ -747,7 +747,7 @@ export default function TechnicalServiceDetailPage() {
                   : "先沟通需求，再确认服务价格"}
               </p>
               <button type="button" onClick={() => setPurchaseOpen(true)}>
-                {fixedPrice ? "立即购买" : "沟通确认价格"}
+                购买服务
               </button>
               {service.deliveryModes.includes("online") && (
                 <button
@@ -768,7 +768,7 @@ export default function TechnicalServiceDetailPage() {
               )}
               <small>
                 {currentMode === "onsite"
-                  ? `当前选择：${selectedModeLabel}（先选择时间与地点）`
+                  ? `当前选择：${selectedModeLabel}（选择服务时间与上门地址）`
                   : `当前选择：${selectedModeLabel}`}
               </small>
             </section>
