@@ -16,6 +16,16 @@ import {
 
 type DetailTab = "content" | "flow" | "delivery" | "notes";
 type ProviderDetailTab = "service" | "provider" | "cases" | "credentials";
+type CustomerAddress = {
+  id: number;
+  contact_name: string;
+  contact_phone: string;
+  province: string;
+  city: string;
+  district: string;
+  detail_address: string;
+  is_default: number;
+};
 
 const detailTabs: { id: DetailTab; label: string }[] = [
   { id: "content", label: "服务内容" },
@@ -55,6 +65,9 @@ export default function TechnicalServiceDetailPage() {
   const [purchaseOpen, setPurchaseOpen] = useState(false);
   const [serviceTime, setServiceTime] = useState("");
   const [serviceAddress, setServiceAddress] = useState("");
+  const [addresses, setAddresses] = useState<CustomerAddress[]>([]);
+  const [selectedAddressId, setSelectedAddressId] = useState<number | null>(null);
+  const [addressesLoading, setAddressesLoading] = useState(false);
   const [requirementText, setRequirementText] = useState("");
   const [contactName, setContactName] = useState("");
   const [creatingOrder, setCreatingOrder] = useState(false);
@@ -72,6 +85,28 @@ export default function TechnicalServiceDetailPage() {
       .catch(() => null);
     return () => { active = false; };
   }, []);
+
+  useEffect(() => {
+    if (!purchaseOpen) return;
+    setAddressesLoading(true);
+    fetch("/api/addresses", { cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) return [];
+        return response.json() as Promise<CustomerAddress[]>;
+      })
+      .then((result) => {
+        const list = Array.isArray(result) ? result : [];
+        setAddresses(list);
+        if (!selectedAddressId && list.length) {
+          const preferred = list.find((item) => Number(item.is_default) === 1) ?? list[0];
+          setSelectedAddressId(preferred.id);
+          setContactName(preferred.contact_name || "");
+          setServiceAddress([preferred.province, preferred.city, preferred.district, preferred.detail_address].filter(Boolean).join(""));
+        }
+      })
+      .catch(() => setAddresses([]))
+      .finally(() => setAddressesLoading(false));
+  }, [purchaseOpen, selectedAddressId]);
 
   if (!service) {
     return (
@@ -119,7 +154,7 @@ export default function TechnicalServiceDetailPage() {
       return;
     }
     if (currentMode === "onsite" && !serviceAddress.trim()) {
-      setPurchaseError("指定地点服务请填写服务地址");
+      setPurchaseError("上门服务请选择或填写上门地址");
       return;
     }
     setCreatingOrder(true);
@@ -132,6 +167,7 @@ export default function TechnicalServiceDetailPage() {
           deliveryMode: currentMode,
           scheduledAt: serviceTime,
           serviceAddress,
+          addressId: currentMode === "onsite" ? selectedAddressId : null,
           requirementText,
           contactName,
         }),
@@ -207,7 +243,7 @@ export default function TechnicalServiceDetailPage() {
           <div>
             <span>TECHNICAL SERVICE</span>
             <h1>专业的技术服务，让复杂的问题变简单</h1>
-            <p>在线沟通 · 指定地点服务 · 专业交付支持</p>
+            <p>在线服务 · 上门服务 · 专业交付支持</p>
           </div>
         </section>
 
@@ -253,7 +289,7 @@ export default function TechnicalServiceDetailPage() {
               )}
               {service.deliveryModes.includes("onsite") && service.onsiteArrival && (
                 <article>
-                  <span>指定地点服务</span>
+                  <span>上门服务</span>
                   <b>{service.onsiteArrival}</b>
                 </article>
               )}
@@ -315,7 +351,7 @@ export default function TechnicalServiceDetailPage() {
                   <ol>
                     <li>
                       <b>确认服务方式</b>
-                      <span>选择在线沟通或指定地点服务</span>
+                      <span>选择在线沟通或上门服务</span>
                     </li>
                     <li>
                       <b>
@@ -325,7 +361,7 @@ export default function TechnicalServiceDetailPage() {
                       </b>
                       <span>
                         {currentMode === "onsite"
-                          ? "确认可服务的到场时间和指定地点"
+                          ? "确认可服务的到场时间和上门地址"
                           : "确认可在线沟通的服务时间"}
                       </span>
                     </li>
@@ -396,14 +432,14 @@ export default function TechnicalServiceDetailPage() {
                       className="technical-current-service-buy"
                       onClick={() => setPurchaseOpen(true)}
                     >
-                      {fixedPrice ? "立即购买" : "沟通确认价格"}
+                      购买服务
                     </button>
                   </div>
                 </section>
 
                 {service.deliveryModes.includes("onsite") && (
                   <p className="technical-current-service-appointment-note">
-                    指定地点服务请先选择到场时间和地点，再确认订单并完成支付；支付成功后服务者将按约到场。
+                    上门服务请先选择到场时间和地点，再确认订单并完成支付；支付成功后服务者将按约到场。
                   </p>
                 )}
                 </section>
@@ -589,7 +625,7 @@ export default function TechnicalServiceDetailPage() {
                 </div>
                 {service.deliveryModes.includes("onsite") && (
                   <p className="technical-post-order-note">
-                    指定地点服务请先确认到场时间和地点，再确认订单并完成支付。
+                    上门服务请先确认到场时间和地点，再确认订单并完成支付。
                   </p>
                 )}
               </div>
@@ -693,7 +729,7 @@ export default function TechnicalServiceDetailPage() {
                   <p>
                     固定价格服务可直接购买；价格面议服务会先沟通需求，确认服务内容与价格后再生成可支付订单。
                     {currentMode === "onsite"
-                      ? " 指定地点服务会先确认到场时间和地点，再确认订单并完成支付。"
+                      ? " 上门服务会先确认到场时间和地点，再确认订单并完成支付。"
                       : " 在线沟通服务会先确认服务时间，再确认订单并完成支付。"}
                   </p>
                 </div>
@@ -787,11 +823,61 @@ export default function TechnicalServiceDetailPage() {
           <section className="technical-appointment-modal technical-order-modal" role="dialog" aria-modal="true" aria-label="服务订单">
             <button className="modal-close" aria-label="关闭" onClick={() => setPurchaseOpen(false)}>×</button>
             <span>✓</span>
-            <h2>{fixedPrice ? "确认服务并创建订单" : "提交需求等待报价"}</h2>
-            <p>{fixedPrice ? `当前选择：${selectedModeLabel}。确认服务时间${currentMode === "onsite" ? "、服务地点" : ""}和需求后创建服务订单。` : "提交需求和预约时间后，平台或技术人员确认服务范围并给出最终报价。"}</p>
+            <h2>购买服务</h2>
+            <p>{`当前选择：${selectedModeLabel}。确认服务时间${currentMode === "onsite" ? "、上门地址" : ""}和需求后提交订单。`}{!fixedPrice ? " 本服务为面议价格，提交后由技术人员确认最终金额。" : ""}</p>
             <div className="technical-order-form">
               <label><span>{currentMode === "onsite" ? "期望到场时间" : "期望在线服务时间"}</span><input type="datetime-local" value={serviceTime} onChange={(event) => setServiceTime(event.target.value)} /></label>
-              {currentMode === "onsite" && <label><span>服务地点</span><input value={serviceAddress} onChange={(event) => setServiceAddress(event.target.value)} placeholder="请填写详细服务地址" /></label>}
+              {currentMode === "onsite" && (
+                <div className="technical-order-address-field">
+                  <div className="technical-order-address-title">
+                    <span>上门地址</span>
+                    <a href="/addresses" target="_blank" rel="noreferrer">管理我的地址</a>
+                  </div>
+                  {addressesLoading ? (
+                    <div className="technical-order-address-empty">正在读取常用地址…</div>
+                  ) : addresses.length ? (
+                    <div className="technical-order-address-options">
+                      {addresses.map((address) => {
+                        const fullAddress = [address.province, address.city, address.district, address.detail_address].filter(Boolean).join("");
+                        return (
+                          <button
+                            type="button"
+                            className={selectedAddressId === address.id ? "active" : ""}
+                            key={address.id}
+                            onClick={() => {
+                              setSelectedAddressId(address.id);
+                              setContactName(address.contact_name || "");
+                              setServiceAddress(fullAddress);
+                            }}
+                          >
+                            <b>{address.contact_name} · {address.contact_phone}</b>
+                            <span>{fullAddress}</span>
+                            {Number(address.is_default) === 1 && <em>默认</em>}
+                          </button>
+                        );
+                      })}
+                      <button
+                        type="button"
+                        className={selectedAddressId === null ? "active manual" : "manual"}
+                        onClick={() => {
+                          setSelectedAddressId(null);
+                          setServiceAddress("");
+                        }}
+                      >
+                        <b>临时上门地址</b>
+                        <span>本次订单使用，不保存到地址簿</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="technical-order-address-empty">
+                      暂无常用地址，可直接填写本次上门地址，或前往“我的地址”保存。
+                    </div>
+                  )}
+                  {(!addresses.length || selectedAddressId === null) && (
+                    <input value={serviceAddress} onChange={(event) => setServiceAddress(event.target.value)} placeholder="请输入完整上门地址（省市区 + 街道门牌）" />
+                  )}
+                </div>
+              )}
               <label><span>联系人</span><input value={contactName} onChange={(event) => setContactName(event.target.value)} placeholder="选填，方便技术人员联系" /></label>
               <label><span>需求说明</span><textarea value={requirementText} onChange={(event) => setRequirementText(event.target.value)} placeholder="请描述问题、当前环境、希望解决的目标等" /></label>
               {fixedPrice && <div className="technical-order-price-confirm"><span>服务金额</span>{renderReferencePrice()}</div>}
@@ -799,7 +885,7 @@ export default function TechnicalServiceDetailPage() {
             </div>
             <div className="technical-order-modal-actions">
               <button type="button" className="technical-order-consult" onClick={() => { setPurchaseOpen(false); setTechnicalChatService(service); setTechnicalChatOpen(true); }}>先在线沟通</button>
-              <button type="button" disabled={creatingOrder} onClick={() => void createServiceOrder()}>{creatingOrder ? "正在创建…" : fixedPrice ? "创建服务订单" : "提交需求等待报价"}</button>
+              <button type="button" disabled={creatingOrder} onClick={() => void createServiceOrder()}>{creatingOrder ? "正在提交…" : "确认购买服务"}</button>
             </div>
           </section>
         </div>
