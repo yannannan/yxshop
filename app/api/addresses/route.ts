@@ -94,10 +94,15 @@ export async function PUT(request: Request) {
   const address = normalize(body);
   const error = validate(address);
   if (error) return Response.json({ message: error }, { status: 400 });
-  const existing = await env.DB.prepare('SELECT id FROM customer_addresses WHERE id=? AND user_id=?')
-    .bind(id,user.id).first();
+  const existing = await env.DB.prepare('SELECT id,is_default FROM customer_addresses WHERE id=? AND user_id=?')
+    .bind(id,user.id).first<{ id: number; is_default: number }>();
   if (!existing) return Response.json({ message: '地址不存在' }, { status: 404 });
   const now = new Date().toISOString();
+  if (Number(existing.is_default) === 1 && !address.isDefault) {
+    const anotherDefault = await env.DB.prepare('SELECT id FROM customer_addresses WHERE user_id=? AND id<>? AND is_default=1 LIMIT 1')
+      .bind(user.id,id).first();
+    if (!anotherDefault) address.isDefault = 1;
+  }
   if (address.isDefault) {
     await env.DB.prepare('UPDATE customer_addresses SET is_default=0,updated_at=? WHERE user_id=?')
       .bind(now,user.id).run();
