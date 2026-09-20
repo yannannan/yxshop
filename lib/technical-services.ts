@@ -27,8 +27,8 @@ export type TechnicalService = {
 };
 
 export const serviceDeliveryLabels: Record<ServiceDeliveryMode, string> = {
-  online: "在线沟通",
-  onsite: "支持指定地点服务",
+  online: "在线服务",
+  onsite: "上门服务",
 };
 
 export const technicalServices: TechnicalService[] = [
