@@ -34,7 +34,7 @@ async function createOrderId(phone: string) {
 export async function POST(request: Request) {
   await ensureDatabase();
   const phone = getSessionPhone(request);
-  if (!phone) return Response.json({ message: '请先登录后再预约技术服务' }, { status: 401 });
+  if (!phone) return Response.json({ message: '请先登录后再购买技术服务' }, { status: 401 });
 
   const user = await env.DB.prepare("SELECT id,email FROM users WHERE phone=? AND status='active'").bind(phone).first<{ id: number; email: string }>();
   if (!user) return Response.json({ message: '用户不可用' }, { status: 401 });
