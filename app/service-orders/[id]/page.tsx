@@ -136,7 +136,7 @@ export default function TechnicalServiceOrderPage() {
               <div><dt>技术人员</dt><dd>{order.provider_name} · {order.provider_city}</dd></div>
               <div><dt>服务方式</dt><dd>{order.delivery_mode === "onsite" ? "上门服务" : "在线服务"}</dd></div>
               <div><dt>预约时间</dt><dd>{String(order.scheduled_at).replace("T"," ").slice(0,16)}</dd></div>
-              {order.delivery_mode === "onsite" && <div><dt>服务地点</dt><dd>{order.service_address || "待确认"}</dd></div>}
+              {order.delivery_mode === "onsite" && <div><dt>上门地址</dt><dd>{order.service_address || "待确认"}</dd></div>}
               <div><dt>服务金额</dt><dd className="money">{order.amount === null ? "待报价" : `¥${order.amount}`}</dd></div>
               <div><dt>需求说明</dt><dd>{order.requirement_text || "未填写补充需求"}</dd></div>
             </dl>
