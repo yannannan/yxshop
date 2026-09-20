@@ -34,7 +34,7 @@ async function createOrderId(phone: string) {
 export async function POST(request: Request) {
   await ensureDatabase();
   const phone = getSessionPhone(request);
-  if (!phone) return Response.json({ message: '请先登录后再预约技术服务' }, { status: 401 });
+  if (!phone) return Response.json({ message: '请先登录后再购买技术服务' }, { status: 401 });
 
   const user = await env.DB.prepare("SELECT id,email FROM users WHERE phone=? AND status='active'").bind(phone).first<{ id: number; email: string }>();
   if (!user) return Response.json({ message: '用户不可用' }, { status: 401 });
@@ -49,6 +49,7 @@ export async function POST(request: Request) {
     requirementText?: string;
     contactName?: string;
     contactPhone?: string;
+    addressId?: number;
   };
 
   if (body.action === 'payment-submitted') {
@@ -63,14 +64,55 @@ export async function POST(request: Request) {
   const slug = String(body.serviceSlug || '').trim();
   const deliveryMode = body.deliveryMode === 'onsite' ? 'onsite' : 'online';
   const scheduledAt = String(body.scheduledAt || '').trim().slice(0, 40);
-  const serviceAddress = String(body.serviceAddress || '').trim().slice(0, 500);
+  let serviceAddress = String(body.serviceAddress || '').trim().slice(0, 500);
   const requirementText = String(body.requirementText || '').trim().slice(0, 4000);
-  const contactName = String(body.contactName || '').trim().slice(0, 50);
-  const contactPhone = String(body.contactPhone || phone).trim().slice(0, 32);
+  let contactName = String(body.contactName || '').trim().slice(0, 50);
+  let contactPhone = String(body.contactPhone || phone).trim().slice(0, 32);
+  let addressId: number | null = null;
+  let addressSnapshotJson = '';
 
   if (!slug) return Response.json({ message: '服务参数不完整' }, { status: 400 });
   if (!scheduledAt) return Response.json({ message: '请选择服务时间' }, { status: 400 });
-  if (deliveryMode === 'onsite' && !serviceAddress) return Response.json({ message: '指定地点服务请填写服务地址' }, { status: 400 });
+
+  if (deliveryMode === 'onsite' && body.addressId) {
+    const address = await env.DB.prepare(
+      "SELECT id,contact_name,contact_phone,province,city,district,detail_address FROM customer_addresses WHERE id=? AND user_id=?",
+    ).bind(Number(body.addressId), user.id).first<{
+      id: number;
+      contact_name: string;
+      contact_phone: string;
+      province: string;
+      city: string;
+      district: string;
+      detail_address: string;
+    }>();
+    if (!address) return Response.json({ message: '所选上门地址不存在，请重新选择' }, { status: 400 });
+    addressId = address.id;
+    contactName = address.contact_name;
+    contactPhone = address.contact_phone;
+    serviceAddress = [address.province, address.city, address.district, address.detail_address].filter(Boolean).join('');
+    addressSnapshotJson = JSON.stringify({
+      contactName: address.contact_name,
+      contactPhone: address.contact_phone,
+      province: address.province,
+      city: address.city,
+      district: address.district,
+      detailAddress: address.detail_address,
+      fullAddress: serviceAddress,
+    });
+  } else if (deliveryMode === 'onsite' && serviceAddress) {
+    addressSnapshotJson = JSON.stringify({
+      contactName,
+      contactPhone,
+      province: '',
+      city: '',
+      district: '',
+      detailAddress: serviceAddress,
+      fullAddress: serviceAddress,
+    });
+  }
+
+  if (deliveryMode === 'onsite' && !serviceAddress) return Response.json({ message: '上门服务请选择或填写上门地址' }, { status: 400 });
 
   const service = await env.DB.prepare("SELECT id,provider_id,slug,title,delivery_modes_json,pricing_mode,price,status FROM technical_services WHERE slug=? AND status='active'").bind(slug).first<ServiceRow>();
   if (!service) return Response.json({ message: '技术服务不存在或已下架' }, { status: 404 });
@@ -84,8 +126,8 @@ export async function POST(request: Request) {
   const amount = service.pricing_mode === 'negotiable' ? null : Number(service.price || 0);
 
   await env.DB.batch([
-    env.DB.prepare('INSERT INTO technical_service_orders (id,service_id,provider_id,user_id,customer_phone,customer_email,delivery_mode,pricing_mode,amount,requirement_text,service_address,scheduled_at,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-      .bind(id, service.id, service.provider_id, user.id, phone, user.email || '', deliveryMode, service.pricing_mode, amount, requirementText, serviceAddress, scheduledAt, status, now, now),
+    env.DB.prepare('INSERT INTO technical_service_orders (id,service_id,provider_id,user_id,customer_phone,customer_email,delivery_mode,pricing_mode,amount,requirement_text,service_address,address_id,address_snapshot_json,scheduled_at,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+      .bind(id, service.id, service.provider_id, user.id, phone, user.email || '', deliveryMode, service.pricing_mode, amount, requirementText, serviceAddress, addressId, addressSnapshotJson, scheduledAt, status, now, now),
     env.DB.prepare('INSERT INTO technical_service_appointments (order_id,service_id,provider_id,delivery_mode,scheduled_at,service_address,contact_name,contact_phone,note,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')
       .bind(id, service.id, service.provider_id, deliveryMode, scheduledAt, serviceAddress, contactName, contactPhone, requirementText.slice(0, 1000), 'pending', now, now),
   ]);

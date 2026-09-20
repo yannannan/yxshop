@@ -27,8 +27,8 @@ export type TechnicalService = {
 };
 
 export const serviceDeliveryLabels: Record<ServiceDeliveryMode, string> = {
-  online: "在线沟通",
-  onsite: "支持指定地点服务",
+  online: "在线服务",
+  onsite: "上门服务",
 };
 
 export const technicalServices: TechnicalService[] = [
@@ -176,7 +176,7 @@ export const technicalServices: TechnicalService[] = [
       { title: "修复建议", detail: "给出可执行的修复方案并协助处理。" },
       { title: "结果确认", detail: "完成连通性验证并说明后续注意事项。" },
     ],
-    deliveryNotes: ["说明网络异常现象", "选择沟通或指定地点服务", "确认修复结果"],
+    deliveryNotes: ["说明网络异常现象", "选择在线服务或上门服务", "确认修复结果"],
   },
   {
     slug: "ai-process-automation",
