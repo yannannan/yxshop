@@ -246,11 +246,10 @@ export async function POST(request: Request) {
       case 'order-status': {
         const id = String(body.id || '').trim();
         const status = String(body.status || '');
-        const allowed = ['pending_quote','pending_payment','payment_review','paid','accepted','in_service','completed','closed','cancelled'];
+        const allowed = ['pending_quote','pending_payment','payment_review','paid','in_service','completed','closed','cancelled'];
         if (!allowed.includes(status)) return Response.json({ message: '服务订单状态不正确' }, { status: 400 });
         const timestamps: Record<string, string | null> = {
           paid: 'paid_at',
-          accepted: 'accepted_at',
           in_service: 'started_at',
           completed: 'completed_at',
         };
