@@ -65,7 +65,7 @@ function Modal({ title, children, onClose }: { title: string; children: React.Re
 }
 function Status({ value }: { value: string }) {
   const labels: Record<string, string> = {
-    pending_quote: "待报价", pending_payment: "待支付", payment_review: "支付核验", paid: "已支付", accepted: "已接单", in_service: "服务中", completed: "已完成", closed: "已关闭", cancelled: "已取消",
+    pending_quote: "待报价", pending_payment: "待支付", payment_review: "支付核验", paid: "已支付", in_service: "服务中", completed: "已完成", closed: "已关闭", cancelled: "已取消",
     pending: "待确认", confirmed: "已确认", arrived: "已到场", open: "沟通中", approved: "已通过", rejected: "已驳回",
   };
   return <span className={`status status-${value}`}>{labels[value] || value}</span>;
@@ -75,14 +75,14 @@ function Header({ title, description, loading, onRefresh }: { title: string; des
 }
 
 const orderStatuses = [
-  ["pending_quote","待报价"], ["pending_payment","待支付"], ["payment_review","支付核验"], ["paid","已支付"], ["accepted","已接单"], ["in_service","服务中"], ["completed","已完成"], ["closed","已关闭"], ["cancelled","已取消"],
+  ["pending_quote","待报价"], ["pending_payment","待支付"], ["payment_review","支付核验"], ["paid","已支付"], ["in_service","服务中"], ["completed","已完成"], ["closed","已关闭"], ["cancelled","已取消"],
 ];
 
 export function OnsiteOrderManagement() {
   const { data, loading, notice, load, action } = useOperations();
   const [quote, setQuote] = useState<Row | null>(null);
   const [quoteAmount, setQuoteAmount] = useState("");
-  return <>{notice && <div className="admin-message">{notice}</div>}<Header title="服务订单" description="管理技术服务报价、支付确认、接单、实施与完成状态" loading={loading} onRefresh={() => void load()} />
+  return <>{notice && <div className="admin-message">{notice}</div>}<Header title="服务订单" description="管理技术服务报价、支付确认、服务中与完成状态" loading={loading} onRefresh={() => void load()} />
     {!data.initialized ? <InitRequired message={data.message} /> : <div className="table-wrap onsite-admin-table"><table><thead><tr><th>订单</th><th>服务</th><th>技术人员</th><th>客户</th><th>方式</th><th>预约</th><th>金额</th><th>状态</th><th>操作</th></tr></thead><tbody>{data.orders.map((order) => <tr key={text(order.id)}><td><b>{text(order.id)}</b><small>{text(order.created_at).replace("T"," ").slice(0,16)}</small></td><td>{text(order.service_title)}</td><td>{text(order.provider_name)}</td><td>{text(order.customer_phone)}<small>{text(order.customer_email)}</small></td><td>{text(order.delivery_mode) === "onsite" ? "上门服务" : "在线服务"}</td><td>{text(order.scheduled_at).replace("T"," ").slice(0,16)}<small>{text(order.service_address) || "—"}</small></td><td className="money">{order.amount === null ? "待报价" : `¥${text(order.amount)}`}</td><td><Status value={text(order.status)} /></td><td><div className="onsite-admin-actions">{text(order.status) === "pending_quote" && <button className="text-action" onClick={() => { setQuote(order); setQuoteAmount(""); }}>报价</button>}<select value={text(order.status)} onChange={(e) => void action({ action: "order-status", id: text(order.id), status: e.target.value })}>{orderStatuses.map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></div></td></tr>)}</tbody></table>{!data.orders.length && <div className="table-empty"><span>◇</span><p>暂无技术服务订单</p></div>}</div>}
     {quote && <Modal title="服务订单报价" onClose={() => setQuote(null)}><div className="onsite-quote-summary onsite-dialog-summary"><b>{text(quote.service_title)}</b><p>订单：{text(quote.id)}</p><p>{text(quote.requirement_text) || "客户未填写补充需求"}</p></div><div className="admin-form-grid"><label><span>确认服务金额</span><input type="number" min="0.01" step="0.01" value={quoteAmount} onChange={(e) => setQuoteAmount(e.target.value)} placeholder="请输入报价金额" /></label></div><div className="admin-form-actions"><button className="ghost-button" onClick={() => setQuote(null)}>取消</button><button disabled={!Number(quoteAmount)} onClick={async () => { if (await action({ action: "order-quote", id: text(quote.id), amount: quoteAmount })) setQuote(null); }}>确认报价</button></div></Modal>}
   </>;
