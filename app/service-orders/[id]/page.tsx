@@ -25,10 +25,9 @@ type ServiceOrder = {
 
 const statusInfo: Record<string, { label: string; description: string }> = {
   pending_quote: { label: "待报价", description: "服务需求已经提交，平台或技术人员正在确认服务范围与最终价格。" },
-  pending_payment: { label: "待支付", description: "服务金额已经确认，请扫码完成付款；提交支付核验后，平台确认收款并进入接单流程。" },
+  pending_payment: { label: "待支付", description: "服务金额已经确认，请扫码完成付款；提交支付核验后，平台确认收款并等待服务开始。" },
   payment_review: { label: "支付核验", description: "您已提交支付核验，平台正在确认收款结果，请保持页面或稍后回来查看。" },
-  paid: { label: "已支付", description: "平台已确认收款，等待技术人员确认接单。" },
-  accepted: { label: "已接单", description: "技术人员已经接单，请按预约时间保持联系方式畅通。" },
+  paid: { label: "已支付", description: "平台已确认收款，等待技术人员按服务时间开始服务。" },
   in_service: { label: "服务中", description: "技术人员正在提供本次技术服务。" },
   completed: { label: "已完成", description: "本次技术服务已完成。" },
   closed: { label: "已关闭", description: "本次服务订单已关闭。" },
