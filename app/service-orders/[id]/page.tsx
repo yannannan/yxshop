@@ -25,10 +25,9 @@ type ServiceOrder = {
 
 const statusInfo: Record<string, { label: string; description: string }> = {
   pending_quote: { label: "待报价", description: "服务需求已经提交，平台或技术人员正在确认服务范围与最终价格。" },
-  pending_payment: { label: "待支付", description: "服务金额已经确认，请扫码完成付款；提交支付核验后，平台确认收款并进入接单流程。" },
+  pending_payment: { label: "待支付", description: "服务金额已经确认，请扫码完成付款；提交支付核验后，平台确认收款并等待服务开始。" },
   payment_review: { label: "支付核验", description: "您已提交支付核验，平台正在确认收款结果，请保持页面或稍后回来查看。" },
-  paid: { label: "已支付", description: "平台已确认收款，等待技术人员确认接单。" },
-  accepted: { label: "已接单", description: "技术人员已经接单，请按预约时间保持联系方式畅通。" },
+  paid: { label: "已支付", description: "平台已确认收款，等待技术人员按服务时间开始服务。" },
   in_service: { label: "服务中", description: "技术人员正在提供本次技术服务。" },
   completed: { label: "已完成", description: "本次技术服务已完成。" },
   closed: { label: "已关闭", description: "本次服务订单已关闭。" },
@@ -134,9 +133,9 @@ export default function TechnicalServiceOrderPage() {
             </div>
             <dl className="technical-order-facts">
               <div><dt>技术人员</dt><dd>{order.provider_name} · {order.provider_city}</dd></div>
-              <div><dt>服务方式</dt><dd>{order.delivery_mode === "onsite" ? "指定地点服务" : "在线服务"}</dd></div>
+              <div><dt>服务方式</dt><dd>{order.delivery_mode === "onsite" ? "上门服务" : "在线服务"}</dd></div>
               <div><dt>预约时间</dt><dd>{String(order.scheduled_at).replace("T"," ").slice(0,16)}</dd></div>
-              {order.delivery_mode === "onsite" && <div><dt>服务地点</dt><dd>{order.service_address || "待确认"}</dd></div>}
+              {order.delivery_mode === "onsite" && <div><dt>上门地址</dt><dd>{order.service_address || "待确认"}</dd></div>}
               <div><dt>服务金额</dt><dd className="money">{order.amount === null ? "待报价" : `¥${order.amount}`}</dd></div>
               <div><dt>需求说明</dt><dd>{order.requirement_text || "未填写补充需求"}</dd></div>
             </dl>
