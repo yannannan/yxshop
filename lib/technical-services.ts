@@ -10,6 +10,7 @@ export type TechnicalService = {
   avatar: string;
   city: string;
   experience: string;
+  onlineStatus?: "online" | "offline";
   title: string;
   summary: string;
   deliveryModes: ServiceDeliveryMode[];
