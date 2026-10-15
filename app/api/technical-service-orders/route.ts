@@ -181,7 +181,7 @@ export async function GET(request: Request) {
     let review: unknown = null;
     try {
       logs = (await env.DB.prepare("SELECT id,log_type,content,created_at FROM technical_service_logs WHERE order_id=? ORDER BY created_at,id").bind(id).all()).results;
-      review = await env.DB.prepare("SELECT id,rating,content,created_at FROM technical_service_reviews WHERE order_id=? AND user_id=? AND status='active'").bind(id, user.id).first();
+      review = await env.DB.prepare("SELECT id,rating,content,status,created_at FROM technical_service_reviews WHERE order_id=? AND user_id=?").bind(id, user.id).first();
     } catch (error) {
       const message = error instanceof Error ? error.message : '';
       if (!/technical_service_logs|technical_service_reviews|doesn't exist|does not exist|no such table/i.test(message)) throw error;
