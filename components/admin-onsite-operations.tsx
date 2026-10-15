@@ -12,9 +12,10 @@ type Data = {
   contactRequests: Row[];
   applications: Row[];
   reviews: Row[];
+  serviceLogs: Row[];
   message?: string;
 };
-const emptyData: Data = { initialized: false, orders: [], appointments: [], consultations: [], messages: [], contactRequests: [], applications: [], reviews: [] };
+const emptyData: Data = { initialized: false, orders: [], appointments: [], consultations: [], messages: [], contactRequests: [], applications: [], reviews: [], serviceLogs: [] };
 const text = (value: unknown) => String(value ?? "");
 
 function useOperations() {
@@ -35,6 +36,7 @@ function useOperations() {
         contactRequests: result.contactRequests || [],
         applications: result.applications || [],
         reviews: result.reviews || [],
+        serviceLogs: result.serviceLogs || [],
         message: result.message,
       });
     } catch {
@@ -84,8 +86,10 @@ export function OnsiteOrderManagement() {
   const { data, loading, notice, load, action } = useOperations();
   const [quote, setQuote] = useState<Row | null>(null);
   const [quoteAmount, setQuoteAmount] = useState("");
+  const [detail, setDetail] = useState<Row | null>(null);
   return <>{notice && <div className="admin-message">{notice}</div>}<Header title="服务订单" description="管理技术服务报价、支付确认、服务中与完成状态" loading={loading} onRefresh={() => void load()} />
-    {!data.initialized ? <InitRequired message={data.message} /> : <div className="table-wrap onsite-admin-table"><table><thead><tr><th>订单</th><th>服务</th><th>技术人员</th><th>客户</th><th>方式</th><th>预约</th><th>金额</th><th>状态</th><th>操作</th></tr></thead><tbody>{data.orders.map((order) => <tr key={text(order.id)}><td><b>{text(order.id)}</b><small>{text(order.created_at).replace("T"," ").slice(0,16)}</small></td><td>{text(order.service_title)}</td><td>{text(order.provider_name)}</td><td>{text(order.customer_phone)}<small>{text(order.customer_email)}</small></td><td>{text(order.delivery_mode) === "onsite" ? "上门服务" : "在线服务"}</td><td>{text(order.scheduled_at).replace("T"," ").slice(0,16)}<small>{text(order.service_address) || "—"}</small></td><td className="money">{order.amount === null ? "待报价" : `¥${text(order.amount)}`}</td><td><Status value={text(order.status)} /></td><td><div className="onsite-admin-actions">{text(order.status) === "pending_quote" && <button className="text-action" onClick={() => { setQuote(order); setQuoteAmount(""); }}>报价</button>}<select value={text(order.status)} onChange={(e) => void action({ action: "order-status", id: text(order.id), status: e.target.value })}>{orderStatuses.map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></div></td></tr>)}</tbody></table>{!data.orders.length && <div className="table-empty"><span>◇</span><p>暂无技术服务订单</p></div>}</div>}
+    {!data.initialized ? <InitRequired message={data.message} /> : <div className="table-wrap onsite-admin-table"><table><thead><tr><th>订单</th><th>服务</th><th>技术人员</th><th>客户</th><th>方式</th><th>预约</th><th>金额</th><th>状态</th><th>操作</th></tr></thead><tbody>{data.orders.map((order) => <tr key={text(order.id)}><td><b>{text(order.id)}</b><small>{text(order.created_at).replace("T"," ").slice(0,16)}</small></td><td>{text(order.service_title)}</td><td>{text(order.provider_name)}</td><td>{text(order.customer_phone)}<small>{text(order.customer_email)}</small></td><td>{text(order.delivery_mode) === "onsite" ? "上门服务" : "在线服务"}</td><td>{text(order.scheduled_at).replace("T"," ").slice(0,16)}<small>{text(order.service_address) || "—"}</small></td><td className="money">{order.amount === null ? "待报价" : `¥${text(order.amount)}`}</td><td><Status value={text(order.status)} /></td><td><div className="onsite-admin-actions">{text(order.status) === "pending_quote" && <button className="text-action" onClick={() => { setQuote(order); setQuoteAmount(""); }}>报价</button>}<button className="text-action" onClick={() => setDetail(order)}>详情 / 记录</button><select value={text(order.status)} onChange={(e) => void action({ action: "order-status", id: text(order.id), status: e.target.value })}>{orderStatuses.map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></div></td></tr>)}</tbody></table>{!data.orders.length && <div className="table-empty"><span>◇</span><p>暂无技术服务订单</p></div>}</div>}
+    {detail && <Modal title={`服务订单 · ${text(detail.id)}`} onClose={() => setDetail(null)}><div className="onsite-dialog-summary"><b>{text(detail.service_title)}</b><p>技术人员：{text(detail.provider_name)}</p><p>客户：{text(detail.customer_phone)} · {text(detail.customer_email)}</p><p>服务方式：{text(detail.delivery_mode)==="onsite"?"上门服务":"在线服务"} · {text(detail.scheduled_at).replace("T"," ").slice(0,16)}</p>{text(detail.delivery_mode)==="onsite"&&<p>上门地址：{text(detail.service_address)||"—"}</p>}<p>需求：{text(detail.requirement_text)||"未填写补充需求"}</p></div><div className="admin-service-log-list"><b>服务记录</b>{data.serviceLogs.filter((item)=>text(item.order_id)===text(detail.id)).slice().reverse().map((item)=><article key={text(item.id)}><div><strong>{text(item.log_type)==="start"?"开始服务":text(item.log_type)==="finish"?"服务完成说明":"服务记录"}</strong><small>{text(item.created_at).replace("T"," ").slice(0,16)}</small></div><p>{text(item.content)}</p></article>)}{!data.serviceLogs.some((item)=>text(item.order_id)===text(detail.id))&&<p>暂无服务记录</p>}</div></Modal>}
     {quote && <Modal title="服务订单报价" onClose={() => setQuote(null)}><div className="onsite-quote-summary onsite-dialog-summary"><b>{text(quote.service_title)}</b><p>订单：{text(quote.id)}</p><p>{text(quote.requirement_text) || "客户未填写补充需求"}</p></div><div className="admin-form-grid"><label><span>确认服务金额</span><input type="number" min="0.01" step="0.01" value={quoteAmount} onChange={(e) => setQuoteAmount(e.target.value)} placeholder="请输入报价金额" /></label></div><div className="admin-form-actions"><button className="ghost-button" onClick={() => setQuote(null)}>取消</button><button disabled={!Number(quoteAmount)} onClick={async () => { if (await action({ action: "order-quote", id: text(quote.id), amount: quoteAmount })) setQuote(null); }}>确认报价</button></div></Modal>}
   </>;
 }
