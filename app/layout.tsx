@@ -4,6 +4,7 @@ import './extra.css';
 import './refined.css';
 import './flow.css';
 import './technical-services.css';
+import './technician/technician.css';
 export const metadata: Metadata = {
   metadataBase: new URL('https://qingxiang-mall.yannanna.chatgpt.site'),
   title: '宇星商城｜精选数字商品',

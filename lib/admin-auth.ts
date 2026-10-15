@@ -99,8 +99,9 @@ export async function getAdminContext(request: Request): Promise<AdminContext | 
       permission_type_name: string;
     }>();
 
-    // users.permission_type 是后台访问的唯一权限入口：
-    // 10001 普通用户；10002 超级管理员。
+    // users.permission_type 是身份事实源：
+    // 10001 普通用户；10002 超级管理员；10003 技术人员。
+    // /admin 仅允许 10002；技术人员使用 /technician。
     if (!user || user.status !== 'active' || user.permission_type !== '10002') return null;
 
     const admin = await ensureSuperAdminRecord(phone);

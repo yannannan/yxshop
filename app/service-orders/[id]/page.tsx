@@ -21,6 +21,8 @@ type ServiceOrder = {
   scheduled_at: string;
   status: string;
   created_at: string;
+  service_logs?: { id: number; log_type: string; content: string; created_at: string }[];
+  review?: { id: number; rating: number; content: string; created_at: string } | null;
 };
 
 const statusInfo: Record<string, { label: string; description: string }> = {
@@ -29,6 +31,7 @@ const statusInfo: Record<string, { label: string; description: string }> = {
   payment_review: { label: "支付核验", description: "您已提交支付核验，平台正在确认收款结果，请保持页面或稍后回来查看。" },
   paid: { label: "已支付", description: "平台已确认收款，等待技术人员按服务时间开始服务。" },
   in_service: { label: "服务中", description: "技术人员正在提供本次技术服务。" },
+  awaiting_acceptance: { label: "待验收", description: "技术人员已提交服务完成，请确认服务结果；验收后可对本次服务进行评价。" },
   completed: { label: "已完成", description: "本次技术服务已完成。" },
   closed: { label: "已关闭", description: "本次服务订单已关闭。" },
   cancelled: { label: "已取消", description: "本次服务订单已取消。" },
@@ -43,6 +46,9 @@ export default function TechnicalServiceOrderPage() {
   const [paymentQr, setPaymentQr] = useState<{ imageUrl?: string; amount?: number; message?: string } | null>(null);
   const [paymentQrError, setPaymentQrError] = useState("");
   const [submittingPayment, setSubmittingPayment] = useState(false);
+  const [serviceActionLoading, setServiceActionLoading] = useState(false);
+  const [rating, setRating] = useState(5);
+  const [reviewContent, setReviewContent] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -111,6 +117,28 @@ export default function TechnicalServiceOrderPage() {
     }
   }
 
+  async function serviceAction(action: "accept-service" | "submit-review") {
+    if (!order || serviceActionLoading) return;
+    setServiceActionLoading(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/technical-service-orders", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action, orderId: order.id, rating, reviewContent }),
+      });
+      const result = await response.json() as { message?: string; status?: string };
+      if (!response.ok) { setMessage(result.message || "操作失败"); return; }
+      setMessage(result.message || "操作成功");
+      const reload = await fetch(`/api/technical-service-orders?id=${encodeURIComponent(order.id)}&refresh=${Date.now()}`, { cache: "no-store" });
+      if (reload.ok) setOrder(await reload.json() as ServiceOrder);
+    } catch {
+      setMessage("操作失败，请稍后重试");
+    } finally {
+      setServiceActionLoading(false);
+    }
+  }
+
   const status = order ? statusInfo[order.status] || { label: order.status, description: "订单状态已更新。" } : null;
 
   return <main className="technical-order-page">
@@ -139,6 +167,9 @@ export default function TechnicalServiceOrderPage() {
               <div><dt>服务金额</dt><dd className="money">{order.amount === null ? "待报价" : `¥${order.amount}`}</dd></div>
               <div><dt>需求说明</dt><dd>{order.requirement_text || "未填写补充需求"}</dd></div>
             </dl>
+            {!!order.service_logs?.length && <section className="technical-service-log-view"><h2>服务记录</h2>{order.service_logs.map((log) => <article key={log.id}><div><b>{log.log_type === "start" ? "开始服务" : log.log_type === "finish" ? "服务完成说明" : "服务记录"}</b><small>{String(log.created_at).replace("T"," ").slice(0,16)}</small></div><p>{log.content}</p></article>)}</section>}
+            {order.status === "awaiting_acceptance" && <section className="technical-customer-acceptance"><span>服务验收</span><h2>技术人员已完成本次服务</h2><p>请确认服务结果是否符合约定。点击确认后订单将正式完成，并可提交服务评价。</p><button disabled={serviceActionLoading} onClick={() => void serviceAction("accept-service")}>{serviceActionLoading ? "提交中…" : "确认服务完成"}</button></section>}
+            {order.status === "completed" && <section className="technical-customer-review"><span>SERVICE REVIEW</span><h2>{order.review ? "我的服务评价" : "评价本次服务"}</h2>{order.review ? <div className="technical-review-result"><b>{"★".repeat(Number(order.review.rating))}{"☆".repeat(5-Number(order.review.rating))}</b><p>{order.review.content || "已完成评分"}</p><small>{String(order.review.created_at).replace("T"," ").slice(0,16)}</small></div> : <><div className="technical-rating">{[1,2,3,4,5].map((star) => <button key={star} className={star <= rating ? "active" : ""} onClick={() => setRating(star)}>★</button>)}</div><textarea value={reviewContent} onChange={(e) => setReviewContent(e.target.value)} placeholder="可以简单说说本次服务体验（选填）" /><button disabled={serviceActionLoading} onClick={() => void serviceAction("submit-review")}>{serviceActionLoading ? "提交中…" : "提交评价"}</button></>}</section>}
             {["pending_payment","payment_review"].includes(order.status) && order.amount !== null && <section className="technical-service-payment">
               <header><div><span>PAYMENT</span><h2>{order.status === "payment_review" ? "支付核验中" : "服务付款"}</h2></div><b>¥{order.amount}</b></header>
               <div className="technical-service-pay-methods"><button className={payMethod === "wechat" ? "active" : ""} onClick={() => setPayMethod("wechat")}>微信支付</button><button className={payMethod === "alipay" ? "active" : ""} onClick={() => setPayMethod("alipay")}>支付宝</button></div>

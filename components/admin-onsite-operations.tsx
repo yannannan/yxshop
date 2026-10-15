@@ -11,9 +11,11 @@ type Data = {
   messages: Row[];
   contactRequests: Row[];
   applications: Row[];
+  reviews: Row[];
+  serviceLogs: Row[];
   message?: string;
 };
-const emptyData: Data = { initialized: false, orders: [], appointments: [], consultations: [], messages: [], contactRequests: [], applications: [] };
+const emptyData: Data = { initialized: false, orders: [], appointments: [], consultations: [], messages: [], contactRequests: [], applications: [], reviews: [], serviceLogs: [] };
 const text = (value: unknown) => String(value ?? "");
 
 function useOperations() {
@@ -33,6 +35,8 @@ function useOperations() {
         messages: result.messages || [],
         contactRequests: result.contactRequests || [],
         applications: result.applications || [],
+        reviews: result.reviews || [],
+        serviceLogs: result.serviceLogs || [],
         message: result.message,
       });
     } catch {
@@ -65,8 +69,8 @@ function Modal({ title, children, onClose }: { title: string; children: React.Re
 }
 function Status({ value }: { value: string }) {
   const labels: Record<string, string> = {
-    pending_quote: "待报价", pending_payment: "待支付", payment_review: "支付核验", paid: "已支付", in_service: "服务中", completed: "已完成", closed: "已关闭", cancelled: "已取消",
-    pending: "待确认", confirmed: "已确认", arrived: "已到场", open: "沟通中", approved: "已通过", rejected: "已驳回",
+    pending_quote: "待报价", pending_payment: "待支付", payment_review: "支付核验", paid: "已支付", in_service: "服务中", awaiting_acceptance: "待客户验收", completed: "已完成", closed: "已关闭", cancelled: "已取消",
+    pending: "待确认", confirmed: "已确认", arrived: "已到场", open: "沟通中", approved: "已通过", rejected: "已驳回", active: "展示中", disabled: "已隐藏",
   };
   return <span className={`status status-${value}`}>{labels[value] || value}</span>;
 }
@@ -75,15 +79,17 @@ function Header({ title, description, loading, onRefresh }: { title: string; des
 }
 
 const orderStatuses = [
-  ["pending_quote","待报价"], ["pending_payment","待支付"], ["payment_review","支付核验"], ["paid","已支付"], ["in_service","服务中"], ["completed","已完成"], ["closed","已关闭"], ["cancelled","已取消"],
+  ["pending_quote","待报价"], ["pending_payment","待支付"], ["payment_review","支付核验"], ["paid","已支付"], ["in_service","服务中"], ["awaiting_acceptance","待客户验收"], ["completed","已完成"], ["closed","已关闭"], ["cancelled","已取消"],
 ];
 
 export function OnsiteOrderManagement() {
   const { data, loading, notice, load, action } = useOperations();
   const [quote, setQuote] = useState<Row | null>(null);
   const [quoteAmount, setQuoteAmount] = useState("");
+  const [detail, setDetail] = useState<Row | null>(null);
   return <>{notice && <div className="admin-message">{notice}</div>}<Header title="服务订单" description="管理技术服务报价、支付确认、服务中与完成状态" loading={loading} onRefresh={() => void load()} />
-    {!data.initialized ? <InitRequired message={data.message} /> : <div className="table-wrap onsite-admin-table"><table><thead><tr><th>订单</th><th>服务</th><th>技术人员</th><th>客户</th><th>方式</th><th>预约</th><th>金额</th><th>状态</th><th>操作</th></tr></thead><tbody>{data.orders.map((order) => <tr key={text(order.id)}><td><b>{text(order.id)}</b><small>{text(order.created_at).replace("T"," ").slice(0,16)}</small></td><td>{text(order.service_title)}</td><td>{text(order.provider_name)}</td><td>{text(order.customer_phone)}<small>{text(order.customer_email)}</small></td><td>{text(order.delivery_mode) === "onsite" ? "上门服务" : "在线服务"}</td><td>{text(order.scheduled_at).replace("T"," ").slice(0,16)}<small>{text(order.service_address) || "—"}</small></td><td className="money">{order.amount === null ? "待报价" : `¥${text(order.amount)}`}</td><td><Status value={text(order.status)} /></td><td><div className="onsite-admin-actions">{text(order.status) === "pending_quote" && <button className="text-action" onClick={() => { setQuote(order); setQuoteAmount(""); }}>报价</button>}<select value={text(order.status)} onChange={(e) => void action({ action: "order-status", id: text(order.id), status: e.target.value })}>{orderStatuses.map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></div></td></tr>)}</tbody></table>{!data.orders.length && <div className="table-empty"><span>◇</span><p>暂无技术服务订单</p></div>}</div>}
+    {!data.initialized ? <InitRequired message={data.message} /> : <div className="table-wrap onsite-admin-table"><table><thead><tr><th>订单</th><th>服务</th><th>技术人员</th><th>客户</th><th>方式</th><th>预约</th><th>金额</th><th>状态</th><th>操作</th></tr></thead><tbody>{data.orders.map((order) => <tr key={text(order.id)}><td><b>{text(order.id)}</b><small>{text(order.created_at).replace("T"," ").slice(0,16)}</small></td><td>{text(order.service_title)}</td><td>{text(order.provider_name)}</td><td>{text(order.customer_phone)}<small>{text(order.customer_email)}</small></td><td>{text(order.delivery_mode) === "onsite" ? "上门服务" : "在线服务"}</td><td>{text(order.scheduled_at).replace("T"," ").slice(0,16)}<small>{text(order.service_address) || "—"}</small></td><td className="money">{order.amount === null ? "待报价" : `¥${text(order.amount)}`}</td><td><Status value={text(order.status)} /></td><td><div className="onsite-admin-actions">{text(order.status) === "pending_quote" && <button className="text-action" onClick={() => { setQuote(order); setQuoteAmount(""); }}>报价</button>}<button className="text-action" onClick={() => setDetail(order)}>详情 / 记录</button><select value={text(order.status)} onChange={(e) => void action({ action: "order-status", id: text(order.id), status: e.target.value })}>{orderStatuses.map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></div></td></tr>)}</tbody></table>{!data.orders.length && <div className="table-empty"><span>◇</span><p>暂无技术服务订单</p></div>}</div>}
+    {detail && <Modal title={`服务订单 · ${text(detail.id)}`} onClose={() => setDetail(null)}><div className="onsite-dialog-summary"><b>{text(detail.service_title)}</b><p>技术人员：{text(detail.provider_name)}</p><p>客户：{text(detail.customer_phone)} · {text(detail.customer_email)}</p><p>服务方式：{text(detail.delivery_mode)==="onsite"?"上门服务":"在线服务"} · {text(detail.scheduled_at).replace("T"," ").slice(0,16)}</p>{text(detail.delivery_mode)==="onsite"&&<p>上门地址：{text(detail.service_address)||"—"}</p>}<p>需求：{text(detail.requirement_text)||"未填写补充需求"}</p></div><div className="admin-service-log-list"><b>服务记录</b>{data.serviceLogs.filter((item)=>text(item.order_id)===text(detail.id)).slice().reverse().map((item)=><article key={text(item.id)}><div><strong>{text(item.log_type)==="start"?"开始服务":text(item.log_type)==="finish"?"服务完成说明":"服务记录"}</strong><small>{text(item.created_at).replace("T"," ").slice(0,16)}</small></div><p>{text(item.content)}</p></article>)}{!data.serviceLogs.some((item)=>text(item.order_id)===text(detail.id))&&<p>暂无服务记录</p>}</div></Modal>}
     {quote && <Modal title="服务订单报价" onClose={() => setQuote(null)}><div className="onsite-quote-summary onsite-dialog-summary"><b>{text(quote.service_title)}</b><p>订单：{text(quote.id)}</p><p>{text(quote.requirement_text) || "客户未填写补充需求"}</p></div><div className="admin-form-grid"><label><span>确认服务金额</span><input type="number" min="0.01" step="0.01" value={quoteAmount} onChange={(e) => setQuoteAmount(e.target.value)} placeholder="请输入报价金额" /></label></div><div className="admin-form-actions"><button className="ghost-button" onClick={() => setQuote(null)}>取消</button><button disabled={!Number(quoteAmount)} onClick={async () => { if (await action({ action: "order-quote", id: text(quote.id), amount: quoteAmount })) setQuote(null); }}>确认报价</button></div></Modal>}
   </>;
 }
@@ -105,6 +111,13 @@ export function OnsiteConsultationManagement() {
   return <>{notice && <div className="admin-message">{notice}</div>}<Header title="在线咨询" description="查看用户与技术服务者沟通记录、后台回复并审核联系方式申请" loading={loading} onRefresh={() => void load()} />
     {!data.initialized ? <InitRequired message={data.message} /> : <div className="table-wrap onsite-admin-table"><table><thead><tr><th>会话</th><th>服务</th><th>技术人员</th><th>客户</th><th>最后沟通</th><th>消息</th><th>联系方式申请</th><th>状态</th><th>操作</th></tr></thead><tbody>{data.consultations.map((item) => { const count=data.messages.filter((m)=>Number(m.consultation_id)===Number(item.id)).length; const request=data.contactRequests.find((r)=>Number(r.consultation_id)===Number(item.id)); return <tr key={text(item.id)}><td>#{text(item.id)}</td><td>{text(item.service_title)}</td><td>{text(item.provider_name)}</td><td>{text(item.customer_phone)}<small>{text(item.customer_email)}</small></td><td>{text(item.last_message_at).replace("T"," ").slice(0,16)}</td><td>{count} 条</td><td>{request ? <Status value={text(request.status)} /> : "—"}</td><td><Status value={text(item.status)} /></td><td><button className="text-action" onClick={() => { setThread(item); setReply(""); }}>查看 / 回复</button><button className="text-action" onClick={() => void action({ action:"consultation-status", id:Number(item.id), status:text(item.status)==="open"?"closed":"open" })}>{text(item.status)==="open"?"关闭":"重新打开"}</button></td></tr>; })}</tbody></table>{!data.consultations.length && <div className="table-empty"><span>◇</span><p>暂无在线咨询</p></div>}</div>}
     {thread && <Modal title={`咨询会话 #${text(thread.id)}`} onClose={() => setThread(null)}><div className="admin-consultation-thread">{currentMessages.map((message) => <div className={`admin-chat-message ${text(message.sender_type)}`} key={text(message.id)}><b>{text(message.sender_type)==="customer"?"客户":"技术人员 / 平台"}</b><p>{text(message.content)}</p><small>{text(message.created_at).replace("T"," ").slice(0,16)}</small></div>)}</div>{currentRequests.map((request) => <div className="admin-contact-request" key={text(request.id)}><div><b>联系方式申请</b><span><Status value={text(request.status)} /></span></div>{text(request.status)==="pending" && <div className="admin-form-actions"><button className="ghost-button" onClick={() => void action({ action:"contact-request-review", id:Number(request.id), status:"rejected" })}>驳回</button><button onClick={() => void action({ action:"contact-request-review", id:Number(request.id), status:"approved" })}>通过申请</button></div>}</div>)}<div className="admin-reply-box"><textarea value={reply} onChange={(e)=>setReply(e.target.value)} placeholder="回复用户咨询内容" /><button disabled={!reply.trim()} onClick={async()=>{ if(await action({ action:"consultation-reply", consultationId:Number(thread.id), content:reply })){ setReply(""); } }}>发送回复</button></div></Modal>}
+  </>;
+}
+
+export function OnsiteReviewManagement() {
+  const { data, loading, notice, load, action } = useOperations();
+  return <>{notice && <div className="admin-message">{notice}</div>}<Header title="服务评价" description="查看客户对技术服务和技术人员的评分与评价，可隐藏不适合展示的内容" loading={loading} onRefresh={() => void load()} />
+    {!data.initialized ? <InitRequired message={data.message} /> : <div className="table-wrap onsite-admin-table"><table><thead><tr><th>订单</th><th>服务</th><th>技术人员</th><th>客户</th><th>评分</th><th>评价内容</th><th>时间</th><th>状态</th><th>操作</th></tr></thead><tbody>{data.reviews.map((item) => <tr key={text(item.id)}><td><b>{text(item.order_id)}</b></td><td>{text(item.service_title)}</td><td>{text(item.provider_name)}</td><td>{text(item.customer_phone)}</td><td><b style={{color:"#ff8b20"}}>{"★".repeat(Math.max(0,Math.min(5,Number(item.rating)||0)))}</b><small>{text(item.rating)} / 5</small></td><td>{text(item.content)||"—"}</td><td>{text(item.created_at).replace("T"," ").slice(0,16)}</td><td><Status value={text(item.status)} /></td><td><button className="text-action" onClick={() => void action({ action:"review-status", id:Number(item.id), status:text(item.status)==="active"?"disabled":"active" })}>{text(item.status)==="active"?"隐藏":"恢复"}</button></td></tr>)}</tbody></table>{!data.reviews.length && <div className="table-empty"><span>◇</span><p>暂无服务评价</p></div>}</div>}
   </>;
 }
 
