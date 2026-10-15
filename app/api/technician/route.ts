@@ -12,7 +12,7 @@ function jsonArray(value: unknown) {
 }
 
 async function readDashboard(providerId: number) {
-  const [orders, logs, reviews] = await Promise.all([
+  const [orders, logs, reviews, consultations, messages] = await Promise.all([
     env.DB.prepare(
       `SELECT o.*,s.title AS service_title,s.slug AS service_slug,s.summary AS service_summary,
               a.contact_name,a.contact_phone,a.note AS appointment_note
@@ -33,8 +33,22 @@ async function readDashboard(providerId: number) {
        WHERE r.provider_id=? AND r.status='active'
        ORDER BY r.created_at DESC,r.id DESC`
     ).bind(providerId).all(),
+    env.DB.prepare(
+      `SELECT c.*,s.title AS service_title,s.slug AS service_slug
+       FROM technical_consultations c
+       JOIN technical_services s ON s.id=c.service_id
+       WHERE c.provider_id=?
+       ORDER BY c.last_message_at DESC,c.id DESC`
+    ).bind(providerId).all(),
+    env.DB.prepare(
+      `SELECT m.*,c.provider_id
+       FROM technical_consultation_messages m
+       JOIN technical_consultations c ON c.id=m.consultation_id
+       WHERE c.provider_id=?
+       ORDER BY m.created_at,m.id`
+    ).bind(providerId).all(),
   ]);
-  return { orders: orders.results, logs: logs.results, reviews: reviews.results };
+  return { orders: orders.results, logs: logs.results, reviews: reviews.results, consultations: consultations.results, messages: messages.results };
 }
 
 export async function GET(request: Request) {
@@ -89,6 +103,19 @@ export async function POST(request: Request) {
         'UPDATE technical_providers SET city=?,experience=?,role_name=?,intro=?,skills_json=?,online_status=?,updated_at=? WHERE id=? AND user_id=?'
       ).bind(city, experience, roleName, intro, JSON.stringify(skills), onlineStatus, now, context.provider.id, context.user.id).run();
       return Response.json({ ok: true, message: '个人资料已保存' });
+    }
+
+    if (action === 'consultation-reply') {
+      const consultationId = Number(body.consultationId || 0);
+      const content = String(body.content || '').trim().slice(0, 4000);
+      if (!consultationId || !content) return Response.json({ message: '请输入回复内容' }, { status: 400 });
+      const consultation = await env.DB.prepare('SELECT id FROM technical_consultations WHERE id=? AND provider_id=?').bind(consultationId, context.provider.id).first();
+      if (!consultation) return Response.json({ message: '咨询会话不存在或不属于当前技术人员' }, { status: 404 });
+      await env.DB.batch([
+        env.DB.prepare("INSERT INTO technical_consultation_messages (consultation_id,sender_type,sender_id,content,read_at,created_at) VALUES (?,?,?,?,?,?)").bind(consultationId, 'provider', context.user.id, content, null, now),
+        env.DB.prepare("UPDATE technical_consultations SET status='open',last_message_at=?,updated_at=? WHERE id=? AND provider_id=?").bind(now, now, consultationId, context.provider.id),
+      ]);
+      return Response.json({ ok: true, message: '回复已发送' });
     }
 
     const orderId = String(body.orderId || '').trim();
