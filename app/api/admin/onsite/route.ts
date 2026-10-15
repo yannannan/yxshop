@@ -40,7 +40,7 @@ async function readPaymentQrs() {
 }
 
 async function readData() {
-  const [providers, services, paymentQrs, orders, appointments, consultations, messages, contactRequests, applications] = await Promise.all([
+  const [providers, services, paymentQrs, orders, appointments, consultations, messages, contactRequests, applications, reviews] = await Promise.all([
     env.DB.prepare('SELECT p.*,u.phone AS login_phone FROM technical_providers p LEFT JOIN users u ON u.id=p.user_id ORDER BY p.sort_order,p.id').all(),
     env.DB.prepare("SELECT s.*,p.name AS provider_name,p.provider_code,p.avatar,p.city,p.experience,p.role_name,p.intro,p.skills_json,p.certification_status,p.online_status FROM technical_services s JOIN technical_providers p ON p.id=s.provider_id ORDER BY s.sort_order,s.id").all(),
     readPaymentQrs(),
@@ -50,6 +50,7 @@ async function readData() {
     env.DB.prepare("SELECT m.*,c.service_id,c.provider_id FROM technical_consultation_messages m JOIN technical_consultations c ON c.id=m.consultation_id ORDER BY m.created_at,m.id").all(),
     env.DB.prepare("SELECT r.*,s.title AS service_title,p.name AS provider_name FROM technical_contact_requests r JOIN technical_services s ON s.id=r.service_id JOIN technical_providers p ON p.id=r.provider_id ORDER BY r.requested_at DESC,r.id DESC").all(),
     env.DB.prepare("SELECT * FROM technical_provider_applications ORDER BY created_at DESC,id DESC").all(),
+    env.DB.prepare("SELECT r.*,s.title AS service_title,p.name AS provider_name,u.phone AS customer_phone FROM technical_service_reviews r JOIN technical_services s ON s.id=r.service_id JOIN technical_providers p ON p.id=r.provider_id JOIN users u ON u.id=r.user_id ORDER BY r.created_at DESC,r.id DESC").all(),
   ]);
   return {
     initialized: true,
@@ -62,6 +63,7 @@ async function readData() {
     messages: messages.results,
     contactRequests: contactRequests.results,
     applications: applications.results,
+    reviews: reviews.results,
   };
 }
 
@@ -72,6 +74,7 @@ function scopeData(admin: AdminContext, data: Awaited<ReturnType<typeof readData
   const canAppointments = hasAdminPermission(admin, 'onsite-appointments');
   const canConsultations = hasAdminPermission(admin, 'onsite-consultations');
   const canApplications = hasAdminPermission(admin, 'onsite-provider-applications');
+  const canReviews = hasAdminPermission(admin, 'onsite-service-reviews');
   return {
     initialized: data.initialized,
     providers: canProviders || canServices ? data.providers : [],
@@ -83,6 +86,7 @@ function scopeData(admin: AdminContext, data: Awaited<ReturnType<typeof readData
     messages: canConsultations ? data.messages : [],
     contactRequests: canConsultations ? data.contactRequests : [],
     applications: canApplications ? data.applications : [],
+    reviews: canReviews ? data.reviews : [],
   };
 }
 
@@ -90,7 +94,7 @@ export async function GET(request: Request) {
   await ensureDatabase();
   const admin = await getAdminContext(request);
   if (!admin) return adminDenied();
-  if (!hasAdminPermission(admin, ['onsite-provider-management','onsite-service-management','onsite-service-orders','onsite-appointments','onsite-consultations','onsite-provider-applications'])) return adminDenied('无上门服务后台权限');
+  if (!hasAdminPermission(admin, ['onsite-provider-management','onsite-service-management','onsite-service-orders','onsite-appointments','onsite-consultations','onsite-provider-applications','onsite-service-reviews'])) return adminDenied('无上门服务后台权限');
   try {
     return Response.json(scopeData(admin, await readData()), { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
@@ -127,6 +131,7 @@ export async function POST(request: Request) {
     'consultation-status': 'onsite-consultations',
     'contact-request-review': 'onsite-consultations',
     'application-review': 'onsite-provider-applications',
+    'review-status': 'onsite-service-reviews',
   };
   const requiredPermission = permissionByAction[action];
   if (!requiredPermission || !hasAdminPermission(admin, requiredPermission)) return adminDenied('无此上门服务操作权限');
@@ -308,6 +313,11 @@ export async function POST(request: Request) {
           .bind(status, status === 'pending' ? null : now, null, String(body.note || '').trim().slice(0, 500), body.id).run();
         break;
       }
+      case 'review-status': {
+        const status = body.status === 'disabled' ? 'disabled' : 'active';
+        await env.DB.prepare('UPDATE technical_service_reviews SET status=?,updated_at=? WHERE id=?').bind(status, now, body.id).run();
+        break;
+      }
       case 'application-review': {
         const status = body.status === 'approved' ? 'approved' : body.status === 'rejected' ? 'rejected' : 'pending';
         await env.DB.prepare('UPDATE technical_provider_applications SET status=?,review_note=?,reviewed_at=?,reviewed_by=?,updated_at=? WHERE id=?')
@@ -321,7 +331,7 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error('上门服务后台操作失败', error);
     const message = error instanceof Error ? error.message : '';
-    if (/technical_providers|technical_services|technical_payment_qrs|technical_service_orders|technical_service_appointments|technical_consultations|technical_consultation_messages|technical_contact_requests|technical_provider_applications|doesn't exist|does not exist|no such table/i.test(message)) {
+    if (/technical_providers|technical_services|technical_payment_qrs|technical_service_orders|technical_service_appointments|technical_consultations|technical_consultation_messages|technical_contact_requests|technical_provider_applications|technical_service_reviews|doesn't exist|does not exist|no such table/i.test(message)) {
       return Response.json({ message: '上门服务数据表尚未初始化，请先执行上门服务 SQL。' }, { status: 503 });
     }
     return Response.json({ message: '上门服务操作失败，请检查数据和数据库配置' }, { status: 500 });
