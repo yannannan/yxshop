@@ -50,6 +50,8 @@ export async function POST(request: Request) {
     contactName?: string;
     contactPhone?: string;
     addressId?: number;
+    rating?: number;
+    reviewContent?: string;
   };
 
   if (body.action === 'payment-submitted') {
@@ -59,6 +61,33 @@ export async function POST(request: Request) {
     if (!['pending_payment','payment_review'].includes(order.status)) return Response.json({ message: '当前订单无需提交支付核验' }, { status: 400 });
     if (order.status !== 'payment_review') await env.DB.prepare("UPDATE technical_service_orders SET status='payment_review',updated_at=? WHERE id=? AND user_id=?").bind(new Date().toISOString(), orderId, user.id).run();
     return Response.json({ ok: true, status: 'payment_review' });
+  }
+
+  if (body.action === 'accept-service') {
+    const orderId = String(body.orderId || '').trim();
+    const order = await env.DB.prepare("SELECT id,status,provider_id FROM technical_service_orders WHERE id=? AND user_id=?").bind(orderId, user.id).first<{ id: string; status: string; provider_id: number }>();
+    if (!order) return Response.json({ message: '服务订单不存在' }, { status: 404 });
+    if (order.status !== 'awaiting_acceptance') return Response.json({ message: '当前订单不需要验收' }, { status: 400 });
+    const now = new Date().toISOString();
+    await env.DB.prepare("UPDATE technical_service_orders SET status='completed',customer_accepted_at=?,completed_at=?,updated_at=? WHERE id=? AND user_id=?")
+      .bind(now, now, now, orderId, user.id).run();
+    return Response.json({ ok: true, status: 'completed', message: '服务验收完成' });
+  }
+
+  if (body.action === 'submit-review') {
+    const orderId = String(body.orderId || '').trim();
+    const rating = Math.max(1, Math.min(5, Number(body.rating || 0)));
+    const content = String(body.reviewContent || '').trim().slice(0, 2000);
+    if (!Number.isInteger(rating) || rating < 1 || rating > 5) return Response.json({ message: '请选择 1～5 星评分' }, { status: 400 });
+    const order = await env.DB.prepare("SELECT id,status,service_id,provider_id FROM technical_service_orders WHERE id=? AND user_id=?").bind(orderId, user.id).first<{ id: string; status: string; service_id: number; provider_id: number }>();
+    if (!order) return Response.json({ message: '服务订单不存在' }, { status: 404 });
+    if (order.status !== 'completed') return Response.json({ message: '服务完成并验收后才能评价' }, { status: 400 });
+    const existing = await env.DB.prepare('SELECT id FROM technical_service_reviews WHERE order_id=?').bind(orderId).first();
+    if (existing) return Response.json({ message: '该服务订单已经评价过' }, { status: 400 });
+    const now = new Date().toISOString();
+    await env.DB.prepare("INSERT INTO technical_service_reviews (order_id,service_id,provider_id,user_id,rating,content,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)")
+      .bind(orderId, order.service_id, order.provider_id, user.id, rating, content, 'active', now, now).run();
+    return Response.json({ ok: true, message: '感谢您的评价' });
   }
 
   const slug = String(body.serviceSlug || '').trim();
@@ -147,7 +176,17 @@ export async function GET(request: Request) {
   const id = url.searchParams.get('id');
   if (id) {
     const order = await env.DB.prepare("SELECT o.*,s.title AS service_title,s.slug AS service_slug,s.summary AS service_summary,p.name AS provider_name,p.city AS provider_city,p.avatar AS provider_avatar FROM technical_service_orders o JOIN technical_services s ON s.id=o.service_id JOIN technical_providers p ON p.id=o.provider_id WHERE o.id=? AND o.user_id=?").bind(id, user.id).first();
-    return order ? Response.json(order, { headers: { 'Cache-Control': 'no-store' } }) : Response.json({ message: '服务订单不存在' }, { status: 404 });
+    if (!order) return Response.json({ message: '服务订单不存在' }, { status: 404 });
+    let logs: unknown[] = [];
+    let review: unknown = null;
+    try {
+      logs = (await env.DB.prepare("SELECT id,log_type,content,created_at FROM technical_service_logs WHERE order_id=? ORDER BY created_at,id").bind(id).all()).results;
+      review = await env.DB.prepare("SELECT id,rating,content,status,created_at FROM technical_service_reviews WHERE order_id=? AND user_id=?").bind(id, user.id).first();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '';
+      if (!/technical_service_logs|technical_service_reviews|doesn't exist|does not exist|no such table/i.test(message)) throw error;
+    }
+    return Response.json({ ...order, service_logs: logs, review }, { headers: { 'Cache-Control': 'no-store' } });
   }
 
   const { results } = await env.DB.prepare("SELECT o.*,s.title AS service_title,s.slug AS service_slug,p.name AS provider_name FROM technical_service_orders o JOIN technical_services s ON s.id=o.service_id JOIN technical_providers p ON p.id=o.provider_id WHERE o.user_id=? ORDER BY o.created_at DESC").bind(user.id).all();

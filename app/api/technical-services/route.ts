@@ -23,6 +23,7 @@ type DbService = {
   avatar: string;
   city: string;
   experience: string;
+  online_status: string;
   role_name: string;
   intro: string;
   skills_json: string;
@@ -47,6 +48,7 @@ function mapService(row: DbService): TechnicalService {
     avatar: row.avatar,
     city: row.city,
     experience: row.experience,
+    onlineStatus: row.online_status === 'offline' ? 'offline' : 'online',
     title: row.title,
     summary: row.summary,
     deliveryModes: parseArray<'online' | 'onsite'>(row.delivery_modes_json).filter((item) => item === 'online' || item === 'onsite'),
@@ -74,7 +76,7 @@ export async function GET(request: Request) {
     const values: string[] = [];
     if (slug) { where.push('s.slug=?'); values.push(slug); }
     if (homepage) where.push('s.homepage_featured=1');
-    const query = `SELECT s.id,s.slug,s.homepage_featured,s.title,s.summary,s.delivery_modes_json,s.coverage,s.pricing_mode,s.price,s.unit,s.online_response,s.onsite_arrival,s.service_includes_json,s.delivery_notes_json,p.provider_code,p.name AS provider_name,p.initials,p.avatar,p.city,p.experience,p.role_name,p.intro,p.skills_json FROM technical_services s JOIN technical_providers p ON p.id=s.provider_id WHERE ${where.join(' AND ')} ORDER BY s.sort_order,s.id`;
+    const query = `SELECT s.id,s.slug,s.homepage_featured,s.title,s.summary,s.delivery_modes_json,s.coverage,s.pricing_mode,s.price,s.unit,s.online_response,s.onsite_arrival,s.service_includes_json,s.delivery_notes_json,p.provider_code,p.name AS provider_name,p.initials,p.avatar,p.city,p.experience,p.online_status,p.role_name,p.intro,p.skills_json FROM technical_services s JOIN technical_providers p ON p.id=s.provider_id WHERE ${where.join(' AND ')} ORDER BY s.sort_order,s.id`;
     const statement = env.DB.prepare(query);
     const { results } = values.length ? await statement.bind(...values).all<DbService>() : await statement.all<DbService>();
     const services = results.map(mapService);

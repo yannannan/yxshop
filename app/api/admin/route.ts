@@ -178,6 +178,7 @@ export async function POST(request: Request) {
       const status = body.status === 'disabled' ? 'disabled' : 'active';
       const user = await env.DB.prepare('SELECT id,phone,permission_type FROM users WHERE id=?').bind(id).first<{ id: number; phone: string; permission_type: string }>();
       if (!user) return Response.json({ message: '用户不存在' }, { status: 404 });
+      if (user.permission_type === '10003') return Response.json({ message: '技术人员权限由“上门服务 -> 技术人员”账号绑定统一维护，请先在那里解绑或调整' }, { status: 400 });
       if (user.phone === admin.admin.username && status === 'disabled') return Response.json({ message: '不能停用当前登录超级管理员账号' }, { status: 400 });
       await env.DB.prepare('UPDATE users SET status=? WHERE id=?').bind(status, id).run();
       break;
@@ -186,8 +187,9 @@ export async function POST(request: Request) {
       const id = Number(body.id || 0);
       const permissionType = String(body.permissionType || '');
       if (!['10001','10002'].includes(permissionType)) return Response.json({ message: '用户权限类型不正确' }, { status: 400 });
-      const user = await env.DB.prepare('SELECT id,phone FROM users WHERE id=?').bind(id).first<{ id: number; phone: string }>();
+      const user = await env.DB.prepare('SELECT id,phone,permission_type FROM users WHERE id=?').bind(id).first<{ id: number; phone: string; permission_type: string }>();
       if (!user) return Response.json({ message: '用户不存在' }, { status: 404 });
+      if (user.permission_type === '10003') return Response.json({ message: '技术人员权限由“上门服务 -> 技术人员”账号绑定统一维护，请先在那里解绑或调整' }, { status: 400 });
       if (user.phone === admin.admin.username && permissionType !== '10002') return Response.json({ message: '不能取消当前登录超级管理员的管理权限' }, { status: 400 });
       const permissionTypeName = permissionType === '10002' ? '超级管理员' : '普通用户';
       await env.DB.prepare('UPDATE users SET permission_type=?,permission_type_name=? WHERE id=?').bind(permissionType, permissionTypeName, id).run();
