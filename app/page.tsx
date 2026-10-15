@@ -37,6 +37,7 @@ export default function StorePage() {
   const [code, setCode] = useState("");
   const [loggedIn, setLoggedIn] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isTechnician, setIsTechnician] = useState(false);
   const [pendingProduct, setPendingProduct] = useState<number | null>(null);
   const [authError, setAuthError] = useState("");
   const [authNotice, setAuthNotice] = useState("");
@@ -80,16 +81,16 @@ export default function StorePage() {
   useEffect(() => {
     if (!loggedIn) {
       setIsAdmin(false);
+      setIsTechnician(false);
       return;
     }
     let active = true;
     fetch("/api/admin/session", { cache: "no-store" })
-      .then((response) => {
-        if (active) setIsAdmin(response.ok);
-      })
-      .catch(() => {
-        if (active) setIsAdmin(false);
-      });
+      .then((response) => { if (active) setIsAdmin(response.ok); })
+      .catch(() => { if (active) setIsAdmin(false); });
+    fetch("/api/technician", { cache: "no-store" })
+      .then((response) => { if (active) setIsTechnician(response.ok); })
+      .catch(() => { if (active) setIsTechnician(false); });
     return () => {
       active = false;
     };
@@ -326,7 +327,7 @@ export default function StorePage() {
             </p>
             <small>{service.providerRole}</small>
           </div>
-          <em>在线接单</em>
+          <em>{service.onlineStatus === "online" ? "可服务" : "暂停服务"}</em>
         </header>
 
         <section className="technical-reference-card-service">
@@ -346,7 +347,7 @@ export default function StorePage() {
             ))}
             {supportsOnsite && (
               <small>
-                {service.coverage || "支持指定地点服务"} · 确认订单前选择时间和地点
+                {service.coverage || "支持上门服务"} · 购买时选择服务时间和上门地址
               </small>
             )}
           </div>
@@ -391,7 +392,7 @@ export default function StorePage() {
               className="primary"
               href={`/service/${service.slug}`}
             >
-              {service.pricingMode === "fixed" ? "立即购买" : "沟通确认价格"}
+              购买服务
             </a>
           </div>
         </div>
@@ -451,6 +452,7 @@ export default function StorePage() {
     window.localStorage.removeItem("mall_phone");
     setLoggedIn(false);
     setIsAdmin(false);
+    setIsTechnician(false);
     setPhone("");
     setEmail("");
     setCode("");
@@ -460,7 +462,7 @@ export default function StorePage() {
   return (
     <main className="store-shell refined-store">
       <header
-        className={`topbar refined-topbar compact-topbar${isAdmin ? " has-admin-entry" : ""}`}
+        className={`topbar refined-topbar compact-topbar${isAdmin || isTechnician ? " has-admin-entry" : ""}`}
       >
         <a className="brand" href="/" aria-label="宇星商城首页">
           <span className="brand-mark">
@@ -497,14 +499,10 @@ export default function StorePage() {
           </a>
         </nav>
         {isAdmin && (
-          <a
-            className="admin-entry"
-            href="/admin"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            进入管理后台
-          </a>
+          <a className="admin-entry" href="/admin" target="_blank" rel="noopener noreferrer">进入管理后台</a>
+        )}
+        {isTechnician && (
+          <a className="admin-entry" href="/technician">进入技术人员工作台</a>
         )}
         <div className="account-actions">
           {loggedIn ? (
