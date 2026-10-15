@@ -16,10 +16,12 @@ type Dashboard = {
   orders: Row[];
   logs: Row[];
   reviews: Row[];
+  consultations: Row[];
+  messages: Row[];
   stats: { total: number; waiting: number; inService: number; awaitingAcceptance: number; completed: number; rating: number };
   message?: string;
 };
-type Tab = "overview" | "waiting" | "in_service" | "awaiting_acceptance" | "completed" | "profile";
+type Tab = "overview" | "waiting" | "in_service" | "awaiting_acceptance" | "completed" | "consultations" | "profile";
 
 const text = (value: unknown) => String(value ?? "");
 const statusLabel: Record<string,string> = {
@@ -35,6 +37,8 @@ export default function TechnicianPage() {
   const [orderView,setOrderView]=useState<Row|null>(null);
   const [logText,setLogText]=useState("");
   const [finishText,setFinishText]=useState("");
+  const [consultationView,setConsultationView]=useState<Row|null>(null);
+  const [consultationReply,setConsultationReply]=useState("");
   const [saving,setSaving]=useState(false);
   const [profile,setProfile]=useState({city:"",experience:"",roleName:"",intro:"",skillsText:"",onlineStatus:"online"});
 
@@ -95,6 +99,7 @@ export default function TechnicianPage() {
         <button className={tab==="in_service"?"active":""} onClick={()=>setTab("in_service")}>服务中 <em>{data.stats.inService}</em></button>
         <button className={tab==="awaiting_acceptance"?"active":""} onClick={()=>setTab("awaiting_acceptance")}>待客户验收 <em>{data.stats.awaitingAcceptance}</em></button>
         <button className={tab==="completed"?"active":""} onClick={()=>setTab("completed")}>已完成 <em>{data.stats.completed}</em></button>
+        <button className={tab==="consultations"?"active":""} onClick={()=>setTab("consultations")}>在线咨询 <em>{data.consultations.filter((item)=>text(item.status)==="open").length}</em></button>
         <button className={tab==="profile"?"active":""} onClick={()=>setTab("profile")}>我的资料</button>
       </nav>
       <Link className="technician-store-link" href="/?channel=technical">查看技术服务商城 →</Link>
@@ -104,7 +109,7 @@ export default function TechnicianPage() {
       <header><div><span>TECHNICIAN WORKBENCH</span><h1>{tab==="profile"?"我的资料":"技术服务工作台"}</h1></div><div><b>{data.provider.onlineStatus==="online"?"可服务":"暂停服务"}</b><small>{data.user.phone}</small></div></header>
       {message&&<div className="technician-notice">{message}</div>}
 
-      {tab!=="profile"&&<>
+      {tab!=="profile"&&tab!=="consultations"&&<>
         <div className="technician-stat-grid">
           <article><span>服务订单</span><b>{data.stats.total}</b><small>全部历史订单</small></article>
           <article><span>待服务</span><b>{data.stats.waiting}</b><small>已支付待开始</small></article>
@@ -128,6 +133,10 @@ export default function TechnicianPage() {
         </section>
       </>}
 
+      {tab==="consultations"&&<section className="technician-panel"><div className="technician-panel-title"><div><h2>在线咨询</h2><p>只显示当前技术人员自己的服务咨询，可直接回复客户。</p></div><button disabled={loading} onClick={()=>void load()}>{loading?"刷新中…":"↻ 刷新"}</button></div>
+        <div className="technician-consultation-list">{data.consultations.map((item)=>{const count=data.messages.filter((m)=>Number(m.consultation_id)===Number(item.id)).length;return <article key={text(item.id)}><div><b>{text(item.service_title)}</b><small>会话 #{text(item.id)} · {text(item.customer_phone)}</small></div><p>{text(item.last_message_at).replace("T"," ").slice(0,16)} · {count} 条消息</p><button onClick={()=>{setConsultationView(item);setConsultationReply("");}}>查看 / 回复</button></article>})}{!data.consultations.length&&<div className="technician-empty">暂无在线咨询。</div>}</div>
+      </section>}
+
       {tab==="profile"&&<section className="technician-panel technician-profile-form"><div className="technician-panel-title"><div><h2>我的服务资料</h2><p>姓名、认证状态和账号绑定由管理员维护；服务资料可自行更新。</p></div></div>
         <div className="technician-form-grid"><label><span>姓名</span><input value={data.provider.name} disabled/></label><label><span>人员编码</span><input value={data.provider.providerCode} disabled/></label>
           <label><span>服务城市</span><input value={profile.city} onChange={e=>setProfile({...profile,city:e.target.value})}/></label>
@@ -139,6 +148,11 @@ export default function TechnicianPage() {
         </div><div className="technician-form-actions"><button disabled={saving} onClick={()=>void action({action:"profile-save",...profile})}>{saving?"保存中…":"保存资料"}</button></div>
       </section>}
     </section>
+
+    {consultationView&&<div className="technician-modal-mask"><section className="technician-modal"><header><div><span>ONLINE SUPPORT</span><h2>{text(consultationView.service_title)}</h2><small>会话 #{text(consultationView.id)}</small></div><button onClick={()=>setConsultationView(null)}>×</button></header>
+      <div className="technician-chat-thread">{data.messages.filter((item)=>Number(item.consultation_id)===Number(consultationView.id)).map((item)=><article key={text(item.id)} className={text(item.sender_type)==="provider"?"mine":""}><b>{text(item.sender_type)==="provider"?"我":"客户"}</b><p>{text(item.content)}</p><small>{text(item.created_at).replace("T"," ").slice(0,16)}</small></article>)}</div>
+      <div className="technician-chat-reply"><textarea value={consultationReply} onChange={e=>setConsultationReply(e.target.value)} placeholder="回复客户咨询内容"/><button className="primary" disabled={saving||!consultationReply.trim()} onClick={async()=>{if(await action({action:"consultation-reply",consultationId:Number(consultationView.id),content:consultationReply}))setConsultationReply("");}}>发送回复</button></div>
+    </section></div>}
 
     {orderView&&<div className="technician-modal-mask"><section className="technician-modal">
       <header><div><span>SERVICE ORDER</span><h2>{text(orderView.service_title)}</h2><small>{text(orderView.id)}</small></div><button onClick={()=>setOrderView(null)}>×</button></header>
