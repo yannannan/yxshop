@@ -327,7 +327,7 @@ export default function StorePage() {
             </p>
             <small>{service.providerRole}</small>
           </div>
-          <em>{service.onlineStatus === "online" ? "可服务" : "暂停服务"}</em>
+          <em>{service.onlineStatus === "offline" ? "暂停服务" : "可服务"}</em>
         </header>
 
         <section className="technical-reference-card-service">
