@@ -11,9 +11,10 @@ type Data = {
   messages: Row[];
   contactRequests: Row[];
   applications: Row[];
+  reviews: Row[];
   message?: string;
 };
-const emptyData: Data = { initialized: false, orders: [], appointments: [], consultations: [], messages: [], contactRequests: [], applications: [] };
+const emptyData: Data = { initialized: false, orders: [], appointments: [], consultations: [], messages: [], contactRequests: [], applications: [], reviews: [] };
 const text = (value: unknown) => String(value ?? "");
 
 function useOperations() {
@@ -33,6 +34,7 @@ function useOperations() {
         messages: result.messages || [],
         contactRequests: result.contactRequests || [],
         applications: result.applications || [],
+        reviews: result.reviews || [],
         message: result.message,
       });
     } catch {
@@ -66,7 +68,7 @@ function Modal({ title, children, onClose }: { title: string; children: React.Re
 function Status({ value }: { value: string }) {
   const labels: Record<string, string> = {
     pending_quote: "待报价", pending_payment: "待支付", payment_review: "支付核验", paid: "已支付", in_service: "服务中", awaiting_acceptance: "待客户验收", completed: "已完成", closed: "已关闭", cancelled: "已取消",
-    pending: "待确认", confirmed: "已确认", arrived: "已到场", open: "沟通中", approved: "已通过", rejected: "已驳回",
+    pending: "待确认", confirmed: "已确认", arrived: "已到场", open: "沟通中", approved: "已通过", rejected: "已驳回", active: "展示中", disabled: "已隐藏",
   };
   return <span className={`status status-${value}`}>{labels[value] || value}</span>;
 }
@@ -105,6 +107,13 @@ export function OnsiteConsultationManagement() {
   return <>{notice && <div className="admin-message">{notice}</div>}<Header title="在线咨询" description="查看用户与技术服务者沟通记录、后台回复并审核联系方式申请" loading={loading} onRefresh={() => void load()} />
     {!data.initialized ? <InitRequired message={data.message} /> : <div className="table-wrap onsite-admin-table"><table><thead><tr><th>会话</th><th>服务</th><th>技术人员</th><th>客户</th><th>最后沟通</th><th>消息</th><th>联系方式申请</th><th>状态</th><th>操作</th></tr></thead><tbody>{data.consultations.map((item) => { const count=data.messages.filter((m)=>Number(m.consultation_id)===Number(item.id)).length; const request=data.contactRequests.find((r)=>Number(r.consultation_id)===Number(item.id)); return <tr key={text(item.id)}><td>#{text(item.id)}</td><td>{text(item.service_title)}</td><td>{text(item.provider_name)}</td><td>{text(item.customer_phone)}<small>{text(item.customer_email)}</small></td><td>{text(item.last_message_at).replace("T"," ").slice(0,16)}</td><td>{count} 条</td><td>{request ? <Status value={text(request.status)} /> : "—"}</td><td><Status value={text(item.status)} /></td><td><button className="text-action" onClick={() => { setThread(item); setReply(""); }}>查看 / 回复</button><button className="text-action" onClick={() => void action({ action:"consultation-status", id:Number(item.id), status:text(item.status)==="open"?"closed":"open" })}>{text(item.status)==="open"?"关闭":"重新打开"}</button></td></tr>; })}</tbody></table>{!data.consultations.length && <div className="table-empty"><span>◇</span><p>暂无在线咨询</p></div>}</div>}
     {thread && <Modal title={`咨询会话 #${text(thread.id)}`} onClose={() => setThread(null)}><div className="admin-consultation-thread">{currentMessages.map((message) => <div className={`admin-chat-message ${text(message.sender_type)}`} key={text(message.id)}><b>{text(message.sender_type)==="customer"?"客户":"技术人员 / 平台"}</b><p>{text(message.content)}</p><small>{text(message.created_at).replace("T"," ").slice(0,16)}</small></div>)}</div>{currentRequests.map((request) => <div className="admin-contact-request" key={text(request.id)}><div><b>联系方式申请</b><span><Status value={text(request.status)} /></span></div>{text(request.status)==="pending" && <div className="admin-form-actions"><button className="ghost-button" onClick={() => void action({ action:"contact-request-review", id:Number(request.id), status:"rejected" })}>驳回</button><button onClick={() => void action({ action:"contact-request-review", id:Number(request.id), status:"approved" })}>通过申请</button></div>}</div>)}<div className="admin-reply-box"><textarea value={reply} onChange={(e)=>setReply(e.target.value)} placeholder="回复用户咨询内容" /><button disabled={!reply.trim()} onClick={async()=>{ if(await action({ action:"consultation-reply", consultationId:Number(thread.id), content:reply })){ setReply(""); } }}>发送回复</button></div></Modal>}
+  </>;
+}
+
+export function OnsiteReviewManagement() {
+  const { data, loading, notice, load, action } = useOperations();
+  return <>{notice && <div className="admin-message">{notice}</div>}<Header title="服务评价" description="查看客户对技术服务和技术人员的评分与评价，可隐藏不适合展示的内容" loading={loading} onRefresh={() => void load()} />
+    {!data.initialized ? <InitRequired message={data.message} /> : <div className="table-wrap onsite-admin-table"><table><thead><tr><th>订单</th><th>服务</th><th>技术人员</th><th>客户</th><th>评分</th><th>评价内容</th><th>时间</th><th>状态</th><th>操作</th></tr></thead><tbody>{data.reviews.map((item) => <tr key={text(item.id)}><td><b>{text(item.order_id)}</b></td><td>{text(item.service_title)}</td><td>{text(item.provider_name)}</td><td>{text(item.customer_phone)}</td><td><b style={{color:"#ff8b20"}}>{"★".repeat(Math.max(0,Math.min(5,Number(item.rating)||0)))}</b><small>{text(item.rating)} / 5</small></td><td>{text(item.content)||"—"}</td><td>{text(item.created_at).replace("T"," ").slice(0,16)}</td><td><Status value={text(item.status)} /></td><td><button className="text-action" onClick={() => void action({ action:"review-status", id:Number(item.id), status:text(item.status)==="active"?"disabled":"active" })}>{text(item.status)==="active"?"隐藏":"恢复"}</button></td></tr>)}</tbody></table>{!data.reviews.length && <div className="table-empty"><span>◇</span><p>暂无服务评价</p></div>}</div>}
   </>;
 }
 
