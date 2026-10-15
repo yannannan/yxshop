@@ -40,7 +40,7 @@ async function readPaymentQrs() {
 }
 
 async function readData() {
-  const [providers, services, paymentQrs, orders, appointments, consultations, messages, contactRequests, applications, reviews] = await Promise.all([
+  const [providers, services, paymentQrs, orders, appointments, consultations, messages, contactRequests, applications, reviews, serviceLogs] = await Promise.all([
     env.DB.prepare('SELECT p.*,u.phone AS login_phone FROM technical_providers p LEFT JOIN users u ON u.id=p.user_id ORDER BY p.sort_order,p.id').all(),
     env.DB.prepare("SELECT s.*,p.name AS provider_name,p.provider_code,p.avatar,p.city,p.experience,p.role_name,p.intro,p.skills_json,p.certification_status,p.online_status FROM technical_services s JOIN technical_providers p ON p.id=s.provider_id ORDER BY s.sort_order,s.id").all(),
     readPaymentQrs(),
@@ -51,6 +51,7 @@ async function readData() {
     env.DB.prepare("SELECT r.*,s.title AS service_title,p.name AS provider_name FROM technical_contact_requests r JOIN technical_services s ON s.id=r.service_id JOIN technical_providers p ON p.id=r.provider_id ORDER BY r.requested_at DESC,r.id DESC").all(),
     env.DB.prepare("SELECT * FROM technical_provider_applications ORDER BY created_at DESC,id DESC").all(),
     env.DB.prepare("SELECT r.*,s.title AS service_title,p.name AS provider_name,u.phone AS customer_phone FROM technical_service_reviews r JOIN technical_services s ON s.id=r.service_id JOIN technical_providers p ON p.id=r.provider_id JOIN users u ON u.id=r.user_id ORDER BY r.created_at DESC,r.id DESC").all(),
+    env.DB.prepare("SELECT l.*,p.name AS provider_name FROM technical_service_logs l JOIN technical_providers p ON p.id=l.provider_id ORDER BY l.created_at DESC,l.id DESC").all(),
   ]);
   return {
     initialized: true,
@@ -64,6 +65,7 @@ async function readData() {
     contactRequests: contactRequests.results,
     applications: applications.results,
     reviews: reviews.results,
+    serviceLogs: serviceLogs.results,
   };
 }
 
@@ -87,6 +89,7 @@ function scopeData(admin: AdminContext, data: Awaited<ReturnType<typeof readData
     contactRequests: canConsultations ? data.contactRequests : [],
     applications: canApplications ? data.applications : [],
     reviews: canReviews ? data.reviews : [],
+    serviceLogs: canOrders ? data.serviceLogs : [],
   };
 }
 
@@ -331,7 +334,7 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error('上门服务后台操作失败', error);
     const message = error instanceof Error ? error.message : '';
-    if (/technical_providers|technical_services|technical_payment_qrs|technical_service_orders|technical_service_appointments|technical_consultations|technical_consultation_messages|technical_contact_requests|technical_provider_applications|technical_service_reviews|doesn't exist|does not exist|no such table/i.test(message)) {
+    if (/technical_providers|technical_services|technical_payment_qrs|technical_service_orders|technical_service_appointments|technical_consultations|technical_consultation_messages|technical_contact_requests|technical_provider_applications|technical_service_reviews|technical_service_logs|doesn't exist|does not exist|no such table/i.test(message)) {
       return Response.json({ message: '上门服务数据表尚未初始化，请先执行上门服务 SQL。' }, { status: 503 });
     }
     return Response.json({ message: '上门服务操作失败，请检查数据和数据库配置' }, { status: 500 });
