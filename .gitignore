@@ -1,1 +1,11 @@
 /node_modules/
+/.next/
+/.vinext/
+/.wrangler/
+/dist/
+/.env
+/.env.*
+!/.env.example
+/sslcrt证书/
+*.key
+*.pem
