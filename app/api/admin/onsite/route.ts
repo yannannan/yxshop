@@ -99,8 +99,8 @@ export async function GET(request: Request) {
     return Response.json(scopeData(admin, await readData()), { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     const message = error instanceof Error ? error.message : '';
-    if (/technical_providers|technical_services|doesn't exist|does not exist|no such table/i.test(message)) {
-      return Response.json({ initialized: false, providers: [], services: [], message: '上门服务数据表尚未初始化，请执行上门服务 SQL。' }, { headers: { 'Cache-Control': 'no-store' } });
+    if (/technical_providers|technical_services|technical_service_reviews|user_id|unknown column|doesn't exist|does not exist|no such table/i.test(message)) {
+      return Response.json({ initialized: false, providers: [], services: [], message: '上门服务数据表或技术人员工作台增量尚未初始化，请执行现有上门服务 SQL 及 sql/yxshop-technician-workbench-V1.5.sql。' }, { headers: { 'Cache-Control': 'no-store' } });
     }
     console.error('读取上门服务后台数据失败', error);
     return Response.json({ initialized: false, providers: [], services: [], message: '上门服务数据读取失败' }, { status: 500 });
