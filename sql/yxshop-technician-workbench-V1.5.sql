@@ -61,6 +61,14 @@ CREATE TABLE IF NOT EXISTS technical_service_reviews (
   KEY idx_technical_review_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+-- 管理端增加“服务评价”菜单（已存在则跳过）
+INSERT INTO sys_menu
+(parent_id,menu_code,menu_name,component_key,icon,menu_type,sort_order,visible,status,created_at,updated_at)
+SELECT id,'onsite-service-reviews','服务评价','service-reviews','评','menu',170,1,'active',NOW(),NOW()
+FROM sys_menu
+WHERE menu_code='onsite-services'
+  AND NOT EXISTS (SELECT 1 FROM sys_menu WHERE menu_code='onsite-service-reviews');
+
 -- 10003 = 技术人员。这里只补充说明数据，不覆盖既有用户权限。
 -- 技术人员账号由管理端“技术人员 -> 登录手机号”绑定时自动写为 10003 / 技术人员。
 
