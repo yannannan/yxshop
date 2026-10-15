@@ -53,15 +53,11 @@ export default function TechnicianPage() {
         city:result.provider.city||"",experience:result.provider.experience||"",roleName:result.provider.roleName||"",
         intro:result.provider.intro||"",skillsText:(result.provider.skills||[]).join("、"),onlineStatus:result.provider.onlineStatus||"online"
       });
-      if(orderView){
-        const refreshed=result.orders.find((item)=>text(item.id)===text(orderView.id));
-        if(refreshed) setOrderView(refreshed);
-      }
     }catch{ setMessage("技术人员工作台读取失败，请稍后重试"); }
     finally{ setLoading(false); }
-  },[orderView]);
+  },[]);
 
-  useEffect(()=>{ void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ },[]);
+  useEffect(()=>{ void load(); },[load]);
 
   async function action(body:Record<string,string|number>){
     setSaving(true); setMessage("");
