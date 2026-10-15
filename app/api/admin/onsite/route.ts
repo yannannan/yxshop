@@ -41,7 +41,7 @@ async function readPaymentQrs() {
 
 async function readData() {
   const [providers, services, paymentQrs, orders, appointments, consultations, messages, contactRequests, applications] = await Promise.all([
-    env.DB.prepare('SELECT * FROM technical_providers ORDER BY sort_order,id').all(),
+    env.DB.prepare('SELECT p.*,u.phone AS login_phone FROM technical_providers p LEFT JOIN users u ON u.id=p.user_id ORDER BY p.sort_order,p.id').all(),
     env.DB.prepare("SELECT s.*,p.name AS provider_name,p.provider_code,p.avatar,p.city,p.experience,p.role_name,p.intro,p.skills_json,p.certification_status,p.online_status FROM technical_services s JOIN technical_providers p ON p.id=s.provider_id ORDER BY s.sort_order,s.id").all(),
     readPaymentQrs(),
     env.DB.prepare("SELECT o.*,s.title AS service_title,s.slug AS service_slug,p.name AS provider_name FROM technical_service_orders o JOIN technical_services s ON s.id=o.service_id JOIN technical_providers p ON p.id=o.provider_id ORDER BY o.created_at DESC").all(),
@@ -139,6 +139,18 @@ export async function POST(request: Request) {
         if (!name || !providerCode) return Response.json({ message: '请填写技术人员姓名和人员编码' }, { status: 400 });
         const duplicate = await env.DB.prepare('SELECT id FROM technical_providers WHERE provider_code=? AND id<>?').bind(providerCode, Number(body.id || 0)).first();
         if (duplicate) return Response.json({ message: '技术人员编码已存在' }, { status: 400 });
+        const loginPhone = String(body.loginPhone || '').trim().slice(0, 32);
+        let linkedUserId: number | null = null;
+        if (loginPhone) {
+          if (!/^1\d{10}$/.test(loginPhone)) return Response.json({ message: '技术人员登录手机号格式不正确' }, { status: 400 });
+          const linkedUser = await env.DB.prepare("SELECT id,status,permission_type FROM users WHERE phone=?").bind(loginPhone).first<{ id: number; status: string; permission_type: string }>();
+          if (!linkedUser) return Response.json({ message: '该手机号尚未注册宇星商城，请先让技术人员完成商城登录/注册' }, { status: 400 });
+          if (linkedUser.status !== 'active') return Response.json({ message: '该商城账号已停用，不能绑定技术人员' }, { status: 400 });
+          if (linkedUser.permission_type === '10002') return Response.json({ message: '超级管理员账号不能直接绑定为技术人员，请使用独立商城账号' }, { status: 400 });
+          const used = await env.DB.prepare('SELECT id FROM technical_providers WHERE user_id=? AND id<>?').bind(linkedUser.id, Number(body.id || 0)).first();
+          if (used) return Response.json({ message: '该手机号已绑定其他技术人员' }, { status: 400 });
+          linkedUserId = Number(linkedUser.id);
+        }
         const initials = String(body.initials || name.slice(0, 1)).trim().slice(0, 8);
         const avatar = String(body.avatar || '').trim().slice(0, 500);
         const city = String(body.city || '').trim().slice(0, 80);
@@ -151,11 +163,18 @@ export async function POST(request: Request) {
         const sortOrder = Math.max(0, Number(body.sortOrder || 0));
         const status = String(body.status || '') === 'disabled' ? 'disabled' : 'active';
         if (body.id) {
-          await env.DB.prepare('UPDATE technical_providers SET provider_code=?,name=?,initials=?,avatar=?,city=?,experience=?,role_name=?,intro=?,skills_json=?,certification_status=?,online_status=?,sort_order=?,status=?,updated_at=? WHERE id=?')
-            .bind(providerCode, name, initials, avatar, city, experience, roleName, intro, skillsJson, certificationStatus, onlineStatus, sortOrder, status, now, body.id).run();
+          const previous = await env.DB.prepare('SELECT user_id FROM technical_providers WHERE id=?').bind(body.id).first<{ user_id: number | null }>();
+          await env.DB.prepare('UPDATE technical_providers SET user_id=?,provider_code=?,name=?,initials=?,avatar=?,city=?,experience=?,role_name=?,intro=?,skills_json=?,certification_status=?,online_status=?,sort_order=?,status=?,updated_at=? WHERE id=?')
+            .bind(linkedUserId, providerCode, name, initials, avatar, city, experience, roleName, intro, skillsJson, certificationStatus, onlineStatus, sortOrder, status, now, body.id).run();
+          if (previous?.user_id && Number(previous.user_id) !== linkedUserId) {
+            await env.DB.prepare("UPDATE users SET permission_type='10001',permission_type_name='普通用户' WHERE id=? AND permission_type='10003'").bind(previous.user_id).run();
+          }
         } else {
-          await env.DB.prepare('INSERT INTO technical_providers (provider_code,name,initials,avatar,city,experience,role_name,intro,skills_json,certification_status,online_status,sort_order,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-            .bind(providerCode, name, initials, avatar, city, experience, roleName, intro, skillsJson, certificationStatus, onlineStatus, sortOrder, status, now, now).run();
+          await env.DB.prepare('INSERT INTO technical_providers (user_id,provider_code,name,initials,avatar,city,experience,role_name,intro,skills_json,certification_status,online_status,sort_order,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+            .bind(linkedUserId, providerCode, name, initials, avatar, city, experience, roleName, intro, skillsJson, certificationStatus, onlineStatus, sortOrder, status, now, now).run();
+        }
+        if (linkedUserId) {
+          await env.DB.prepare("UPDATE users SET permission_type='10003',permission_type_name='技术人员' WHERE id=? AND status='active'").bind(linkedUserId).run();
         }
         break;
       }
@@ -166,7 +185,9 @@ export async function POST(request: Request) {
         const id = Number(body.id || 0);
         const services = await env.DB.prepare('SELECT COUNT(*) AS total FROM technical_services WHERE provider_id=?').bind(id).first<{ total: number }>();
         if (Number(services?.total || 0) > 0) return Response.json({ message: '该技术人员仍有关联服务，请先处理服务后再删除' }, { status: 400 });
+        const provider = await env.DB.prepare('SELECT user_id FROM technical_providers WHERE id=?').bind(id).first<{ user_id: number | null }>();
         await env.DB.prepare('DELETE FROM technical_providers WHERE id=?').bind(id).run();
+        if (provider?.user_id) await env.DB.prepare("UPDATE users SET permission_type='10001',permission_type_name='普通用户' WHERE id=? AND permission_type='10003'").bind(provider.user_id).run();
         break;
       }
       case 'service-save': {
@@ -246,7 +267,7 @@ export async function POST(request: Request) {
       case 'order-status': {
         const id = String(body.id || '').trim();
         const status = String(body.status || '');
-        const allowed = ['pending_quote','pending_payment','payment_review','paid','in_service','completed','closed','cancelled'];
+        const allowed = ['pending_quote','pending_payment','payment_review','paid','in_service','awaiting_acceptance','completed','closed','cancelled'];
         if (!allowed.includes(status)) return Response.json({ message: '服务订单状态不正确' }, { status: 400 });
         const timestamps: Record<string, string | null> = {
           paid: 'paid_at',
