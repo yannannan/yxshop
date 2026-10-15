@@ -5,7 +5,7 @@ import Image from 'next/image';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { parseProductAttributes } from '../../lib/catalog';
 import { OnsiteProviderManagement, OnsiteServiceManagement } from '../../components/admin-onsite-management';
-import { OnsiteApplicationManagement, OnsiteAppointmentManagement, OnsiteConsultationManagement, OnsiteOrderManagement } from '../../components/admin-onsite-operations';
+import { OnsiteApplicationManagement, OnsiteAppointmentManagement, OnsiteConsultationManagement, OnsiteOrderManagement, OnsiteReviewManagement } from '../../components/admin-onsite-operations';
 
 type Row = Record<string, string | number | null>;
 type Data = { products: Row[]; users: Row[]; orders: Row[]; credentials: Row[]; credentialAssignments: Row[]; qrs: Row[]; categories: Row[]; notificationSettings: Row[]; emailConfig: Row | null };
@@ -42,6 +42,7 @@ const fallbackMenuTree: AdminMenu[] = [
     { id: 104, parent_id: 100, menu_code: 'onsite-appointments', menu_name: '预约管理', component_key: 'service-appointments', icon: '约', menu_type: 'menu', sort_order: 140, visible: 1, status: 'active', children: [] },
     { id: 105, parent_id: 100, menu_code: 'onsite-consultations', menu_name: '在线咨询', component_key: 'service-consultations', icon: '聊', menu_type: 'menu', sort_order: 150, visible: 1, status: 'active', children: [] },
     { id: 106, parent_id: 100, menu_code: 'onsite-provider-applications', menu_name: '入驻审核', component_key: 'provider-applications', icon: '审', menu_type: 'menu', sort_order: 160, visible: 1, status: 'active', children: [] },
+    { id: 107, parent_id: 100, menu_code: 'onsite-service-reviews', menu_name: '服务评价', component_key: 'service-reviews', icon: '评', menu_type: 'menu', sort_order: 170, visible: 1, status: 'active', children: [] },
   ] },
   { id: 200, parent_id: null, menu_code: 'system-settings', menu_name: '系统设置', component_key: '', icon: '⚙', menu_type: 'directory', sort_order: 900, visible: 1, status: 'active', children: [
     { id: 201, parent_id: 200, menu_code: 'system-menu-management', menu_name: '菜单管理', component_key: 'menu-management', icon: '菜', menu_type: 'menu', sort_order: 910, visible: 1, status: 'active', children: [] },
@@ -434,6 +435,7 @@ export default function AdminPage() {
           {active === 'service-appointments' && <OnsiteAppointmentManagement />}
           {active === 'service-consultations' && <OnsiteConsultationManagement />}
           {active === 'provider-applications' && <OnsiteApplicationManagement />}
+          {active === 'service-reviews' && <OnsiteReviewManagement />}
           {active === 'products' && <>
             <div className="panel-title"><div><h2>商品列表</h2><p>可维护商品分类、价格、库存及前台详情内容</p></div><div className="panel-title-actions"><button className="refresh-list-button" disabled={refreshing} onClick={() => void load(true)}>{refreshing ? '正在刷新…' : '↻ 刷新列表'}</button><button onClick={() => startProduct()}>＋ 新增商品</button></div></div>
             <div className="order-tabs product-tabs">{productListTabs.map((tab) => <button key={tab.key} className={`${productListTab === tab.key ? 'active ' : ''}${tab.key === 'closed' ? 'void-tab' : ''}`} onClick={() => { setProductListTab(tab.key); setProductPage(1); setSelectedProductIds([]); }}>{tab.label} <span>{tab.key === 'all' ? data.products.filter((product) => text(product.status) !== 'closed').length : data.products.filter((product) => text(product.status) === tab.key).length}</span></button>)}</div>
@@ -533,10 +535,11 @@ function ServiceModulePlaceholder({ moduleKey }: { moduleKey: string }) {
   const modules: Record<string, { title: string; description: string }> = {
     'service-management': { title: '技术服务管理', description: '发布、编辑、上下架技术服务，并维护服务方式、价格、服务区域和交付说明。' },
     'provider-management': { title: '技术人员管理', description: '维护技术人员资料、技能、经验、服务区域、认证信息和可提供的服务。' },
-    'service-orders': { title: '服务订单', description: '管理技术服务交易订单、支付、接单、实施、完成与售后状态。' },
+    'service-orders': { title: '服务订单', description: '管理技术服务交易订单、支付、实施、客户验收与完成状态。' },
     'service-appointments': { title: '预约管理', description: '管理在线服务时间、上门时间、服务地址和预约状态。' },
     'service-consultations': { title: '在线咨询', description: '管理用户与技术服务者的咨询会话、消息记录和联系方式申请。' },
     'provider-applications': { title: '入驻审核', description: '审核技术人才入驻资料、技能、资质及服务发布资格。' },
+    'service-reviews': { title: '服务评价', description: '查看客户对技术服务和技术人员的评分与评价。' },
   };
   const module = modules[moduleKey] || { title: '上门服务', description: '模块建设中。' };
   return <><div className="panel-title"><div><h2>{module.title}</h2><p>{module.description}</p></div></div><div className="system-module-placeholder"><span>⌖</span><b>后台模块已建立</b><p>菜单、权限与模块入口已接入数据库配置。下一阶段将把当前前端静态技术服务数据迁移为 MySQL 数据并完成真实业务 CRUD。</p></div></>;
