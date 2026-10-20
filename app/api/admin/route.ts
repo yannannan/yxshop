@@ -149,29 +149,91 @@ export async function POST(request: Request) {
       break;
     }
     case 'category-save': {
+      const id = Number(body.id || 0);
       const name = String(body.name || '').trim();
       const parentId = body.parentId ? Number(body.parentId) : null;
       if (!name) return Response.json({ message: '请填写分类名称' }, { status: 400 });
-      const parentName = parentId ? await env.DB.prepare('SELECT name FROM categories WHERE id=?').bind(parentId).first<{ name: string }>() : null;
-      if (parentId && !parentName) return Response.json({ message: '所属一级分类不存在' }, { status: 400 });
-      if (body.id) {
-        const old = await env.DB.prepare('SELECT c.*,p.name AS parent_name FROM categories c LEFT JOIN categories p ON p.id=c.parent_id WHERE c.id=?').bind(body.id).first<{ id: number; parent_id: number | null; name: string; parent_name: string | null }>();
+      if (parentId && parentId === id) return Response.json({ message: '分类不能将自己设为上级分类' }, { status: 400 });
+
+      const parent = parentId
+        ? await env.DB.prepare('SELECT id,parent_id,name FROM categories WHERE id=?').bind(parentId).first<{ id: number; parent_id: number | null; name: string }>()
+        : null;
+      if (parentId && !parent) return Response.json({ message: '所属上级分类不存在' }, { status: 400 });
+
+      const grandParent = parent?.parent_id
+        ? await env.DB.prepare('SELECT id,parent_id,name FROM categories WHERE id=?').bind(parent.parent_id).first<{ id: number; parent_id: number | null; name: string }>()
+        : null;
+      if (grandParent?.parent_id) return Response.json({ message: '商品分类最多支持三级，不能继续添加下级分类' }, { status: 400 });
+      if (id && (parent?.id === id || parent?.parent_id === id || grandParent?.parent_id === id)) {
+        return Response.json({ message: '不能将分类移动到自己的子分类下' }, { status: 400 });
+      }
+
+      if (id) {
+        const old = await env.DB.prepare(
+          'SELECT c.id,c.parent_id,c.name,p.id AS parent_id_value,p.parent_id AS grand_parent_id,p.name AS parent_name,g.name AS grand_parent_name FROM categories c LEFT JOIN categories p ON p.id=c.parent_id LEFT JOIN categories g ON g.id=p.parent_id WHERE c.id=?',
+        ).bind(id).first<{ id: number; parent_id: number | null; name: string; parent_id_value: number | null; grand_parent_id: number | null; parent_name: string | null; grand_parent_name: string | null }>();
         if (!old) return Response.json({ message: '分类不存在' }, { status: 404 });
-        await env.DB.prepare('UPDATE categories SET parent_id=?,name=?,sort=?,status=? WHERE id=?').bind(parentId, name, Number(body.sort || 0), body.status || 'active', body.id).run();
-        if (!old.parent_id) await env.DB.prepare('UPDATE products SET category=?,updated_at=? WHERE category=?').bind(name, now, old.name).run();
-        else await env.DB.prepare('UPDATE products SET category=?,subcategory=?,updated_at=? WHERE category=? AND subcategory=?').bind(parentName?.name || old.parent_name, name, now, old.parent_name, old.name).run();
-      } else await env.DB.prepare('INSERT INTO categories (parent_id,name,sort,status,created_at) VALUES (?,?,?,?,?)').bind(parentId, name, Number(body.sort || 0), body.status || 'active', now).run();
+
+        const children = await env.DB.prepare('SELECT COUNT(*) AS total FROM categories WHERE parent_id=?').bind(id).first<{ total: number }>();
+        const oldDepth = !old.parent_id ? 1 : old.grand_parent_id ? 3 : 2;
+        const newDepth = !parent ? 1 : parent.parent_id ? 3 : 2;
+
+        if (Number(children?.total || 0) > 0 && newDepth >= 3) {
+          return Response.json({ message: '该分类还有下级分类，移动后将超过三级结构' }, { status: 400 });
+        }
+
+        if (oldDepth !== newDepth) {
+          const linkedProducts = oldDepth === 2
+            ? await env.DB.prepare('SELECT COUNT(*) AS total FROM products WHERE category=?').bind(old.name).first<{ total: number }>()
+            : oldDepth === 3
+              ? await env.DB.prepare('SELECT COUNT(*) AS total FROM products WHERE category=? AND subcategory=?').bind(old.parent_name, old.name).first<{ total: number }>()
+              : { total: 0 };
+          if (Number(linkedProducts?.total || 0) > 0) {
+            return Response.json({ message: '该分类已关联商品，不能直接调整层级；可先调整商品分类后再移动' }, { status: 400 });
+          }
+        }
+
+        await env.DB.prepare('UPDATE categories SET parent_id=?,name=?,sort=?,status=? WHERE id=?')
+          .bind(parentId, name, Number(body.sort || 0), body.status || 'active', id)
+          .run();
+
+        if (oldDepth === 2) {
+          await env.DB.prepare('UPDATE products SET category=?,updated_at=? WHERE category=?')
+            .bind(name, now, old.name)
+            .run();
+        } else if (oldDepth === 3) {
+          await env.DB.prepare('UPDATE products SET category=?,subcategory=?,updated_at=? WHERE category=? AND subcategory=?')
+            .bind(parent?.name || old.parent_name, name, now, old.parent_name, old.name)
+            .run();
+        }
+      } else {
+        await env.DB.prepare('INSERT INTO categories (parent_id,name,sort,status,created_at) VALUES (?,?,?,?,?)')
+          .bind(parentId, name, Number(body.sort || 0), body.status || 'active', now)
+          .run();
+      }
       break;
     }
     case 'category-status':
       await env.DB.prepare('UPDATE categories SET status=? WHERE id=?').bind(body.status, body.id).run(); break;
     case 'category-delete': {
-      const category = await env.DB.prepare('SELECT c.*,p.name AS parent_name FROM categories c LEFT JOIN categories p ON p.id=c.parent_id WHERE c.id=?').bind(body.id).first<{ id: number; parent_id: number | null; name: string; parent_name: string | null }>();
+      const category = await env.DB.prepare(
+        'SELECT c.id,c.parent_id,c.name,p.parent_id AS grand_parent_id,p.name AS parent_name FROM categories c LEFT JOIN categories p ON p.id=c.parent_id WHERE c.id=?',
+      ).bind(body.id).first<{ id: number; parent_id: number | null; name: string; grand_parent_id: number | null; parent_name: string | null }>();
       if (!category) return Response.json({ message: '分类不存在' }, { status: 404 });
+
       const children = await env.DB.prepare('SELECT COUNT(*) AS total FROM categories WHERE parent_id=?').bind(category.id).first<{ total: number }>();
-      const products = await env.DB.prepare(category.parent_id ? 'SELECT COUNT(*) AS total FROM products WHERE category=? AND subcategory=?' : 'SELECT COUNT(*) AS total FROM products WHERE category=?').bind(...(category.parent_id ? [category.parent_name, category.name] : [category.name])).first<{ total: number }>();
-      if (children?.total || products?.total) return Response.json({ message: '分类下仍有关联内容，不能删除' }, { status: 400 });
-      await env.DB.prepare('DELETE FROM categories WHERE id=?').bind(body.id).run(); break;
+      const depth = !category.parent_id ? 1 : category.grand_parent_id ? 3 : 2;
+      let products = { total: 0 } as { total: number };
+      if (depth === 2) {
+        products = await env.DB.prepare('SELECT COUNT(*) AS total FROM products WHERE category=?').bind(category.name).first<{ total: number }>() || products;
+      } else if (depth === 3) {
+        products = await env.DB.prepare('SELECT COUNT(*) AS total FROM products WHERE category=? AND subcategory=?').bind(category.parent_name, category.name).first<{ total: number }>() || products;
+      }
+      if (Number(children?.total || 0) > 0 || Number(products?.total || 0) > 0) {
+        return Response.json({ message: '分类下仍有关联内容，不能删除' }, { status: 400 });
+      }
+      await env.DB.prepare('DELETE FROM categories WHERE id=?').bind(body.id).run();
+      break;
     }
     case 'user-status': {
       const id = Number(body.id || 0);
