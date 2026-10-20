@@ -20,10 +20,10 @@ declare global {
 }
 
 declare namespace VinextRouteTypes {
-  type PageRoute = "/" | "/addresses" | "/admin" | "/checkout/[id]" | "/orders" | "/product/[id]" | "/service-orders" | "/service-orders/[id]" | "/service/[slug]";
+  type PageRoute = "/" | "/addresses" | "/admin" | "/checkout/[id]" | "/orders" | "/product/[id]" | "/service-orders" | "/service-orders/[id]" | "/service/[slug]" | "/technician";
   type LayoutRoute = "/" | "/product/[id]";
-  type RouteHandlerRoute = "/api/addresses" | "/api/admin" | "/api/admin/onsite" | "/api/admin/session" | "/api/admin/summary" | "/api/admin/system" | "/api/auth/logout" | "/api/auth/send-code" | "/api/auth/verify" | "/api/categories" | "/api/order-notifications/reply" | "/api/orders" | "/api/payment-qrs" | "/api/product-images" | "/api/products" | "/api/technical-consultations" | "/api/technical-payment-qrs" | "/api/technical-provider-applications" | "/api/technical-service-orders" | "/api/technical-services";
-  type AppRoute = "/" | "/addresses" | "/admin" | "/api/addresses" | "/api/admin" | "/api/admin/onsite" | "/api/admin/session" | "/api/admin/summary" | "/api/admin/system" | "/api/auth/logout" | "/api/auth/send-code" | "/api/auth/verify" | "/api/categories" | "/api/order-notifications/reply" | "/api/orders" | "/api/payment-qrs" | "/api/product-images" | "/api/products" | "/api/technical-consultations" | "/api/technical-payment-qrs" | "/api/technical-provider-applications" | "/api/technical-service-orders" | "/api/technical-services" | "/checkout/[id]" | "/orders" | "/product/[id]" | "/service-orders" | "/service-orders/[id]" | "/service/[slug]";
+  type RouteHandlerRoute = "/api/addresses" | "/api/admin" | "/api/admin/onsite" | "/api/admin/session" | "/api/admin/summary" | "/api/admin/system" | "/api/auth/logout" | "/api/auth/send-code" | "/api/auth/verify" | "/api/categories" | "/api/order-notifications/reply" | "/api/orders" | "/api/payment-qrs" | "/api/product-images" | "/api/products" | "/api/technical-consultations" | "/api/technical-payment-qrs" | "/api/technical-provider-applications" | "/api/technical-service-orders" | "/api/technical-services" | "/api/technician";
+  type AppRoute = "/" | "/addresses" | "/admin" | "/api/addresses" | "/api/admin" | "/api/admin/onsite" | "/api/admin/session" | "/api/admin/summary" | "/api/admin/system" | "/api/auth/logout" | "/api/auth/send-code" | "/api/auth/verify" | "/api/categories" | "/api/order-notifications/reply" | "/api/orders" | "/api/payment-qrs" | "/api/product-images" | "/api/products" | "/api/technical-consultations" | "/api/technical-payment-qrs" | "/api/technical-provider-applications" | "/api/technical-service-orders" | "/api/technical-services" | "/api/technician" | "/checkout/[id]" | "/orders" | "/product/[id]" | "/service-orders" | "/service-orders/[id]" | "/service/[slug]" | "/technician";
 
   interface ParamMap {
     "/": {};
@@ -49,12 +49,14 @@ declare namespace VinextRouteTypes {
     "/api/technical-provider-applications": {};
     "/api/technical-service-orders": {};
     "/api/technical-services": {};
+    "/api/technician": {};
     "/checkout/[id]": { id: string; };
     "/orders": {};
     "/product/[id]": { id: string; };
     "/service-orders": {};
     "/service-orders/[id]": { id: string; };
     "/service/[slug]": { slug: string; };
+    "/technician": {};
   }
 
   interface LayoutSlotMap {
