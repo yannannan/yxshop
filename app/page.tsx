@@ -11,7 +11,7 @@ import {
   parseProductAttributes,
   type CatalogProduct,
 } from "../lib/catalog";
-import { categoryTree } from "../lib/categories";
+import { categoryTree, type CategoryNode } from "../lib/categories";
 import {
   formatServicePrice,
   serviceDeliveryLabels,
@@ -20,14 +20,15 @@ import {
   type TechnicalService,
 } from "../lib/technical-services";
 
-type CategoryGroup = { name: string; children: { name: string }[] };
+type CategoryGroup = CategoryNode & { id?: number };
 const pageSize = 9;
 
 export default function StorePage() {
   const [category, setCategory] = useState("全部商品");
   const [subcategory, setSubcategory] = useState("全部");
+  const [thirdCategory, setThirdCategory] = useState("全部");
   const [categoryGroups, setCategoryGroups] =
-    useState<Record<string, string[]>>(categoryTree);
+    useState<CategoryGroup[]>(categoryTree);
   const [products, setProducts] = useState<CatalogProduct[]>(catalog);
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
@@ -108,13 +109,7 @@ export default function StorePage() {
       .then((result: unknown) => {
         const groups = result as CategoryGroup[];
         if (!Array.isArray(groups) || !groups.length) return;
-        const next: Record<string, string[]> = Object.fromEntries(
-          groups.map((item) => [
-            item.name,
-            item.children.map((child) => child.name),
-          ]),
-        );
-        setCategoryGroups(next);
+        setCategoryGroups(groups);
       })
       .catch(() => null);
     fetch("/api/technical-services", { cache: "no-store" })
@@ -150,24 +145,50 @@ export default function StorePage() {
     return () => window.clearInterval(timer);
   }, []);
 
+  const selectedPrimary = categoryGroups.find((item) => item.name === category);
+  const selectedSecondary = selectedPrimary?.children.find(
+    (item) => item.name === subcategory,
+  );
+  const secondaryCategoryNames = selectedPrimary?.children.map((item) => item.name) || [];
+
   const visible = useMemo(() => {
-    const filtered = products.filter(
-      (product) =>
-        (category === "全部商品" || product.category === category) &&
-        (subcategory === "全部" || product.subcategory === subcategory) &&
-        `${product.name}${product.desc}`
-          .toLowerCase()
-          .includes(query.trim().toLowerCase()),
-    );
-    return filtered;
-  }, [products, category, subcategory, query]);
+    const keyword = query.trim().toLowerCase();
+    return products.filter((product) => {
+      const inPrimary =
+        category === "全部商品" ||
+        secondaryCategoryNames.includes(product.category) ||
+        product.category === category;
+      const inSecondary =
+        subcategory === "全部" ||
+        product.category === subcategory ||
+        product.subcategory === subcategory;
+      const inThird =
+        thirdCategory === "全部" || product.subcategory === thirdCategory;
+      return (
+        inPrimary &&
+        inSecondary &&
+        inThird &&
+        `${product.name}${product.desc}`.toLowerCase().includes(keyword)
+      );
+    });
+  }, [
+    products,
+    category,
+    subcategory,
+    thirdCategory,
+    query,
+    secondaryCategoryNames,
+  ]);
   const totalPages = Math.max(1, Math.ceil(visible.length / pageSize));
   const currentPage = Math.min(page, totalPages);
   const pagedProducts = visible.slice(
     (currentPage - 1) * pageSize,
     currentPage * pageSize,
   );
-  const showGroupedCatalog = category === "全部商品" && subcategory === "全部";
+  const showGroupedCatalog =
+    category === "全部商品" &&
+    subcategory === "全部" &&
+    thirdCategory === "全部";
   const groupedVisibleProducts = useMemo(() => {
     const groups = new Map<string, CatalogProduct[]>();
     for (const product of visible) {
@@ -177,11 +198,15 @@ export default function StorePage() {
     }
     return Array.from(groups, ([name, items]) => ({ name, items }));
   }, [visible]);
-  const categories = ["全部商品", ...Object.keys(categoryGroups)];
+  const categories = ["全部商品", ...categoryGroups.map((item) => item.name)];
   const availableSubcategories =
     category === "全部商品"
       ? ["全部"]
-      : ["全部", ...(categoryGroups[category] || [])];
+      : ["全部", ...secondaryCategoryNames];
+  const availableThirdCategories =
+    subcategory === "全部"
+      ? ["全部"]
+      : ["全部", ...(selectedSecondary?.children.map((item) => item.name) || [])];
 
   function order(id: number) {
     if (!loggedIn) {
@@ -691,6 +716,7 @@ export default function StorePage() {
                     onClick={() => {
                       setCategory(item);
                       setSubcategory("全部");
+                      setThirdCategory("全部");
                       setPage(1);
                     }}
                   >
@@ -739,24 +765,47 @@ export default function StorePage() {
                 )}
               </div>
             </div>
-            <nav
-              className="subcategory-tabs"
-              aria-label={`${category}二级分类`}
-            >
-              {availableSubcategories.map((item) => (
-                <button
-                  key={item}
-                  aria-pressed={subcategory === item}
-                  className={subcategory === item ? "active" : ""}
-                  onClick={() => {
-                    setSubcategory(item);
-                    setPage(1);
-                  }}
-                >
-                  {item}
-                </button>
-              ))}
-            </nav>
+            {category !== "全部商品" && availableSubcategories.length > 1 && (
+              <nav
+                className="subcategory-tabs"
+                aria-label={`${category}二级分类`}
+              >
+                {availableSubcategories.map((item) => (
+                  <button
+                    key={item}
+                    aria-pressed={subcategory === item}
+                    className={subcategory === item ? "active" : ""}
+                    onClick={() => {
+                      setSubcategory(item);
+                      setThirdCategory("全部");
+                      setPage(1);
+                    }}
+                  >
+                    {item}
+                  </button>
+                ))}
+              </nav>
+            )}
+            {subcategory !== "全部" && availableThirdCategories.length > 1 && (
+              <nav
+                className="subcategory-tabs third-category-tabs"
+                aria-label={`${subcategory}三级分类`}
+              >
+                {availableThirdCategories.map((item) => (
+                  <button
+                    key={item}
+                    aria-pressed={thirdCategory === item}
+                    className={thirdCategory === item ? "active" : ""}
+                    onClick={() => {
+                      setThirdCategory(item);
+                      setPage(1);
+                    }}
+                  >
+                    {item}
+                  </button>
+                ))}
+              </nav>
+            )}
           </div>
 
           {showGroupedCatalog ? (
@@ -787,6 +836,8 @@ export default function StorePage() {
                 onClick={() => {
                   setQuery("");
                   setCategory("全部商品");
+                  setSubcategory("全部");
+                  setThirdCategory("全部");
                   setPage(1);
                 }}
               >
