@@ -130,8 +130,6 @@ export function OnsiteServiceManagement() {
   const [paymentImage, setPaymentImage] = useState("");
   const [filters, setFilters] = useState({ keyword: "", providerId: "", status: "", homepage: "" });
   const [expandedProviders, setExpandedProviders] = useState<number[]>([]);
-  const providerMap = useMemo(() => new Map(data.providers.map((item) => [Number(item.id), item])), [data.providers]);
-
   useEffect(() => {
     if (!data.providers.length || expandedProviders.length) return;
     setExpandedProviders(data.providers.map((item) => Number(item.id)));
