@@ -2,11 +2,15 @@
 
 import { useParams } from "next/navigation";
 import Image from "next/image";
+import Link from "next/link";
+import { toolPagePath } from '../../../lib/tool-services';
 import { useEffect, useState } from "react";
 
 type Order = {
   id: string;
   product_id: number;
+  product_type?: string;
+  tool_slug?: string;
   amount: number;
   status: string;
   product_name: string;
@@ -314,17 +318,17 @@ export default function CheckoutPage() {
             ) : (
               <div className="paid-state">
                 <span>✓</span>
-                <h1>支付确认已提交</h1>
+                <h1>{order?.product_type === 'tool' ? '工具购买已确认' : '支付确认已提交'}</h1>
                 <p>
-                  我们正在核验支付结果
+                  {order?.product_type === 'tool' ? '支付已通过核验，可返回工具页面使用' : '我们正在核验支付结果'}
                   <br />
-                  商品信息将发送至 {order?.email || "您的订单邮箱"}
+                  {order?.product_type === 'tool' ? '点击下方按钮进入对应工具页面。' : <>商品信息将发送至 {order?.email || "您的订单邮箱"}</>}
                 </p>
                 <div className="paid-order">
                   <span>订单编号</span>
                   <b>{order?.id || params.id}</b>
                 </div>
-                <Link href="/">继续选购</Link>
+                {order?.product_type === 'tool' && order.tool_slug ? <Link href={toolPagePath(order.tool_slug)}>返回工具页面并使用</Link> : <Link href="/">继续选购</Link>}
               </div>
             )
           ) : (

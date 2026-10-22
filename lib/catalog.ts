@@ -1,6 +1,6 @@
 export type BillingCycle = 'once' | 'day' | 'week' | 'month' | 'year' | 'times';
 export type ProductAttribute = { name: string; value: string };
-export type CatalogProduct = { id: number; name: string; category: string; subcategory: string; price: number; oldPrice: number; tag: string; tone: string; initial: string; desc: string; detail: string; billingCycle?: BillingCycle; attributesJson?: string; coverImage?: string; detailImage?: string };
+export type CatalogProduct = { id: number; name: string; category: string; subcategory: string; price: number; oldPrice: number; tag: string; tone: string; initial: string; desc: string; detail: string; billingCycle?: BillingCycle; attributesJson?: string; coverImage?: string; detailImage?: string; productType?: 'digital' | 'tool'; toolSlug?: string; toolChargeType?: string };
 
 const billingCycleNames: Record<BillingCycle, string> = { once: '一次性', day: '按天', week: '按周', month: '按月', year: '按年', times: '按次' };
 const billingCyclePrices: Record<BillingCycle, string> = { once: '一次性', day: '/天', week: '/周', month: '/月', year: '/年', times: '/次' };

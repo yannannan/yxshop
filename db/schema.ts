@@ -22,6 +22,12 @@ export const products = sqliteTable('products', {
   status: text('status').notNull().default('active'),
   stock: integer('stock').notNull().default(0),
   sortOrder: integer('sort_order').notNull().default(0),
+  productType: text('product_type').notNull().default('digital'),
+  toolSlug: text('tool_slug').unique(),
+  toolUrl: text('tool_url'),
+  toolChargeType: text('tool_charge_type').notNull().default('pending'),
+  seoTitle: text('seo_title').notNull().default(''),
+  seoDescription: text('seo_description').notNull().default(''),
 });
 
 export const orders = sqliteTable('orders', {

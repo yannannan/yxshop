@@ -4,6 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { parseProductAttributes } from '../../lib/catalog';
+import { ToolManagement, type ToolDraft } from '../../components/admin-tool-management';
 import { OnsiteProviderManagement, OnsiteServiceManagement } from '../../components/admin-onsite-management';
 import { OnsiteApplicationManagement, OnsiteAppointmentManagement, OnsiteConsultationManagement, OnsiteOrderManagement, OnsiteReviewManagement } from '../../components/admin-onsite-operations';
 
@@ -26,6 +27,7 @@ type AdminSession = { authenticated: true; admin: { id: number; username: string
 
 const tabs = [
   { key: 'products', label: '商品管理', icon: '◇' },
+  { key: 'tools', label: '工具服务', icon: '工' },
   { key: 'categories', label: '分类管理', icon: '▤' },
   { key: 'orders', label: '订单管理', icon: '▣' },
   { key: 'users', label: '用户管理', icon: '◎' },
@@ -92,6 +94,8 @@ export default function AdminPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [notice, setNotice] = useState('');
   const [productForm, setProductForm] = useState<ProductForm | null>(null);
+  const [toolCreateRequested, setToolCreateRequested] = useState(false);
+  const [toolDraft, setToolDraft] = useState<ToolDraft>();
   const [productError, setProductError] = useState('');
   const [savingProduct, setSavingProduct] = useState(false);
   const [categoryForm, setCategoryForm] = useState<CategoryForm | null>(null);
@@ -174,7 +178,8 @@ export default function AdminPage() {
     try {
       const response = await fetch(`/api/admin/summary?refresh=${Date.now()}`, { cache: 'no-store', headers: { 'cache-control': 'no-cache' } });
       if (!response.ok) throw new Error('读取失败');
-      setData(await response.json() as Data);
+      const result = await response.json() as Data;
+      setData({ ...result, products: result.products.filter(item => item.product_type !== 'tool') });
     } catch {
       setNotice('数据读取失败，请刷新后重试');
     } finally {
@@ -331,6 +336,7 @@ export default function AdminPage() {
     if (!product) {
       const firstRoot = parents.find((item) => item.status === 'active');
       const rootCategory = firstRoot ? text(firstRoot.name) : '';
+      if (rootCategory === '工具服务') { setToolDraft(undefined); setToolCreateRequested(true); setActive('tools'); return; }
       const firstCategory = secondForRoot(rootCategory).find((item) => item.status === 'active');
       const category = firstCategory ? text(firstCategory.name) : '';
       const firstSubcategory = thirdForSecond(category).find((item) => item.status === 'active');
@@ -471,7 +477,7 @@ export default function AdminPage() {
 
   const navigationMenus = adminSession?.menuTree?.length ? adminSession.menuTree : fallbackMenuTree;
   const currentMenu = findMenu(navigationMenus, active);
-  const showStoreStats = tabs.some((tab) => tab.key === active);
+  const showStoreStats = active !== 'tools' && tabs.some((tab) => tab.key === active);
 
   if (adminAccessLoading) return <main className="admin-access-page"><section><span className="brand-mark"><Image src="/yxstar_logo.png" alt="宇星商城 Logo" fill sizes="52px" /></span><h1>正在验证管理权限…</h1><p>正在读取当前账号的后台角色与菜单权限。</p></section></main>;
   if (!adminSession) return <main className="admin-access-page"><section><span className="brand-mark"><Image src="/yxstar_logo.png" alt="宇星商城 Logo" fill sizes="52px" /></span><h1>无后台访问权限</h1><p>请先使用已配置为管理员的手机号登录宇星商城，再进入管理后台。</p><Link href="/">返回商城登录</Link></section></main>;
@@ -486,7 +492,7 @@ export default function AdminPage() {
     <aside className="admin-sidebar">
       <Link className="brand admin-brand" href="/"><span className="brand-mark"><Image src="/yxstar_logo.png" alt="宇星商城 Logo" fill sizes="34px" /></span><span>宇星商城</span></Link>
       <small>商城管理</small>
-      <AdminNavigation menus={navigationMenus} active={active} pendingOrders={pendingOrders} onSelect={(key) => { setActive(key); if (tabs.some((tab) => tab.key === key)) void load(true); }} />
+      <AdminNavigation menus={navigationMenus} active={active} pendingOrders={pendingOrders} onSelect={(key) => { setActive(key); setToolCreateRequested(false); if (tabs.some((tab) => tab.key === key)) void load(true); }} />
       <div className="admin-user"><span>管</span><div><b>{adminSession.admin.displayName}</b><small>{adminSession.admin.username}</small></div></div>
     </aside>
     <section className="admin-main">
@@ -505,6 +511,7 @@ export default function AdminPage() {
           {active === 'service-consultations' && <OnsiteConsultationManagement />}
           {active === 'provider-applications' && <OnsiteApplicationManagement />}
           {active === 'service-reviews' && <OnsiteReviewManagement />}
+          {active === 'tools' && <ToolManagement autoCreate={toolCreateRequested} initialDraft={toolDraft} onCreateClose={() => { setToolCreateRequested(false); setToolDraft(undefined); }} onPayment={startProductQr} />}
           {active === 'products' && <>
             <div className="panel-title"><div><h2>商品列表</h2><p>可维护商品分类、价格、库存及前台详情内容</p></div><div className="panel-title-actions"><button className="refresh-list-button" disabled={refreshing} onClick={() => void load(true)}>{refreshing ? '正在刷新…' : '↻ 刷新列表'}</button><button onClick={() => startProduct()}>＋ 新增商品</button></div></div>
             <div className="order-tabs product-tabs">{productListTabs.map((tab) => <button key={tab.key} className={`${productListTab === tab.key ? 'active ' : ''}${tab.key === 'closed' ? 'void-tab' : ''}`} onClick={() => { setProductListTab(tab.key); setProductPage(1); setSelectedProductIds([]); }}>{tab.label} <span>{tab.key === 'all' ? data.products.filter((product) => text(product.status) !== 'closed').length : data.products.filter((product) => text(product.status) === tab.key).length}</span></button>)}</div>
@@ -561,7 +568,7 @@ export default function AdminPage() {
     {productForm && <div className="admin-modal-mask" role="presentation"><section className="admin-modal product-editor-modal" role="dialog" aria-modal="true" aria-labelledby="product-editor-title"><div className="editor-head"><div><span className="section-kicker">PRODUCT EDITOR</span><b id="product-editor-title">{productForm.id ? '编辑商品' : '新增商品'}</b></div><button className="modal-close" aria-label="关闭商品编辑" disabled={savingProduct} onClick={() => setProductForm(null)}>×</button></div><div className="admin-form-grid">
       <Field label="商品名称"><input autoFocus value={productForm.name} onChange={(event) => setProductForm({ ...productForm, name: event.target.value })} /></Field>
       <Field label="商品角标"><input value={productForm.tag} onChange={(event) => setProductForm({ ...productForm, tag: event.target.value })} placeholder="如：热卖" /></Field>
-      <Field label="一级菜单"><select value={productForm.rootCategory} onChange={(event) => { const rootCategory = event.target.value; const categoryItem = secondForRoot(rootCategory).find((item) => item.status === 'active'); const category = categoryItem ? text(categoryItem.name) : ''; const child = thirdForSecond(category).find((item) => item.status === 'active'); setProductForm({ ...productForm, rootCategory, category, subcategory: child ? text(child.name) : '' }); }}><option value="">请选择</option>{parents.filter((item) => item.status === 'active').map((item) => <option key={text(item.id)} value={text(item.name)}>{text(item.name)}</option>)}</select></Field>
+      <Field label="一级菜单"><select value={productForm.rootCategory} onChange={(event) => { const rootCategory = event.target.value; if (rootCategory === '工具服务') { setToolDraft({ name: productForm.name, description: productForm.description, detail: productForm.detail, logo: productForm.coverImage, price: productForm.price }); setProductForm(null); setToolCreateRequested(true); setActive('tools'); return; } const categoryItem = secondForRoot(rootCategory).find((item) => item.status === 'active'); const category = categoryItem ? text(categoryItem.name) : ''; const child = thirdForSecond(category).find((item) => item.status === 'active'); setProductForm({ ...productForm, rootCategory, category, subcategory: child ? text(child.name) : '' }); }}><option value="">请选择</option>{parents.filter((item) => item.status === 'active').map((item) => <option key={text(item.id)} value={text(item.name)}>{text(item.name)}</option>)}</select></Field>
       <Field label="二级分类（可选）"><select value={productForm.category} disabled={!productForm.rootCategory} onChange={(event) => { const category = event.target.value; const child = thirdForSecond(category).find((item) => item.status === 'active'); setProductForm({ ...productForm, category, subcategory: child ? text(child.name) : '' }); }}><option value="">不选择，归属一级菜单</option>{secondForRoot(productForm.rootCategory).filter((item) => item.status === 'active').map((item) => <option key={text(item.id)} value={text(item.name)}>{text(item.name)}</option>)}</select></Field>
       <Field label="三级分类（可选）"><select value={productForm.subcategory} disabled={!productForm.category} onChange={(event) => setProductForm({ ...productForm, subcategory: event.target.value })}><option value="">{productForm.category ? '不选择，归属二级分类' : '请先选择二级分类'}</option>{thirdForSecond(productForm.category).filter((item) => item.status === 'active').map((item) => <option key={text(item.id)} value={text(item.name)}>{text(item.name)}</option>)}</select></Field>
       <Field label="售价（元）"><input type="number" min="0" value={productForm.price} onChange={(event) => setProductForm({ ...productForm, price: event.target.value })} /></Field>

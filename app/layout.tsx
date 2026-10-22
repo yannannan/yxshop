@@ -5,8 +5,9 @@ import './refined.css';
 import './flow.css';
 import './technical-services.css';
 import './technician/technician.css';
+import './tools.css';
 export const metadata: Metadata = {
-  metadataBase: new URL('https://qingxiang-mall.yannanna.chatgpt.site'),
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'https://www.yxstar.shop'),
   title: '宇星商城｜精选数字商品',
   description: '轻量、可靠的数字商品购买平台，支持自动发货与订单售后。',
   openGraph: {

@@ -24,8 +24,9 @@ export async function POST(request: Request) {
     await env.DB.prepare("UPDATE orders SET status='pending_delivery',recharge_json=?,updated_at=? WHERE id=? AND user_id=?").bind(jsonText, new Date().toISOString(), orderId, user.id).run();
     return Response.json({ ok: true, status: 'pending_delivery' });
   }
-  const product = await env.DB.prepare("SELECT id,price,name,category FROM products WHERE id=? AND status='active'").bind(productId).first<{ id: number; price: number; name: string; category: string }>();
+  const product = await env.DB.prepare("SELECT id,price,name,category,product_type,tool_charge_type,tool_url FROM products WHERE id=? AND status='active'").bind(productId).first<{ id: number; price: number; name: string; category: string; product_type: string; tool_charge_type: string; tool_url: string }>();
   if (!product) return Response.json({ message: '商品不可用' }, { status: 400 });
+  if (product.product_type === 'tool' && (product.tool_charge_type !== 'paid' || !product.tool_url)) return Response.json({ message: '该工具暂不支持购买，请从工具服务页面查看使用方式' }, { status: 400 });
   const newOrderId = await createOrderId(phone);
   const createdAt = new Date().toISOString();
   await env.DB.prepare('INSERT INTO orders (id,user_id,product_id,amount,status,delivery_content,recharge_json,created_at) VALUES (?,?,?,?,?,?,?,?)').bind(newOrderId, user.id, product.id, product.price, 'pending', '', '', createdAt).run();
@@ -57,9 +58,9 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const id = url.searchParams.get('id');
   if (!id) {
-    const { results } = await env.DB.prepare('SELECT o.*, p.name AS product_name, p.category, p.subcategory, u.email, u.phone FROM orders o JOIN products p ON p.id=o.product_id JOIN users u ON u.id=o.user_id WHERE o.user_id=? ORDER BY o.created_at DESC').bind(user.id).all();
+    const { results } = await env.DB.prepare('SELECT o.*, p.name AS product_name, p.category, p.subcategory, p.product_type, p.tool_slug, u.email, u.phone FROM orders o JOIN products p ON p.id=o.product_id JOIN users u ON u.id=o.user_id WHERE o.user_id=? ORDER BY o.created_at DESC').bind(user.id).all();
     return Response.json(results);
   }
-  const order = await env.DB.prepare('SELECT o.*, p.name AS product_name, p.category, p.subcategory, u.email, u.phone FROM orders o JOIN products p ON p.id=o.product_id JOIN users u ON u.id=o.user_id WHERE o.id=? AND o.user_id=?').bind(id, user.id).first();
+  const order = await env.DB.prepare('SELECT o.*, p.name AS product_name, p.category, p.subcategory, p.product_type, p.tool_slug, u.email, u.phone FROM orders o JOIN products p ON p.id=o.product_id JOIN users u ON u.id=o.user_id WHERE o.id=? AND o.user_id=?').bind(id, user.id).first();
   return order ? Response.json(order) : Response.json({ message: '订单不存在' }, { status: 404 });
 }

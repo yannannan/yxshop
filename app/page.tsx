@@ -1,9 +1,12 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { TechnicalSupportChat } from "../components/technical-support-chat";
 import { TechnicalProviderApplication } from "../components/technical-provider-application";
+import { ToolDirectory } from "../components/tool-directory";
+import type { ToolService } from "../lib/tool-services";
 import {
   billingCyclePriceText,
   catalog,
@@ -30,6 +33,9 @@ export default function StorePage() {
   const [categoryGroups, setCategoryGroups] =
     useState<CategoryGroup[]>(categoryTree);
   const [products, setProducts] = useState<CatalogProduct[]>(catalog);
+  const [tools, setTools] = useState<ToolService[]>([]);
+  const [toolsLoading, setToolsLoading] = useState(true);
+  const [toolsError, setToolsError] = useState('');
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
   const [authOpen, setAuthOpen] = useState(false);
@@ -98,6 +104,13 @@ export default function StorePage() {
   }, [loggedIn]);
 
   useEffect(() => {
+    fetch('/api/tools', { cache: 'no-store' })
+      .then(async response => {
+        if (!response.ok) throw new Error('工具服务暂不可用，请稍后重试');
+        setTools(await response.json() as ToolService[]);
+      })
+      .catch(() => setToolsError('工具服务暂不可用，请稍后重试'))
+      .finally(() => setToolsLoading(false));
     fetch("/api/products", { cache: "no-store" })
       .then((response) => (response.ok ? response.json() : []))
       .then((result: unknown) => {
@@ -146,6 +159,8 @@ export default function StorePage() {
   }, []);
 
   const selectedPrimary = categoryGroups.find((item) => item.name === category);
+  const isToolsCategory = category === '工具服务';
+  const visibleTools = tools.filter(tool => `${tool.name} ${tool.description}`.toLowerCase().includes(query.trim().toLowerCase()));
   const selectedSecondary = selectedPrimary?.children.find(
     (item) => item.name === subcategory,
   );
@@ -678,7 +693,7 @@ export default function StorePage() {
 
           <div className="channel-content" id="channel-content">
           {channel === "mall" && <>
-          <div className="quick-benefits" id="services">
+          {!isToolsCategory && <div className="quick-benefits" id="services">
             <span>
               <b>自动发货</b>
               <small>支付核验后自动账号 / 卡密推送至邮箱</small>
@@ -693,6 +708,7 @@ export default function StorePage() {
             </span>
           </div>
 
+          }
           <div className="catalog-filter-area" id="products">
             <div className="catalog-filter-row">
               <nav className="category-tabs" aria-label="商品类型">
@@ -715,19 +731,19 @@ export default function StorePage() {
               <label className="search catalog-search">
                 <span aria-hidden="true">⌕</span>
                 <input
-                  aria-label="搜索商品"
+                  aria-label={isToolsCategory ? '搜索工具' : '搜索商品'}
                   value={query}
                   onChange={(event) => {
                     setQuery(event.target.value);
                     setPage(1);
                   }}
-                  placeholder="搜索商品、品牌或服务"
+                  placeholder={isToolsCategory ? '搜索需要的工具' : '搜索商品、品牌或服务'}
                 />
                 <button type="button">搜索</button>
               </label>
               <div className="product-tools product-tools-row">
-                <span>共 {visible.length} 件</span>
-                {!showGroupedCatalog && visible.length > pageSize && (
+                <span>{isToolsCategory ? `共 ${visibleTools.length} 个工具` : `共 ${visible.length} 件`}</span>
+                {!isToolsCategory && !showGroupedCatalog && visible.length > pageSize && (
                   <nav
                     className="pagination pagination-inline"
                     aria-label="商品翻页"
@@ -753,7 +769,7 @@ export default function StorePage() {
                 )}
               </div>
             </div>
-            {category !== "全部商品" && availableSubcategories.length > 1 && (
+            {!isToolsCategory && category !== "全部商品" && availableSubcategories.length > 1 && (
               <nav
                 className="subcategory-tabs"
                 aria-label={`${category}二级分类`}
@@ -774,7 +790,7 @@ export default function StorePage() {
                 ))}
               </nav>
             )}
-            {subcategory !== "全部" && availableThirdCategories.length > 1 && (
+            {!isToolsCategory && subcategory !== "全部" && availableThirdCategories.length > 1 && (
               <nav
                 className="subcategory-tabs third-category-tabs"
                 aria-label={`${subcategory}三级分类`}
@@ -796,7 +812,7 @@ export default function StorePage() {
             )}
           </div>
 
-          {showGroupedCatalog ? (
+          {isToolsCategory ? <ToolDirectory tools={visibleTools} loading={toolsLoading} error={toolsError} /> : showGroupedCatalog ? (
             <div className="product-category-groups">
               {groupedVisibleProducts.map((group) => (
                 <section className="product-category-section" key={group.name}>
@@ -815,7 +831,7 @@ export default function StorePage() {
               {pagedProducts.map(renderProductCard)}
             </div>
           )}
-          {visible.length === 0 && (
+          {!isToolsCategory && visible.length === 0 && (
             <div className="empty refined-empty">
               <span>⌕</span>
               <h3>没有找到相关商品</h3>
@@ -838,8 +854,8 @@ export default function StorePage() {
             <div>
               <span>?</span>
               <div>
-                <b>购买前还有疑问？</b>
-                <p>查看购买说明，或联系售后确认商品是否适合你。</p>
+                <b>{isToolsCategory ? '工具使用遇到问题？' : '购买前还有疑问？'}</b>
+                <p>{isToolsCategory ? '联系在线客服，了解工具入口与使用方式。' : '查看购买说明，或联系售后确认商品是否适合你。'}</p>
               </div>
             </div>
             <button onClick={() => setServiceOpen(true)}>在线微信客服</button>
@@ -897,6 +913,7 @@ export default function StorePage() {
         </div>
         <div>
           <b>商城信息</b>
+          <Link href="/tools">工具服务</Link>
           {isAdmin && <a href="/admin">管理后台</a>}
           <span>© 2026 宇星商城</span>
         </div>

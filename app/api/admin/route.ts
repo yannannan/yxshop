@@ -150,6 +150,7 @@ async function handleAdminAction(request: Request) {
       const productId = Number(body.id || 0);
       const source = await env.DB.prepare('SELECT * FROM products WHERE id=?').bind(productId).first<Record<string, string | number | null>>();
       if (!source) return Response.json({ message: '要克隆的商品不存在' }, { status: 404 });
+      if (source.product_type === 'tool') return Response.json({ message: '工具请在“工具服务”模块单独新增并配置页面标识' }, { status: 400 });
       const sortOrder = await nextProductSortOrder();
       const result = await env.DB.prepare("INSERT INTO products (name,category,subcategory,price,cost_price,old_price,billing_cycle,attributes_json,description,detail,tag,tone,initial,cover_image,detail_image,status,stock,updated_at,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'inactive',?,?,?)").bind(
         `${String(source.name)}（副本）`, source.category, source.subcategory, source.price, source.cost_price || 0, source.old_price, source.billing_cycle || 'once', source.attributes_json || '[]', source.description || '', source.detail || '', source.tag || '在售', source.tone || 'dark', source.initial || '', source.cover_image || '', source.detail_image || '', source.stock || 0, now, sortOrder,
