@@ -1,6 +1,7 @@
 import { env } from '@/db/mysql-runtime';
 import { getVerifiedSessionPhone } from '@/db/setup';
 import { isToolEntryUrl, isToolSlug } from '@/lib/tool-services';
+import { getToolEntitlement } from '@/lib/tool-entitlements';
 
 export async function GET(request: Request) {
   try { return await resolveAccess(request); }
@@ -23,8 +24,9 @@ async function resolveAccess(request: Request) {
     const phone = getVerifiedSessionPhone(request);
     const purchaseUrl = `/product/${tool.id}`;
     if (!phone) return Response.json({ message: '请先购买并完成支付核验', purchaseUrl }, { status: 401, headers });
-    const order = await env.DB.prepare("SELECT o.id FROM orders o JOIN users u ON u.id=o.user_id WHERE u.phone=? AND u.status='active' AND o.product_id=? AND o.status IN ('paid','pending_delivery','delivered') LIMIT 1").bind(phone, tool.id).first();
-    if (!order) return Response.json({ message: '购买并完成支付核验后可进入工具', purchaseUrl }, { status: 402, headers });
+    const user = await env.DB.prepare("SELECT id FROM users WHERE phone=? AND status='active'").bind(phone).first<{ id: number }>();
+    const order = user ? await getToolEntitlement(user.id, tool.id) : null;
+    if (!order) return Response.json({ message: '暂无可用套餐，请购买或续购并完成支付核验', purchaseUrl }, { status: 402, headers });
   } else if (tool.tool_charge_type !== 'free') {
     return Response.json({ message: '工具收费配置异常' }, { status: 409, headers });
   }

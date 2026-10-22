@@ -285,10 +285,10 @@ async function handleAdminAction(request: Request) {
     case 'order-status': {
       const status = String(body.status || '');
       if (!['pending', 'paid', 'pending_delivery', 'delivered', 'closed'].includes(status)) return Response.json({ message: '订单状态不正确' }, { status: 400 });
-      if (status === 'delivered') await env.DB.prepare('UPDATE orders SET status=?,delivered_at=COALESCE(delivered_at,?),updated_at=? WHERE id=?').bind(status, now, now, body.id).run();
+      if (status === 'delivered') await env.DB.prepare('UPDATE orders SET status=?,delivered_at=COALESCE(delivered_at,?),updated_at=?,tool_paid_at=COALESCE(tool_paid_at,?) WHERE id=?').bind(status, now, now, now, body.id).run();
       else {
         await releaseOrderCredential(String(body.id));
-        await env.DB.prepare('UPDATE orders SET status=?,delivered_at=NULL,updated_at=? WHERE id=?').bind(status, now, body.id).run();
+        await env.DB.prepare("UPDATE orders SET status=?,delivered_at=NULL,updated_at=?,tool_paid_at=CASE WHEN ? IN ('paid','pending_delivery') THEN COALESCE(tool_paid_at,?) ELSE tool_paid_at END WHERE id=?").bind(status, now, status, now, body.id).run();
       }
       if (status === 'delivered') await notifyOrderDelivery(String(body.id));
       break;

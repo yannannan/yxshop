@@ -26,6 +26,7 @@ export const products = sqliteTable('products', {
   toolSlug: text('tool_slug').unique(),
   toolUrl: text('tool_url'),
   toolChargeType: text('tool_charge_type').notNull().default('pending'),
+  toolPlansJson: text('tool_plans_json'),
   seoTitle: text('seo_title').notNull().default(''),
   seoDescription: text('seo_description').notNull().default(''),
 });
@@ -40,6 +41,15 @@ export const orders = sqliteTable('orders', {
   rechargeJson: text('recharge_json').notNull().default(''),
   createdAt: text('created_at').notNull(),
   deliveredAt: text('delivered_at'),
+  toolBillingCycle: text('tool_billing_cycle').notNull().default(''),
+  toolPaidAt: text('tool_paid_at'),
+  toolUsesRemaining: integer('tool_uses_remaining').notNull().default(0),
+});
+
+export const toolUsageEvents = sqliteTable('tool_usage_events', {
+  operationId: text('operation_id').primaryKey(),
+  orderId: text('order_id').notNull(),
+  createdAt: text('created_at').notNull(),
 });
 
 export const credentials = sqliteTable('credentials', {

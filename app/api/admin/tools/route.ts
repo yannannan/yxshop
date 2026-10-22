@@ -1,12 +1,18 @@
 import { env } from '@/db/mysql-runtime';
 import { ensurePaymentQrRecords } from '@/db/setup';
 import { adminDenied, getAdminContext, hasAdminPermission } from '@/lib/admin-auth';
-import { isToolEntryUrl, isToolSlug } from '@/lib/tool-services';
+import { isToolBillingCycle, isToolEntryUrl, isToolSlug, readToolPlans, type ToolPlan } from '@/lib/tool-services';
 
 export async function GET(request: Request) {
   const admin = await getAdminContext(request);
   if (!admin || !hasAdminPermission(admin, 'tools')) return adminDenied();
   try {
+    if (new URL(request.url).searchParams.get('resource') === 'payment-qrs') {
+      const id = Number(new URL(request.url).searchParams.get('id'));
+      if (!Number.isInteger(id) || id <= 0) return Response.json({ message: '工具参数不正确' }, { status: 400 });
+      const { results } = await env.DB.prepare("SELECT q.* FROM payment_qrs q JOIN products p ON p.id=q.product_id WHERE p.id=? AND p.product_type='tool' ORDER BY q.id DESC").bind(id).all();
+      return Response.json({ qrs: results }, { headers: { 'Cache-Control': 'no-store' } });
+    }
     const { results } = await env.DB.prepare("SELECT * FROM products WHERE product_type='tool' ORDER BY sort_order,id").all();
     return Response.json({ tools: results }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
@@ -18,9 +24,22 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const admin = await getAdminContext(request);
   if (!admin || !hasAdminPermission(admin, 'tools')) return adminDenied();
-  const body = await request.json() as Record<string, string | number>;
+  const body = await request.json() as Record<string, unknown>;
   const id = Number(body.id || 0);
   try {
+    if (body.action === 'qr-save') {
+      const amount = Number(body.amount);
+      const type = String(body.type);
+      const image = String(body.imageUrl || '');
+      const tool = await env.DB.prepare("SELECT price,billing_cycle,tool_plans_json FROM products WHERE id=? AND product_type='tool' AND tool_charge_type='paid'").bind(id).first<{ price: number; billing_cycle: string; tool_plans_json: string | null }>();
+      if (!tool || !['wechat', 'alipay'].includes(type) || !readToolPlans(tool.tool_plans_json, Number(tool.price), tool.billing_cycle).some(plan => plan.price === amount)) return Response.json({ message: '请先保存对应收费套餐，再配置该金额的收款码' }, { status: 400 });
+      if (image && (!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(image) || image.length > 1400000)) return Response.json({ message: '收款码支持不超过 1MB 的 JPG、PNG、WebP 图片' }, { status: 400 });
+      const status = body.enabled === true ? 'active' : 'inactive';
+      const existing = await env.DB.prepare('SELECT id FROM payment_qrs WHERE product_id=? AND type=? AND amount=? ORDER BY id DESC LIMIT 1').bind(id, type, amount).first<{ id: number }>();
+      if (existing) await env.DB.prepare('UPDATE payment_qrs SET image_url=?,status=? WHERE product_id=? AND type=? AND amount=?').bind(image || null, status, id, type, amount).run();
+      else await env.DB.prepare('INSERT INTO payment_qrs (product_id,name,type,amount,image_url,status) VALUES (?,?,?,?,?,?)').bind(id, `${type === 'wechat' ? '微信支付' : '支付宝'} ¥${amount.toFixed(2)} 收款码`, type, amount, image || null, status).run();
+      return Response.json({ ok: true });
+    }
     if (body.action === 'status') {
       if (!id || !['active', 'inactive'].includes(String(body.status))) return Response.json({ message: '工具状态不正确' }, { status: 400 });
       await env.DB.prepare("UPDATE products SET status=?,updated_at=? WHERE id=? AND product_type='tool'").bind(body.status, new Date().toISOString(), id).run();
@@ -31,7 +50,11 @@ export async function POST(request: Request) {
     const slug = String(body.slug || '').trim().toLowerCase();
     const entryUrl = String(body.entryUrl || '').trim();
     const chargeType = String(body.chargeType || 'pending');
-    const price = chargeType === 'paid' ? Number(body.price) : 0;
+    const inputPlans = body.plans ?? [{ cycle: 'once', price: body.price }];
+    if (chargeType === 'paid' && (!Array.isArray(inputPlans) || !inputPlans.length || inputPlans.length > 6 || inputPlans.some(plan => !plan || !isToolBillingCycle(plan.cycle) || !Number.isFinite(Number(plan.price)) || Number(plan.price) <= 0 || Number(plan.price) > 9999999.99 || Math.abs(Number(plan.price) * 100 - Math.round(Number(plan.price) * 100)) > 0.000001) || new Set(inputPlans.map(plan => plan.cycle)).size !== inputPlans.length)) return Response.json({ message: '请至少配置一个收费套餐：周期不能重复，价格须大于 0 且最多两位小数' }, { status: 400 });
+    const plans: ToolPlan[] = chargeType === 'paid' ? readToolPlans(inputPlans) : [];
+    const primaryPlan = [...plans].sort((a, b) => a.price - b.price)[0];
+    const price = primaryPlan?.price || 0;
     const logo = String(body.logo || '').trim();
     if (!name) return Response.json({ message: '请填写工具名称' }, { status: 400 });
     if (!isToolSlug(slug)) return Response.json({ message: '页面标识只能使用小写英文、数字和中划线，长度不超过 100' }, { status: 400 });
@@ -53,16 +76,16 @@ export async function POST(request: Request) {
     const seoDescription = String(body.seoDescription || '').trim().slice(0, 1000);
     const now = new Date().toISOString();
     let productId = id;
-    const values = [name, description, detail, logo, price, slug, entryUrl, chargeType, seoTitle, seoDescription, status, now];
+    const values = [name, description, detail, logo, price, slug, entryUrl, chargeType, seoTitle, seoDescription, status, now, JSON.stringify(plans), primaryPlan?.cycle || 'once'];
     if (id) {
-      await env.DB.prepare("UPDATE products SET name=?,description=?,detail=?,cover_image=?,price=?,tool_slug=?,tool_url=?,tool_charge_type=?,seo_title=?,seo_description=?,status=?,updated_at=? WHERE id=? AND product_type='tool'").bind(...values, id).run();
+      await env.DB.prepare("UPDATE products SET name=?,description=?,detail=?,cover_image=?,price=?,tool_slug=?,tool_url=?,tool_charge_type=?,seo_title=?,seo_description=?,status=?,updated_at=?,tool_plans_json=?,billing_cycle=? WHERE id=? AND product_type='tool'").bind(...values, id).run();
     } else {
       const sort = await env.DB.prepare('SELECT COALESCE(MAX(sort_order),0)+1 AS sort_order FROM products').first<{ sort_order: number }>();
-      const result = await env.DB.prepare("INSERT INTO products (name,description,detail,cover_image,price,tool_slug,tool_url,tool_charge_type,seo_title,seo_description,status,updated_at,category,subcategory,product_type,old_price,cost_price,billing_cycle,attributes_json,detail_image,tag,tone,initial,stock,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'工具服务','','tool',0,0,'once','[]','','工具','blue','',99999,?)")
+      const result = await env.DB.prepare("INSERT INTO products (name,description,detail,cover_image,price,tool_slug,tool_url,tool_charge_type,seo_title,seo_description,status,updated_at,tool_plans_json,billing_cycle,category,subcategory,product_type,old_price,cost_price,attributes_json,detail_image,tag,tone,initial,stock,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,'工具服务','','tool',0,0,'[]','','工具','blue','',99999,?)")
         .bind(...values, Number(sort?.sort_order ?? 1)).run();
       productId = Number(result.meta.last_row_id);
     }
-    if (chargeType === 'paid') await ensurePaymentQrRecords(productId, price);
+    for (const plan of plans) await ensurePaymentQrRecords(productId, plan.price);
     return Response.json({ ok: true, id: productId });
   } catch (error) {
     console.error('工具保存失败', error);

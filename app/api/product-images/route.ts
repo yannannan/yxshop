@@ -10,7 +10,7 @@ const contentTypes: Record<string, string> = { '.jpg': 'image/jpeg', '.jpeg': 'i
 export async function POST(request: Request) {
   const admin = await getAdminContext(request);
   if (!admin) return adminDenied();
-  if (!hasAdminPermission(admin, 'products')) return adminDenied('无商品管理权限');
+  if (!hasAdminPermission(admin, 'products') && !hasAdminPermission(admin, 'tools')) return adminDenied('无商品或工具管理权限');
   const form = await request.formData();
   const file = form.get('file');
   if (!(file instanceof File)) return Response.json({ message: '请选择图片文件' }, { status: 400 });

@@ -3,7 +3,7 @@
 import { useParams } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
-import { toolPagePath } from '../../../lib/tool-services';
+import { toolBillingLabels, isToolBillingCycle, toolPagePath } from '../../../lib/tool-services';
 import { useEffect, useState } from "react";
 
 type Order = {
@@ -11,6 +11,7 @@ type Order = {
   product_id: number;
   product_type?: string;
   tool_slug?: string;
+  tool_billing_cycle?: string;
   amount: number;
   status: string;
   product_name: string;
@@ -344,7 +345,7 @@ export default function CheckoutPage() {
                 <span className="checkout-product-icon">Q</span>
                 <div>
                   <small>正在购买</small>
-                  <b>{order?.product_name || "正在读取订单…"}</b>
+                  <b>{order?.product_name || "正在读取订单…"}</b>{order?.tool_billing_cycle && isToolBillingCycle(order.tool_billing_cycle) && <small>所选套餐：{toolBillingLabels[order.tool_billing_cycle]}</small>}
                 </div>
                 <strong>
                   <em>¥</em>

@@ -14,7 +14,7 @@ export async function POST(request: Request) {
   const order = await env.DB.prepare('SELECT credential_id FROM orders WHERE id=?').bind(orderId).first<{ credential_id: number | null }>();
   if (!order) return Response.json({ message: '订单不存在' }, { status: 404 });
   const now = new Date().toISOString();
-  if (status === 'delivered') await env.DB.prepare('UPDATE orders SET status=?,delivered_at=COALESCE(delivered_at,?),updated_at=? WHERE id=?').bind(status, now, now, orderId).run();
+  if (status === 'delivered') await env.DB.prepare('UPDATE orders SET status=?,delivered_at=COALESCE(delivered_at,?),updated_at=?,tool_paid_at=COALESCE(tool_paid_at,?) WHERE id=?').bind(status, now, now, now, orderId).run();
   else {
     if (order.credential_id) {
       await env.DB.batch([
@@ -24,7 +24,7 @@ export async function POST(request: Request) {
       const active = await env.DB.prepare("SELECT COUNT(*) AS total FROM credential_assignments WHERE credential_id=? AND status='active'").bind(order.credential_id).first<{ total: number }>();
       if (!Number(active?.total || 0)) await env.DB.prepare("UPDATE credentials SET status='available' WHERE id=? AND status='used'").bind(order.credential_id).run();
     }
-    await env.DB.prepare('UPDATE orders SET status=?,delivered_at=NULL,updated_at=? WHERE id=?').bind(status, now, orderId).run();
+    await env.DB.prepare("UPDATE orders SET status=?,delivered_at=NULL,updated_at=?,tool_paid_at=CASE WHEN ? IN ('paid','pending_delivery') THEN COALESCE(tool_paid_at,?) ELSE tool_paid_at END WHERE id=?").bind(status, now, status, now, orderId).run();
   }
   return Response.json({ ok: true, orderId, status });
 }

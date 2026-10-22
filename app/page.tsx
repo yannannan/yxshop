@@ -472,7 +472,7 @@ export default function StorePage() {
     window.localStorage.setItem("mall_phone", phone);
     setLoggedIn(true);
     setAuthOpen(false);
-    if (pendingProduct) window.location.href = `/product/${pendingProduct}`;
+    if (pendingProduct) { const cycle = new URLSearchParams(window.location.search).get("cycle"); window.location.href = `/product/${pendingProduct}${cycle ? `?cycle=${encodeURIComponent(cycle)}` : ""}`; }
   }
 
   async function signOut() {
