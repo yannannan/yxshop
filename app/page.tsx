@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { TechnicalSupportChat } from "../components/technical-support-chat";
 import { TechnicalProviderApplication } from "../components/technical-provider-application";
 import { ToolDirectory } from "../components/tool-directory";
+import { StorefrontBanners } from "../components/storefront-banners";
 import type { ToolService } from "../lib/tool-services";
 import {
   billingCyclePriceText,
@@ -53,7 +54,6 @@ export default function StorePage() {
   const [phoneRegistered, setPhoneRegistered] = useState<boolean | null>(null);
   const [serviceOpen, setServiceOpen] = useState(false);
   const [providerApplicationOpen, setProviderApplicationOpen] = useState(false);
-  const [promoSlide, setPromoSlide] = useState(0);
   const [channel, setChannel] = useState<"mall" | "technical">("mall");
   const [technicalChatOpen, setTechnicalChatOpen] = useState(false);
   const [technicalChatService, setTechnicalChatService] =
@@ -149,14 +149,6 @@ export default function StorePage() {
     );
     return () => window.clearInterval(timer);
   }, [codeCooldown]);
-
-  useEffect(() => {
-    const timer = window.setInterval(
-      () => setPromoSlide((current) => (current + 1) % 2),
-      5000,
-    );
-    return () => window.clearInterval(timer);
-  }, []);
 
   const selectedPrimary = categoryGroups.find((item) => item.name === category);
   const isToolsCategory = category === '工具服务';
@@ -555,112 +547,7 @@ export default function StorePage() {
 
       <div className="store-layout refined-layout no-sidebar-layout">
         <section className="content refined-content">
-          <div
-            className="hero refined-hero promo-hero"
-            aria-roledescription="carousel"
-            aria-label="商城宣传推广"
-          >
-            <div className="hero-promo-viewport">
-              <div
-                className="hero-promo-track"
-                style={{ transform: `translateX(-${promoSlide * 50}%)` }}
-              >
-                <section
-                  className="hero-promo-slide promo-slide-primary"
-                  aria-hidden={promoSlide !== 1}
-                >
-                  <div className="hero-copy">
-                    <span className="eyebrow">SAFE · FAST · RELIABLE</span>
-                    <h1>
-                      官方正规渠道
-                      <br />
-                      下单自动发货
-                    </h1>
-                    <p>
-                      账号/卡密/会员—&gt;自动推送至订单邮箱，安心购买，售后无忧。
-                      <br />
-                      <strong>7 × 24 小时客服人工在线服务</strong>
-                    </p>
-                    <div className="hero-metrics">
-                      <span>
-                        <b>7 × 24</b>
-                        <small>账号 / 卡密自动发货</small>
-                      </span>
-                      <span>
-                        <b>官方Visa直充</b>
-                        <small>官方Visa会员代充</small>
-                      </span>
-                      <span>
-                        <b>无效退款</b>
-                        <small>保质保量，售后保障</small>
-                      </span>
-                    </div>
-                  </div>
-                  <div className="hero-art" aria-hidden="true">
-                    <div className="orbit one" />
-                    <div className="orbit two" />
-                    <div className="glow-card">
-                      <span>✓</span>
-                      <strong>即时交付</strong>
-                      <small>支付核验后发送至订单邮箱</small>
-                    </div>
-                    <div className="cube c1">AI</div>
-                    <div className="cube c2">N</div>
-                    <div className="cube c3">⌘</div>
-                  </div>
-                </section>
-                <section
-                  className="hero-promo-slide promo-slide-service"
-                  aria-hidden={promoSlide !== 0}
-                >
-                  <div className="hero-copy">
-                    <span className="eyebrow">ONE-STOP · AI · SERVICE</span>
-                    <h1 className="service-banner-title">
-                      <span>宇星商城</span>
-                      <span>一站式网络与现实综合服务</span>
-                      <span>不一样的AI时代网络商城</span>
-                    </h1>
-                    <div className="hero-metrics">
-                      <span>
-                        <b>网络与服务</b>
-                      </span>
-                      <span>
-                        <b>技术上门服务</b>
-                      </span>
-                      <span>
-                        <b>7 * 24小时在线</b>
-                      </span>
-                    </div>
-                  </div>
-                  <div className="hero-art hero-art-service" aria-hidden="true">
-                    <div className="orbit one" />
-                    <div className="orbit two" />
-                    <div className="glow-card">
-                      <span>✦</span>
-                      <strong>一站式服务</strong>
-                      <small>AI 时代网络服务触手可及</small>
-                    </div>
-                    <div className="cube c1">AI</div>
-                    <div className="cube c2">24</div>
-                    <div className="cube c3">∞</div>
-                  </div>
-                </section>
-              </div>
-              <div className="hero-promo-dots" role="tablist" aria-label="宣传推广切换">
-                {[0, 1].map((index) => (
-                  <button
-                    type="button"
-                    key={index}
-                    role="tab"
-                    aria-selected={promoSlide === index}
-                    aria-label={`查看第 ${index + 1} 条宣传`}
-                    className={promoSlide === index ? "active" : ""}
-                    onClick={() => setPromoSlide(index)}
-                  />
-                ))}
-              </div>
-            </div>
-          </div>
+          <StorefrontBanners />
 
           <section className="channel-switch" aria-label="服务频道">
             <button
