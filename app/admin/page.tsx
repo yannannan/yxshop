@@ -92,6 +92,8 @@ export default function AdminPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [notice, setNotice] = useState('');
   const [productForm, setProductForm] = useState<ProductForm | null>(null);
+  const [productError, setProductError] = useState('');
+  const [savingProduct, setSavingProduct] = useState(false);
   const [categoryForm, setCategoryForm] = useState<CategoryForm | null>(null);
   const [collapsedCategories, setCollapsedCategories] = useState<number[]>([]);
   const [delivery, setDelivery] = useState<{ id: string; productId: number; credentialId: number; content: string } | null>(null);
@@ -220,17 +222,22 @@ export default function AdminPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, data.emailConfig, data.notificationSettings]);
 
-  async function action(body: Record<string, string | number>) {
+  async function action(body: Record<string, string | number>, reportError = setNotice) {
     setNotice('');
-    const response = await fetch('/api/admin', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
-    const result = await response.json() as { message?: string };
-    if (!response.ok) {
-      setNotice(result.message || '操作未完成');
+    try {
+      const response = await fetch('/api/admin', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+      const result = await response.json() as { message?: string };
+      if (!response.ok) {
+        reportError(result.message || '操作未完成');
+        return false;
+      }
+      await load();
+      if (result.message) setNotice(result.message);
+      return true;
+    } catch {
+      reportError('请求失败，请检查网络后重试');
       return false;
     }
-    await load();
-    if (result.message) setNotice(result.message);
-    return true;
   }
 
   const parents = useMemo(() => data.categories.filter((item) => !item.parent_id), [data.categories]);
@@ -257,10 +264,12 @@ export default function AdminPage() {
     [data.categories, categoryDepth],
   );
   const rootForCategory = useCallback((categoryName: string) => {
+    const root = parents.find((item) => text(item.name) === categoryName);
+    if (root) return text(root.name);
     const category = secondLevelCategories.find((item) => text(item.name) === categoryName);
     if (!category) return '';
     return text(data.categories.find((item) => Number(item.id) === Number(category.parent_id))?.name);
-  }, [data.categories, secondLevelCategories]);
+  }, [data.categories, parents, secondLevelCategories]);
   const secondForRoot = useCallback((rootName: string) => {
     const root = parents.find((item) => text(item.name) === rootName);
     return root ? categoryChildren(Number(root.id)) : [];
@@ -278,10 +287,10 @@ export default function AdminPage() {
     return data.products.filter((product) => {
       const searchable = `${text(product.name)} ${text(product.category)} ${text(product.subcategory)} ${text(product.id)}`.toLowerCase();
       return (!keyword || searchable.includes(keyword)) &&
-        (!productFilters.category || text(product.category) === productFilters.category) &&
+        (!productFilters.category || text(product.category) === productFilters.category || rootForCategory(text(product.category)) === productFilters.category) &&
         (productListTab === 'all' ? text(product.status) !== 'closed' : text(product.status) === productListTab);
     });
-  }, [data.products, productFilters, productListTab]);
+  }, [data.products, productFilters, productListTab, rootForCategory]);
   const productPageCount = Math.max(1, Math.ceil(filteredProducts.length / 10));
   const currentProductPage = Math.min(productPage, productPageCount);
   const paginatedProducts = filteredProducts.slice((currentProductPage - 1) * 10, currentProductPage * 10);
@@ -314,6 +323,7 @@ export default function AdminPage() {
 
   function startProduct(product?: Row) {
     setProductImageError('');
+    setProductError('');
     if (!product) {
       const firstRoot = parents.find((item) => item.status === 'active');
       const rootCategory = firstRoot ? text(firstRoot.name) : '';
@@ -324,9 +334,26 @@ export default function AdminPage() {
       return;
     }
     const category = text(product.category);
+    const rootCategory = rootForCategory(category);
     setProductForm({
-      id: Number(product.id), name: text(product.name), rootCategory: rootForCategory(category), category, subcategory: text(product.subcategory), price: text(product.price), costPrice: text(product.cost_price || 0), oldPrice: text(product.old_price), billingCycle: text(product.billing_cycle) || 'once', stock: text(product.stock), description: text(product.description), detail: text(product.detail), attributesText: attributeText(product.attributes_json), tag: text(product.tag) || '在售', tone: text(product.tone) || 'dark', initial: text(product.initial), coverImage: text(product.cover_image), detailImage: text(product.detail_image),
+      id: Number(product.id), name: text(product.name), rootCategory, category: category === rootCategory ? '' : category, subcategory: text(product.subcategory), price: text(product.price), costPrice: text(product.cost_price || 0), oldPrice: text(product.old_price), billingCycle: text(product.billing_cycle) || 'once', stock: text(product.stock), description: text(product.description), detail: text(product.detail), attributesText: attributeText(product.attributes_json), tag: text(product.tag) || '在售', tone: text(product.tone) || 'dark', initial: text(product.initial), coverImage: text(product.cover_image), detailImage: text(product.detail_image),
     });
+  }
+
+  async function saveProduct() {
+    if (!productForm || savingProduct) return;
+    setProductError('');
+    if (!productForm.name.trim()) { setProductError('请填写商品名称'); return; }
+    if (!productForm.rootCategory) { setProductError('请选择一级菜单'); return; }
+    setSavingProduct(true);
+    try {
+      if (await action({ action: 'product-save', ...productForm }, setProductError)) {
+        setProductForm(null);
+        setNotice(productForm.id ? '商品已保存。' : '商品已新增，当前默认下架；需要展示时可直接点击“上架”。');
+      }
+    } finally {
+      setSavingProduct(false);
+    }
   }
 
   function startCategory(category?: Row) {
@@ -477,7 +504,7 @@ export default function AdminPage() {
           {active === 'products' && <>
             <div className="panel-title"><div><h2>商品列表</h2><p>可维护商品分类、价格、库存及前台详情内容</p></div><div className="panel-title-actions"><button className="refresh-list-button" disabled={refreshing} onClick={() => void load(true)}>{refreshing ? '正在刷新…' : '↻ 刷新列表'}</button><button onClick={() => startProduct()}>＋ 新增商品</button></div></div>
             <div className="order-tabs product-tabs">{productListTabs.map((tab) => <button key={tab.key} className={`${productListTab === tab.key ? 'active ' : ''}${tab.key === 'closed' ? 'void-tab' : ''}`} onClick={() => { setProductListTab(tab.key); setProductPage(1); setSelectedProductIds([]); }}>{tab.label} <span>{tab.key === 'all' ? data.products.filter((product) => text(product.status) !== 'closed').length : data.products.filter((product) => text(product.status) === tab.key).length}</span></button>)}</div>
-            <div className="product-filter"><b>筛选条件</b><input value={productFilters.keyword} onChange={(event) => { setProductFilters({ ...productFilters, keyword: event.target.value }); setProductPage(1); }} placeholder="商品名称、分类或商品 ID" /><select value={productFilters.category} onChange={(event) => { setProductFilters({ ...productFilters, category: event.target.value }); setProductPage(1); }}><option value="">全部分类</option>{secondLevelCategories.map((item) => <option key={text(item.id)} value={text(item.name)}>{text(item.name)}</option>)}</select><small>{productListTab === 'closed' ? `已选 ${selectedVisibleProductIds.length} / ` : ''}共 {filteredProducts.length} 件</small><button type="button" onClick={() => { setProductFilters({ keyword: '', category: '' }); setProductPage(1); }}>重置</button>{productListTab === 'closed' && <button type="button" className="product-batch-delete" disabled={!selectedVisibleProductIds.length} onClick={requestBatchProductDelete}>批量删除</button>}</div>
+            <div className="product-filter"><b>筛选条件</b><input value={productFilters.keyword} onChange={(event) => { setProductFilters({ ...productFilters, keyword: event.target.value }); setProductPage(1); }} placeholder="商品名称、分类或商品 ID" /><select value={productFilters.category} onChange={(event) => { setProductFilters({ ...productFilters, category: event.target.value }); setProductPage(1); }}><option value="">全部分类</option>{categoryParentOptions.map((item) => <option key={text(item.id)} value={text(item.name)}>{text(item.name)}（{categoryDepth(item)}级）</option>)}</select><small>{productListTab === 'closed' ? `已选 ${selectedVisibleProductIds.length} / ` : ''}共 {filteredProducts.length} 件</small><button type="button" onClick={() => { setProductFilters({ keyword: '', category: '' }); setProductPage(1); }}>重置</button>{productListTab === 'closed' && <button type="button" className="product-batch-delete" disabled={!selectedVisibleProductIds.length} onClick={requestBatchProductDelete}>批量删除</button>}</div>
             <div className="table-wrap"><table><thead><tr>{productListTab === 'closed' && <th className="order-select-cell"><input type="checkbox" aria-label="全选当前页已作废商品" checked={allVisibleProductsSelected} disabled={!paginatedProducts.length} onChange={toggleAllProductSelection} /></th>}<th>排序</th><th>商品</th><th>分类</th><th>售价 / 周期</th><th>成本</th><th>库存</th><th>支付配置状态</th><th>上架状态</th><th>操作</th></tr></thead><tbody>{paginatedProducts.map((product, productPageIndex) => { const productId = Number(product.id); const isClosed = text(product.status) === 'closed'; const paymentConfigured = data.qrs.some((qr) => Number(qr.product_id) === productId && Number(qr.amount) === Number(product.price) && text(qr.status) === 'active' && Boolean(text(qr.image_url))); const productPosition = (currentProductPage - 1) * 10 + productPageIndex; const previousProduct = filteredProducts[productPosition - 1]; const nextProduct = filteredProducts[productPosition + 1]; return <tr key={text(product.id)}>{productListTab === 'closed' && <td className="order-select-cell"><input type="checkbox" aria-label={`选择商品 ${text(product.name)}`} checked={selectedProductIds.includes(productId)} onChange={() => toggleProductSelection(productId)} /></td>}<td className="product-sort-cell">{isClosed ? <span>—</span> : <><button type="button" aria-label={`上移 ${text(product.name)}`} title="上移" disabled={!previousProduct} onClick={() => previousProduct && void action({ action: 'product-sort', id: productId, targetId: Number(previousProduct.id) })}>↑</button><button type="button" aria-label={`下移 ${text(product.name)}`} title="下移" disabled={!nextProduct} onClick={() => nextProduct && void action({ action: 'product-sort', id: productId, targetId: Number(nextProduct.id) })}>↓</button></>}<small>#{text(product.sort_order)}</small></td><td><div className="admin-product-cell">{text(product.cover_image) ? <Image unoptimized src={text(product.cover_image)} alt="" width={44} height={44} /> : <span>{text(product.initial) || '图'}</span>}<div><b>{text(product.name)}</b><small>商品 ID：{text(product.id)}</small></div></div></td><td>{text(product.category)}<small>{text(product.subcategory)}</small></td><td className="money">¥{text(product.price)}<small>{billingCycleLabel(text(product.billing_cycle))}</small></td><td className="cost-money">¥{text(product.cost_price || 0)}</td><td>{text(product.stock)}</td><td><span className={`payment-config-status ${paymentConfigured ? 'configured' : 'unconfigured'}`}>{paymentConfigured ? '已配置' : '未配置'}</span></td><td><Status value={text(product.status)} activeLabel="已上架" /></td><td>{!isClosed && <><button className="text-action" onClick={() => startProduct(product)}>编辑</button><button className="text-action" onClick={() => startProductQr(product)}>支付二维码</button><button className="text-action" onClick={() => confirmStatus('变更商品状态', `确定${product.status === 'active' ? '下架' : '上架'}“${text(product.name)}”吗？`, { action: 'product-status', id: productId, status: product.status === 'active' ? 'inactive' : 'active' })}>{product.status === 'active' ? '下架' : '上架'}</button></>}<button className="text-action" onClick={() => setConfirmTarget({ title: '克隆商品', description: `确定克隆“${text(product.name)}”吗？新商品将默认下架，支付二维码不会复制。`, confirmText: '确认克隆', body: { action: 'product-clone', id: productId } })}>克隆</button>{isClosed ? <button className="text-action danger-action" onClick={() => setConfirmTarget({ title: '永久删除商品', description: `确定永久删除已作废商品“${text(product.name)}”吗？商品已有历史订单时系统会拒绝删除。`, confirmText: '确认永久删除', danger: true, body: { action: 'product-delete', id: productId } })}>删除</button> : <button className="text-action danger-action" onClick={() => setConfirmTarget({ title: '作废商品', description: `确定作废“${text(product.name)}”吗？作废后商城前台将不再展示。`, confirmText: '确认作废', danger: true, body: { action: 'product-status', id: productId, status: 'closed' } })}>作废</button>}</td></tr>; })}</tbody></table>{data.products.length === 0 ? <Empty text="暂无商品，请先添加" /> : filteredProducts.length === 0 && <Empty text="没有符合筛选条件的商品" />}{filteredProducts.length > 0 && <div className="admin-pagination"><button type="button" disabled={currentProductPage <= 1} onClick={() => setProductPage((page) => Math.max(1, page - 1))}>上一页</button><span>第 {currentProductPage} / {productPageCount} 页</span><button type="button" disabled={currentProductPage >= productPageCount} onClick={() => setProductPage((page) => Math.min(productPageCount, page + 1))}>下一页</button></div>}</div>
           </>}
 
@@ -527,12 +554,12 @@ export default function AdminPage() {
         </>}
       </div>
     </section>
-    {productForm && <div className="admin-modal-mask" role="presentation"><section className="admin-modal" role="dialog" aria-modal="true" aria-labelledby="product-editor-title"><div className="editor-head"><div><span className="section-kicker">PRODUCT EDITOR</span><b id="product-editor-title">{productForm.id ? '编辑商品' : '新增商品'}</b></div><button className="modal-close" aria-label="关闭商品编辑" onClick={() => setProductForm(null)}>×</button></div><div className="admin-form-grid">
+    {productForm && <div className="admin-modal-mask" role="presentation"><section className="admin-modal product-editor-modal" role="dialog" aria-modal="true" aria-labelledby="product-editor-title"><div className="editor-head"><div><span className="section-kicker">PRODUCT EDITOR</span><b id="product-editor-title">{productForm.id ? '编辑商品' : '新增商品'}</b></div><button className="modal-close" aria-label="关闭商品编辑" disabled={savingProduct} onClick={() => setProductForm(null)}>×</button></div><div className="admin-form-grid">
       <Field label="商品名称"><input autoFocus value={productForm.name} onChange={(event) => setProductForm({ ...productForm, name: event.target.value })} /></Field>
       <Field label="商品角标"><input value={productForm.tag} onChange={(event) => setProductForm({ ...productForm, tag: event.target.value })} placeholder="如：热卖" /></Field>
       <Field label="一级菜单"><select value={productForm.rootCategory} onChange={(event) => { const rootCategory = event.target.value; const categoryItem = secondForRoot(rootCategory).find((item) => item.status === 'active'); const category = categoryItem ? text(categoryItem.name) : ''; const child = thirdForSecond(category).find((item) => item.status === 'active'); setProductForm({ ...productForm, rootCategory, category, subcategory: child ? text(child.name) : '' }); }}><option value="">请选择</option>{parents.filter((item) => item.status === 'active').map((item) => <option key={text(item.id)} value={text(item.name)}>{text(item.name)}</option>)}</select></Field>
-      <Field label="二级分类"><select value={productForm.category} onChange={(event) => { const category = event.target.value; const child = thirdForSecond(category).find((item) => item.status === 'active'); setProductForm({ ...productForm, category, subcategory: child ? text(child.name) : '' }); }}><option value="">请选择</option>{secondForRoot(productForm.rootCategory).filter((item) => item.status === 'active').map((item) => <option key={text(item.id)} value={text(item.name)}>{text(item.name)}</option>)}</select></Field>
-      <Field label="三级分类"><select value={productForm.subcategory} onChange={(event) => setProductForm({ ...productForm, subcategory: event.target.value })}><option value="">请选择</option>{thirdForSecond(productForm.category).filter((item) => item.status === 'active').map((item) => <option key={text(item.id)} value={text(item.name)}>{text(item.name)}</option>)}</select></Field>
+      <Field label="二级分类（可选）"><select value={productForm.category} disabled={!productForm.rootCategory} onChange={(event) => { const category = event.target.value; const child = thirdForSecond(category).find((item) => item.status === 'active'); setProductForm({ ...productForm, category, subcategory: child ? text(child.name) : '' }); }}><option value="">不选择，归属一级菜单</option>{secondForRoot(productForm.rootCategory).filter((item) => item.status === 'active').map((item) => <option key={text(item.id)} value={text(item.name)}>{text(item.name)}</option>)}</select></Field>
+      <Field label="三级分类（可选）"><select value={productForm.subcategory} disabled={!productForm.category} onChange={(event) => setProductForm({ ...productForm, subcategory: event.target.value })}><option value="">{productForm.category ? '不选择，归属二级分类' : '请先选择二级分类'}</option>{thirdForSecond(productForm.category).filter((item) => item.status === 'active').map((item) => <option key={text(item.id)} value={text(item.name)}>{text(item.name)}</option>)}</select></Field>
       <Field label="售价（元）"><input type="number" min="0" value={productForm.price} onChange={(event) => setProductForm({ ...productForm, price: event.target.value })} /></Field>
       <Field label="成本价（元）"><input type="number" min="0" step="0.01" value={productForm.costPrice} onChange={(event) => setProductForm({ ...productForm, costPrice: event.target.value })} /></Field>
       <Field label="计费周期"><select value={productForm.billingCycle} onChange={(event) => setProductForm({ ...productForm, billingCycle: event.target.value })}><option value="once">一次性</option><option value="day">按天</option><option value="week">按周</option><option value="month">按月</option><option value="year">按年</option><option value="times">按次</option></select></Field>
@@ -545,7 +572,7 @@ export default function AdminPage() {
       <Field label="简短描述"><input value={productForm.description} onChange={(event) => setProductForm({ ...productForm, description: event.target.value })} placeholder="列表与详情页摘要" /></Field>
       <Field label="商品属性" wide><textarea value={productForm.attributesText} onChange={(event) => setProductForm({ ...productForm, attributesText: event.target.value })} placeholder={'使用方式：多人共享\n共享人数：5 人\n会话：独立\n有效期：30 天\n网络要求：无需代理'} /></Field>
       <Field label="商品详情" wide><textarea value={productForm.detail} onChange={(event) => setProductForm({ ...productForm, detail: event.target.value })} placeholder="填写商品详情、交付说明或购买须知" /></Field>
-      </div><div className="admin-form-actions"><button className="ghost-button" onClick={() => setProductForm(null)}>取消</button><button onClick={async () => { const isNew = !productForm.id; if (await action({ action: 'product-save', ...productForm })) { setProductForm(null); if (isNew) setNotice('商品已新增，当前默认下架；需要展示时可直接点击“上架”。'); } }}>保存商品</button></div></section></div>}
+      </div>{productError && <div className="product-editor-error" role="alert">{productError}</div>}<div className="admin-form-actions"><button className="ghost-button" disabled={savingProduct} onClick={() => setProductForm(null)}>取消</button><button disabled={savingProduct || Boolean(uploadingProductImage)} onClick={() => void saveProduct()}>{savingProduct ? '正在保存…' : '保存商品'}</button></div></section></div>}
     {categoryForm && <Modal title={categoryForm.id ? '编辑分类' : '新增分类'} onClose={() => setCategoryForm(null)}><div className="admin-form-grid"><Field label="分类名称"><input autoFocus value={categoryForm.name} onChange={(event) => setCategoryForm({ ...categoryForm, name: event.target.value })} /></Field><Field label="所属上级分类"><select value={categoryForm.parentId} onChange={(event) => setCategoryForm({ ...categoryForm, parentId: event.target.value })}><option value="">无（作为一级菜单）</option>{categoryParentOptions.filter((item) => Number(item.id) !== categoryForm.id).map((item) => <option key={text(item.id)} value={text(item.id)}>{'　'.repeat(categoryDepth(item) - 1)}{text(item.name)}（{categoryDepth(item)}级）</option>)}</select></Field><Field label="排序值"><input type="number" value={categoryForm.sort} onChange={(event) => setCategoryForm({ ...categoryForm, sort: event.target.value })} /></Field><Field label="状态"><select value={categoryForm.status} onChange={(event) => setCategoryForm({ ...categoryForm, status: event.target.value })}><option value="active">启用</option><option value="inactive">停用</option></select></Field></div><div className="admin-form-actions"><button className="ghost-button" onClick={() => setCategoryForm(null)}>取消</button><button onClick={async () => { if (await action({ action: 'category-save', ...categoryForm })) setCategoryForm(null); }}>保存分类</button></div></Modal>}
     {productQr && <Modal title={`支付二维码 · ${text(productQr.name)}`} onClose={() => setProductQr(null)}><p className="product-qr-note">当前商品售价：<b>¥{Number(productQr.price).toFixed(2)}</b>。支付二维码可按需要配置，不影响商品上架状态。</p><div className="product-qr-list">{(['wechat', 'alipay'] as const).map((type) => { const qr = currentProductQrs.find((item) => item.type === type); const hasImage = Boolean(qr && text(qr.image_url)); return <article key={type}><div className="product-qr-preview">{hasImage ? <Image unoptimized src={text(qr?.image_url)} alt={`${paymentTypeLabel(type)}二维码`} width={82} height={82} /> : <span>待上传</span>}</div><div><b>{paymentTypeLabel(type)}</b><small>对应金额 ¥{Number(productQr.price).toFixed(2)}</small><Status value={text(qr?.status) || 'inactive'} /></div><div className="product-qr-actions"><button className="text-action" onClick={() => startQr(qr || { id: null, product_id: Number(productQr.id), name: '', type, amount: Number(productQr.price), image_url: null })}>{hasImage ? '修改二维码' : '上传二维码'}</button>{qr && <><button className="text-action" onClick={() => confirmStatus('变更二维码状态', `确定${qr.status === 'active' ? '停用' : '启用'}${paymentTypeLabel(type)}二维码吗？`, { action: 'qr-status', id: Number(qr.id), status: qr.status === 'active' ? 'inactive' : 'active' })}>{qr.status === 'active' ? '停用' : '启用'}</button><button className="text-action danger-action" onClick={() => setConfirmTarget({ title: '删除支付二维码', description: `确定删除${paymentTypeLabel(type)}二维码吗？删除后商品将无法通过该支付方式收款。`, confirmText: '确认删除', danger: true, body: { action: 'qr-delete', id: Number(qr.id) } })}>删除</button></>}</div></article>; })}</div></Modal>}
     {qrForm && <Modal title={`设置${paymentTypeLabel(qrForm.type)}二维码`} onClose={() => setQrForm(null)} compact><div className="admin-form-grid"><Field label="支付类型"><input value={paymentTypeLabel(qrForm.type)} readOnly /></Field><Field label="对应商品金额"><input value={`¥${Number(qrForm.amount).toFixed(2)}`} readOnly /></Field><Field label="二维码名称"><input autoFocus value={qrForm.name} onChange={(event) => setQrForm({ ...qrForm, name: event.target.value })} placeholder="留空则自动生成名称" /></Field><Field label="二维码图片" wide><div className="qr-upload"><input type="file" accept="image/*" onChange={(event) => selectQrImage(event.target.files?.[0])} />{qrForm.imageUrl ? <Image unoptimized src={qrForm.imageUrl} alt="二维码预览" width={64} height={64} /> : <span>未上传图片</span>}</div>{qrImageError && <small className="upload-error">{qrImageError}</small>}</Field></div><div className="admin-form-actions"><button className="ghost-button" onClick={() => setQrForm(null)}>取消</button><button onClick={async () => { if (await action({ action: 'qr-save', ...qrForm })) setQrForm(null); }}>保存二维码</button></div></Modal>}

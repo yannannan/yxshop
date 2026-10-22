@@ -60,9 +60,11 @@ export async function POST(request: Request) {
   switch (action) {
     case 'product-save': {
       const name = String(body.name || '').trim();
-      const category = String(body.category || '').trim();
+      const selectedCategory = String(body.category || '').trim();
+      const category = selectedCategory || String(body.rootCategory || '').trim();
       const subcategory = String(body.subcategory || '').trim();
-      if (!name || !category || !subcategory) return Response.json({ message: '请填写商品名称和分类' }, { status: 400 });
+      if (!name || !category) return Response.json({ message: '请填写商品名称并选择一级菜单' }, { status: 400 });
+      if (subcategory && !selectedCategory) return Response.json({ message: '请选择三级分类所属的二级分类' }, { status: 400 });
       const price = Number(body.price || 0);
       const billingCycle = validBillingCycle(body.billingCycle);
       const attributesJson = normalizeProductAttributes(body.attributesText);
@@ -183,7 +185,7 @@ export async function POST(request: Request) {
         }
 
         if (oldDepth !== newDepth) {
-          const linkedProducts = oldDepth === 2
+          const linkedProducts = oldDepth <= 2
             ? await env.DB.prepare('SELECT COUNT(*) AS total FROM products WHERE category=?').bind(old.name).first<{ total: number }>()
             : oldDepth === 3
               ? await env.DB.prepare('SELECT COUNT(*) AS total FROM products WHERE category=? AND subcategory=?').bind(old.parent_name, old.name).first<{ total: number }>()
@@ -197,7 +199,7 @@ export async function POST(request: Request) {
           .bind(parentId, name, Number(body.sort || 0), body.status || 'active', id)
           .run();
 
-        if (oldDepth === 2) {
+        if (oldDepth <= 2) {
           await env.DB.prepare('UPDATE products SET category=?,updated_at=? WHERE category=?')
             .bind(name, now, old.name)
             .run();
@@ -224,7 +226,7 @@ export async function POST(request: Request) {
       const children = await env.DB.prepare('SELECT COUNT(*) AS total FROM categories WHERE parent_id=?').bind(category.id).first<{ total: number }>();
       const depth = !category.parent_id ? 1 : category.grand_parent_id ? 3 : 2;
       let products = { total: 0 } as { total: number };
-      if (depth === 2) {
+      if (depth <= 2) {
         products = await env.DB.prepare('SELECT COUNT(*) AS total FROM products WHERE category=?').bind(category.name).first<{ total: number }>() || products;
       } else if (depth === 3) {
         products = await env.DB.prepare('SELECT COUNT(*) AS total FROM products WHERE category=? AND subcategory=?').bind(category.parent_name, category.name).first<{ total: number }>() || products;

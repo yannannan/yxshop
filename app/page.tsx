@@ -11,7 +11,7 @@ import {
   parseProductAttributes,
   type CatalogProduct,
 } from "../lib/catalog";
-import { categoryTree, type CategoryNode } from "../lib/categories";
+import { categoryTree, matchesProductCategory, type CategoryNode } from "../lib/categories";
 import {
   formatServicePrice,
   serviceDeliveryLabels,
@@ -154,20 +154,8 @@ export default function StorePage() {
   const visible = useMemo(() => {
     const keyword = query.trim().toLowerCase();
     return products.filter((product) => {
-      const inPrimary =
-        category === "全部商品" ||
-        secondaryCategoryNames.includes(product.category) ||
-        product.category === category;
-      const inSecondary =
-        subcategory === "全部" ||
-        product.category === subcategory ||
-        product.subcategory === subcategory;
-      const inThird =
-        thirdCategory === "全部" || product.subcategory === thirdCategory;
       return (
-        inPrimary &&
-        inSecondary &&
-        inThird &&
+        matchesProductCategory(product, categoryGroups, category, subcategory, thirdCategory) &&
         `${product.name}${product.desc}`.toLowerCase().includes(keyword)
       );
     });
@@ -177,7 +165,7 @@ export default function StorePage() {
     subcategory,
     thirdCategory,
     query,
-    secondaryCategoryNames,
+    categoryGroups,
   ]);
   const totalPages = Math.max(1, Math.ceil(visible.length / pageSize));
   const currentPage = Math.min(page, totalPages);
@@ -282,7 +270,7 @@ export default function StorePage() {
         <div className="product-info">
           <div className="product-meta">
             <span>
-              {product.category} · {product.subcategory}
+              {[product.category, product.subcategory].filter(Boolean).join(' · ')}
             </span>
             <i>库存充足</i>
           </div>

@@ -223,3 +223,6 @@
   .onsite-editor-modal .technical-payment-admin{margin:14px 14px 0}
   .onsite-editor-modal>.admin-form-actions{margin:14px}
 }
+
+.product-editor-error{margin-top:16px;padding:10px 12px;border:1px solid #f0b9ae;border-radius:8px;background:#fff3ef;color:#ac3523;font-size:13px;line-height:1.6}
+.product-editor-modal .admin-form-actions button:disabled,.product-editor-modal .modal-close:disabled{opacity:.55;cursor:not-allowed}
