@@ -21,6 +21,10 @@ pnpm install --frozen-lockfile
 echo "[5/6] 构建生产版本..."
 pnpm build
 
+chmod -R 777 /home/www/yxshop/yxshopdev/upgrade.sh
+chmod -R 777 /home/www/yxshop/yxshopdev/start.sh
+chmod -R 777 /home/www/yxshop/yxshopdev/stop.sh
+
 echo "[6/6] 启动服务..."
 ./start.sh
 
