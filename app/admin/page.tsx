@@ -226,16 +226,20 @@ export default function AdminPage() {
     setNotice('');
     try {
       const response = await fetch('/api/admin', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
-      const result = await response.json() as { message?: string };
+      const result = await response.json().catch(() => null) as { message?: string } | null;
       if (!response.ok) {
-        reportError(result.message || '操作未完成');
+        reportError(result?.message || `服务端处理失败（HTTP ${response.status}），请稍后重试`);
+        return false;
+      }
+      if (!result || typeof result !== 'object') {
+        reportError('服务端返回异常，请刷新页面后重试');
         return false;
       }
       await load();
       if (result.message) setNotice(result.message);
       return true;
     } catch {
-      reportError('请求失败，请检查网络后重试');
+      reportError('无法连接服务器，请检查网络后重试');
       return false;
     }
   }

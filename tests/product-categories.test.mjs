@@ -19,22 +19,35 @@ const routeSource = ts.transpileModule(
 ).outputText;
 
 // 隔离数据库、会话及邮件；调用真实 POST 路由，不连接业务数据库。
-function adminRoute({ category, parent, linkedProducts = 0, children = 0 } = {}) {
+function adminRoute({ category, parent, linkedProducts = 0, children = 0, nextSortOrder = 43, failSort = false, failWrite = false, sourceProduct = null } = {}) {
   const writes = [];
   const paymentRecords = [];
+  const errors = [];
   const DB = {
     prepare(sql) {
       let values = [];
       return {
         bind(...args) { values = args; return this; },
         async first() {
+          if (sql.startsWith('SELECT COALESCE(MAX(sort_order)')) {
+            if (failSort) throw new Error('模拟读取排序失败');
+            return { sort_order: nextSortOrder };
+          }
+          if (sql.startsWith('SELECT * FROM products')) return sourceProduct;
           if (sql.includes('COUNT(*)') && sql.includes('FROM products')) return { total: linkedProducts };
           if (sql.includes('COUNT(*)') && sql.includes('FROM categories')) return { total: children };
           if (sql.startsWith('SELECT c.')) return category || null;
           if (sql.startsWith('SELECT id,parent_id,name FROM categories')) return parent || null;
           return null;
         },
-        async run() { writes.push({ sql, values }); return { meta: { last_row_id: 101 } }; },
+        async run() {
+          if (/^UPDATE products SET sort_order=\(SELECT.*FROM products/i.test(sql)) {
+            throw new Error("You can't specify target table 'products' for update in FROM clause");
+          }
+          if (failWrite) throw new Error('模拟数据库写入失败');
+          writes.push({ sql, values });
+          return { meta: { last_row_id: 101 } };
+        },
       };
     },
   };
@@ -46,11 +59,11 @@ function adminRoute({ category, parent, linkedProducts = 0, children = 0 } = {})
   };
   const exports = {};
   vm.runInNewContext(routeSource, {
-    exports, Response, console,
+    exports, Response, console: { ...console, error: (...args) => errors.push(args) },
     require(name) { assert.ok(name in modules, `Unexpected import: ${name}`); return modules[name]; },
   });
   return {
-    writes, paymentRecords,
+    writes, paymentRecords, errors,
     post(body) { return exports.POST(new Request('http://localhost/api/admin', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })); },
   };
 }
@@ -82,6 +95,7 @@ for (const entry of cases) {
       assert.equal(matchesProductCategory(product, categories, otherRoot), false);
       assert.equal(route.paymentRecords.length, 1);
       if (edit) assert.equal(saved.values.at(-1), 101);
+      else assert.equal(saved.values.at(-1), 43);
     });
   }
 }
@@ -131,4 +145,44 @@ test('直接关联商品的一级菜单禁止直接变更层级', async () => {
   });
   assert.equal((await route.post({ action: 'category-save', id: 1, name: '工具服务', parentId: 2 })).status, 400);
   assert.equal(route.writes.length, 0);
+});
+
+test('截图中的零元一级商品及两张上传图能一次写入，并排到现有商品末尾', async () => {
+  const route = adminRoute();
+  const response = await route.post({
+    action: 'product-save', name: '免费C盘清理工具(100%释放)', rootCategory: '工具服务', category: '', subcategory: '',
+    price: '0.00', costPrice: '0.00', oldPrice: '0.00', stock: '99999',
+    coverImage: '/api/product-images?key=products%2Ftest-cover.png',
+    detailImage: '/api/product-images?key=products%2Ftest-detail.png',
+    attributesText: 'C盘清理(100%释放)\n清理扫描只需30秒\n安全锁机制',
+  });
+  assert.equal(response.status, 200);
+  assert.equal(route.writes.length, 1);
+  assert.equal(route.writes[0].values[3], 0);
+  assert.equal(route.writes[0].values[13], 99999);
+  assert.equal(route.writes[0].values.at(-1), 43);
+  assert.equal(route.errors.length, 0);
+});
+
+test('空商品列表从排序 1 开始，克隆商品也直接写入末尾排序', async () => {
+  const empty = adminRoute({ nextSortOrder: 1 });
+  assert.equal((await empty.post({ action: 'product-save', name: '首件商品', rootCategory: '工具服务', price: 0 })).status, 200);
+  assert.equal(empty.writes[0].values.at(-1), 1);
+  const clone = adminRoute({ sourceProduct: { name: '原商品', category: '工具服务', subcategory: '', price: 0 } });
+  assert.equal((await clone.post({ action: 'product-clone', id: 5 })).status, 200);
+  assert.equal(clone.writes.length, 1);
+  assert.equal(clone.writes[0].values[0], '原商品（副本）');
+  assert.equal(clone.writes[0].values.at(-1), 43);
+});
+
+test('读取排序或写入失败时返回 JSON 服务端错误，不留下半保存商品', async () => {
+  for (const failure of [{ failSort: true }, { failWrite: true }]) {
+    const route = adminRoute(failure);
+    const response = await route.post({ action: 'product-save', name: '保存失败测试', rootCategory: '工具服务', price: 0 });
+    assert.equal(response.status, 500);
+    assert.match(response.headers.get('content-type'), /application\/json/);
+    assert.match((await response.json()).message, /服务端/);
+    assert.equal(route.writes.length, 0);
+    assert.equal(route.errors.length, 1);
+  }
 });

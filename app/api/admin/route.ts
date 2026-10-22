@@ -18,6 +18,15 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  try {
+    return await handleAdminAction(request);
+  } catch (error) {
+    console.error('后台操作失败', error);
+    return Response.json({ message: '服务端处理失败，请稍后重试；如持续失败，请查看服务端日志。' }, { status: 500 });
+  }
+}
+
+async function handleAdminAction(request: Request) {
   await ensureDatabase();
   const admin = await getAdminContext(request);
   if (!admin) return adminDenied();
@@ -73,13 +82,12 @@ export async function POST(request: Request) {
       if (coverImage === null || detailImage === null) return Response.json({ message: '商品图片地址不正确，请重新上传' }, { status: 400 });
       const values = [name, category, subcategory, price, Number(body.costPrice || 0), Number(body.oldPrice || body.price || 0), String(body.description || ''), String(body.detail || ''), String(body.tag || '在售'), String(body.tone || 'dark'), String(body.initial || name.slice(0, 1)), coverImage, detailImage, Number(body.stock || 0), billingCycle, attributesJson, now];
       let productId = Number(body.id || 0);
-      const isNew = !productId;
       if (productId) await env.DB.prepare('UPDATE products SET name=?,category=?,subcategory=?,price=?,cost_price=?,old_price=?,description=?,detail=?,tag=?,tone=?,initial=?,cover_image=?,detail_image=?,stock=?,billing_cycle=?,attributes_json=?,updated_at=? WHERE id=?').bind(...values, productId).run();
       else {
-        const result = await env.DB.prepare('INSERT INTO products (name,category,subcategory,price,cost_price,old_price,description,detail,tag,tone,initial,cover_image,detail_image,status,stock,billing_cycle,attributes_json,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,\'inactive\',?,?,?,?)').bind(...values).run();
+        const sortOrder = await nextProductSortOrder();
+        const result = await env.DB.prepare('INSERT INTO products (name,category,subcategory,price,cost_price,old_price,description,detail,tag,tone,initial,cover_image,detail_image,status,stock,billing_cycle,attributes_json,updated_at,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,\'inactive\',?,?,?,?,?)').bind(...values, sortOrder).run();
         productId = Number(result.meta.last_row_id);
       }
-      if (isNew) await env.DB.prepare('UPDATE products SET sort_order=(SELECT COALESCE(MAX(sort_order),0)+1 FROM products WHERE id<>?) WHERE id=?').bind(productId, productId).run();
       await ensurePaymentQrRecords(productId, price);
       break;
     }
@@ -142,11 +150,11 @@ export async function POST(request: Request) {
       const productId = Number(body.id || 0);
       const source = await env.DB.prepare('SELECT * FROM products WHERE id=?').bind(productId).first<Record<string, string | number | null>>();
       if (!source) return Response.json({ message: '要克隆的商品不存在' }, { status: 404 });
-      const result = await env.DB.prepare("INSERT INTO products (name,category,subcategory,price,cost_price,old_price,billing_cycle,attributes_json,description,detail,tag,tone,initial,cover_image,detail_image,status,stock,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'inactive',?,?)").bind(
-        `${String(source.name)}（副本）`, source.category, source.subcategory, source.price, source.cost_price || 0, source.old_price, source.billing_cycle || 'once', source.attributes_json || '[]', source.description || '', source.detail || '', source.tag || '在售', source.tone || 'dark', source.initial || '', source.cover_image || '', source.detail_image || '', source.stock || 0, now,
+      const sortOrder = await nextProductSortOrder();
+      const result = await env.DB.prepare("INSERT INTO products (name,category,subcategory,price,cost_price,old_price,billing_cycle,attributes_json,description,detail,tag,tone,initial,cover_image,detail_image,status,stock,updated_at,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'inactive',?,?,?)").bind(
+        `${String(source.name)}（副本）`, source.category, source.subcategory, source.price, source.cost_price || 0, source.old_price, source.billing_cycle || 'once', source.attributes_json || '[]', source.description || '', source.detail || '', source.tag || '在售', source.tone || 'dark', source.initial || '', source.cover_image || '', source.detail_image || '', source.stock || 0, now, sortOrder,
       ).run();
       const clonedProductId = Number(result.meta.last_row_id);
-      await env.DB.prepare('UPDATE products SET sort_order=(SELECT COALESCE(MAX(sort_order),0)+1 FROM products WHERE id<>?) WHERE id=?').bind(clonedProductId, clonedProductId).run();
       await ensurePaymentQrRecords(clonedProductId, Number(source.price || 0));
       break;
     }
@@ -465,6 +473,12 @@ export async function POST(request: Request) {
       return Response.json({ message: '未知操作' }, { status: 400 });
   }
   return Response.json({ ok: true });
+}
+
+async function nextProductSortOrder() {
+  // 先读取排序再随商品写入，避免 MySQL 禁止的“更新目标表同时直接子查询该表”。
+  const row = await env.DB.prepare('SELECT COALESCE(MAX(sort_order),0)+1 AS sort_order FROM products').first<{ sort_order: number }>();
+  return Number(row?.sort_order ?? 1);
 }
 
 async function releaseOrderCredential(orderId: string) {
