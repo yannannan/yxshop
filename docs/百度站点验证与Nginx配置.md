@@ -5,24 +5,29 @@
 用户服务器截图确认：
 
 - 应用目录：`/home/www/yxshop/yxshopdev`。
+- 用户终端确认验证文件已放在 `/home/www/baidu_verify_codeva-pxfWVWjVV4.html`，与 `myhome/`、`yxshop/` 同级。
 - Nginx 主配置在 `http` 内包含 `/etc/nginx/conf.d/*.conf`。
 - 站点配置：`/etc/nginx/conf.d/yxshophttps.conf`，HTTP 跳转 HTTPS，HTTPS 反向代理至 `127.0.0.1:3000`。
 - 本项目实际使用 React + Vinext / Next 风格 Node 服务；验证文件由 Nginx 直接提供，不依赖前端框架或应用构建。
 
-## 1. 上传百度原始验证文件
+## 1. 保持当前目录结构
 
-在百度验证页面点击“下载验证文件”，将下载的 `baidu_verify_....html` 原样上传至：
+商城已经在 `/home/www` 下，无需搬动项目源码。验证文件也继续保留在当前目录：
 
 ```text
-/home/www/yxshop/yxshopdev/public/
+/home/www/
+├── baidu_verify_codeva-pxfWVWjVV4.html
+├── myhome/
+└── yxshop/
+    └── yxshopdev/
 ```
 
-保持百度提供的完整文件名和文件内容不变，不从截图推测文件内容，不额外放进子目录。当前聊天仅提供了验证页面截图，项目中尚未新增实际验证 HTML 文件。
+后续重新下载验证文件，也原样上传至 `/home/www/` 的直接下级。保持百度提供的完整文件名和内容不变。当前只确认用户服务器上有此文件，未读取文件内容或将原始 HTML 添加进本地 Git 项目。
 
 百度所说的“网站根目录”指 URL 根路径。最终访问地址应为：
 
 ```text
-https://www.yxstar.shop/百度下载的完整验证文件名.html
+https://www.yxstar.shop/baidu_verify_codeva-pxfWVWjVV4.html
 ```
 
 URL 中不包含 `/public/` 或项目磁盘目录。
@@ -39,13 +44,15 @@ cp -p /etc/nginx/conf.d/yxshophttps.conf /etc/nginx/conf.d/yxshophttps.conf.bak.
 
 ```nginx
 location ~ ^/baidu_verify_[A-Za-z0-9_-]+\.html$ {
-    root /home/www/yxshop/yxshopdev/public;
+    root /home/www;
     default_type text/html;
     try_files $uri =404;
 }
 ```
 
 此 `location` 与原有 `location /` 同级，不能嵌套在其内部，也不能直接放到 `nginx.conf` 的 `http` 外部。原主配置和原反向代理继续使用。
+
+若已按此前方案添加了同名验证规则，将其 `root` 改为 `/home/www` 即可，不要重复添加。`root /home/www` 仅用于此验证文件规则；商城请求继续由 `location /` 反代至 Node，不将 `/home/www` 整体作为可浏览的源码目录。`myhome` 等其他项目的域名和站点配置保持各自独立。
 
 项目内 `deploy/nginx/yxshophttps.conf` 是按截图整理的完整站点参考，已包含上述规则；若服务器还有截图未展示的额外设置，保留它们，只添加验证规则。
 
