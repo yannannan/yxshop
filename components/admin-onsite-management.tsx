@@ -128,7 +128,38 @@ export function OnsiteServiceManagement() {
   const [paymentService, setPaymentService] = useState<Row | null>(null);
   const [paymentType, setPaymentType] = useState<"wechat" | "alipay">("wechat");
   const [paymentImage, setPaymentImage] = useState("");
-  const providerMap = useMemo(() => new Map(data.providers.map((item) => [Number(item.id), item])), [data.providers]);
+  const [filters, setFilters] = useState({ keyword: "", providerId: "", status: "", homepage: "" });
+  const [expandedProviders, setExpandedProviders] = useState<number[]>([]);
+  useEffect(() => {
+    if (!data.providers.length || expandedProviders.length) return;
+    setExpandedProviders(data.providers.map((item) => Number(item.id)));
+  }, [data.providers, expandedProviders.length]);
+
+  const providerGroups = useMemo(() => {
+    const keyword = filters.keyword.trim().toLowerCase();
+    return data.providers
+      .filter((provider) => !filters.providerId || text(provider.id) === filters.providerId)
+      .map((provider) => {
+        const providerId = Number(provider.id);
+        const providerText = `${text(provider.name)} ${text(provider.provider_code)} ${text(provider.city)} ${text(provider.role_name)}`.toLowerCase();
+        const providerMatchesKeyword = !keyword || providerText.includes(keyword);
+        const services = data.services.filter((service) => {
+          if (Number(service.provider_id) !== providerId) return false;
+          if (filters.status && text(service.status) !== filters.status) return false;
+          if (filters.homepage === "featured" && Number(service.homepage_featured) !== 1) return false;
+          if (filters.homepage === "normal" && Number(service.homepage_featured) === 1) return false;
+          if (!keyword || providerMatchesKeyword) return true;
+          return `${text(service.title)} ${text(service.slug)} ${text(service.summary)} ${text(service.coverage)}`.toLowerCase().includes(keyword);
+        });
+        return { provider, services, providerMatchesKeyword };
+      })
+      .filter((group) => {
+        if (filters.status || filters.homepage) return group.services.length > 0;
+        if (!filters.keyword) return true;
+        return group.providerMatchesKeyword || group.services.length > 0;
+      });
+  }, [data.providers, data.services, filters]);
+  const visibleServiceCount = providerGroups.reduce((total, group) => total + group.services.length, 0);
 
   function openPayment(service: Row, type: "wechat" | "alipay") {
     const existing = data.paymentQrs.find((item) => Number(item.service_id) === Number(service.id) && text(item.type) === type);
@@ -153,13 +184,17 @@ export function OnsiteServiceManagement() {
     try { notes = JSON.parse(text(row.delivery_notes_json) || "[]"); } catch { notes = []; }
     setForm({ id: Number(row.id), providerId: text(row.provider_id), slug: text(row.slug), title: text(row.title), summary: text(row.summary), online: modes.includes("online"), onsite: modes.includes("onsite"), coverage: text(row.coverage), pricingMode: text(row.pricing_mode) || "fixed", price: row.price === null ? "" : text(row.price), unit: text(row.unit) || "次", onlineResponse: text(row.online_response), onsiteArrival: text(row.onsite_arrival), serviceIncludesText: includes.map((item) => `${item.title}：${item.detail}`).join("\n"), deliveryNotesText: notes.join("\n"), homepageFeatured: Number(row.homepage_featured) === 1, sortOrder: text(row.sort_order || 0), status: text(row.status) || "inactive" });
   }
+  function toggleProvider(providerId: number) {
+    setExpandedProviders((items) => items.includes(providerId) ? items.filter((id) => id !== providerId) : [...items, providerId]);
+  }
 
-  return <>{notice && <div className="admin-message">{notice}</div>}<div className="panel-title"><div><h2>技术服务管理</h2><p>发布技术服务，维护服务者、服务方式、价格、服务范围、首页推荐和上下架状态</p></div><div className="panel-title-actions"><button className="refresh-list-button" disabled={loading} onClick={() => void load()}>{loading ? "正在刷新…" : "↻ 刷新列表"}</button><button disabled={!data.providers.length} onClick={() => setForm(newService(text(data.providers[0]?.id)))}>＋ 发布技术服务</button></div></div>
-    {!data.initialized ? <InitRequired message={data.message} /> : <div className="table-wrap onsite-admin-table"><table><thead><tr><th>服务</th><th>技术人员</th><th>服务方式</th><th>价格</th><th>响应 / 到场</th><th>首页</th><th>状态</th><th>排序</th><th>操作</th></tr></thead><tbody>{data.services.map((service) => {
-      let modes: string[] = []; try { modes = JSON.parse(text(service.delivery_modes_json) || "[]"); } catch { modes = []; }
-      const provider = providerMap.get(Number(service.provider_id));
-      return <tr key={text(service.id)}><td><b>{text(service.title)}</b><small>{text(service.slug)} · {text(service.summary)}</small></td><td>{text(provider?.name || service.provider_name)}</td><td><div className="onsite-skill-list">{modes.map((mode) => <span key={mode}>{mode === "onsite" ? "上门服务" : "在线服务"}</span>)}</div></td><td className="money">{text(service.pricing_mode) === "negotiable" ? "价格面议" : `¥${text(service.price)} / ${text(service.unit) || "次"}`}</td><td>{text(service.online_response) || "—"}<small>{text(service.onsite_arrival) || "—"}</small></td><td>{Number(service.homepage_featured) ? "推荐" : "—"}</td><td><Status value={text(service.status)} /></td><td>{text(service.sort_order)}</td><td><div className="onsite-service-actions"><button className="text-action" onClick={() => edit(service)}>编辑</button><button className="text-action" onClick={() => openPayment(service, "wechat")}>微信收款码</button><button className="text-action" onClick={() => openPayment(service, "alipay")}>支付宝收款码</button><button className="text-action" onClick={() => void action({ action: "service-status", id: Number(service.id), status: text(service.status) === "active" ? "inactive" : "active" })}>{text(service.status) === "active" ? "下架" : "上架"}</button><button className="text-action danger-action" onClick={() => setDeleteTarget(service)}>删除</button></div></td></tr>;
-    })}</tbody></table></div>}
+  function addServiceForProvider(providerId: number) {
+    setForm(newService(String(providerId)));
+  }
+
+  return <>{notice && <div className="admin-message">{notice}</div>}<div className="panel-title"><div><h2>技术服务管理</h2><p>按技术人员分组维护服务；一级为技术人员，展开后管理其名下服务项</p></div><div className="panel-title-actions"><button className="refresh-list-button" disabled={loading} onClick={() => void load()}>{loading ? "正在刷新…" : "↻ 刷新列表"}</button><button disabled={!data.providers.length} onClick={() => addServiceForProvider(Number(data.providers[0]?.id))}>＋ 发布技术服务</button></div></div>
+    {data.initialized && <div className="product-filter"><b>筛选条件</b><input value={filters.keyword} onChange={(e) => setFilters({ ...filters, keyword: e.target.value })} placeholder="技术人员、城市、服务名称、Slug" /><select value={filters.providerId} onChange={(e) => setFilters({ ...filters, providerId: e.target.value })}><option value="">全部技术人员</option>{data.providers.map((provider) => <option key={text(provider.id)} value={text(provider.id)}>{text(provider.name)} · {text(provider.city) || "未设置城市"}</option>)}</select><select value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })}><option value="">全部状态</option><option value="active">已上架</option><option value="inactive">已下架</option></select><select value={filters.homepage} onChange={(e) => setFilters({ ...filters, homepage: e.target.value })}><option value="">全部首页状态</option><option value="featured">首页推荐</option><option value="normal">非首页推荐</option></select><small>技术人员 {providerGroups.length} 位 · 服务 {visibleServiceCount} 项</small><button type="button" onClick={() => setFilters({ keyword: "", providerId: "", status: "", homepage: "" })}>重置</button></div>}
+    {!data.initialized ? <InitRequired message={data.message} /> : <div className="category-tree">{providerGroups.map(({ provider, services }) => { const providerId = Number(provider.id); const expanded = expandedProviders.includes(providerId); const totalServices = data.services.filter((service) => Number(service.provider_id) === providerId).length; return <section className="category-branch" key={providerId}><div className="category-parent-row"><button className="tree-toggle" aria-label={expanded ? "收起服务项" : "展开服务项"} onClick={() => toggleProvider(providerId)}>{expanded ? "⌄" : "›"}</button><div className="onsite-provider-cell">{text(provider.avatar) ? <img src={text(provider.avatar)} alt={`${text(provider.name)}头像`} /> : <span>{text(provider.initials) || text(provider.name).slice(0,1)}</span>}<div><b>{text(provider.name)}</b><small>{text(provider.provider_code)} · {text(provider.city) || "未设置城市"} · {text(provider.experience) || "未设置经验"}</small></div></div><div className="tree-name"><b>{text(provider.role_name) || "未设置职业定位"}</b><small>当前显示 {services.length} 项 / 共 {totalServices} 项服务</small></div><Status value={text(provider.online_status) || "online"} /><Status value={text(provider.status) || "active"} /><div className="tree-actions"><button className="text-action" onClick={() => addServiceForProvider(providerId)}>＋ 增加服务项</button><button className="text-action" onClick={() => toggleProvider(providerId)}>{expanded ? "收起" : "展开"}</button></div></div>{expanded && <div className="category-children">{services.length ? <div className="table-wrap onsite-admin-table"><table><thead><tr><th>服务项</th><th>服务方式</th><th>价格</th><th>响应 / 到场</th><th>首页</th><th>状态</th><th>排序</th><th>操作</th></tr></thead><tbody>{services.map((service) => { let modes: string[] = []; try { modes = JSON.parse(text(service.delivery_modes_json) || "[]"); } catch { modes = []; } return <tr key={text(service.id)}><td><b>{text(service.title)}</b><small>{text(service.slug)} · {text(service.summary)}</small></td><td><div className="onsite-skill-list">{modes.map((mode) => <span key={mode}>{mode === "onsite" ? "上门服务" : "在线服务"}</span>)}</div></td><td className="money">{text(service.pricing_mode) === "negotiable" ? "价格面议" : `¥${text(service.price)} / ${text(service.unit) || "次"}`}</td><td>{text(service.online_response) || "—"}<small>{text(service.onsite_arrival) || "—"}</small></td><td>{Number(service.homepage_featured) ? "推荐" : "—"}</td><td><Status value={text(service.status)} /></td><td>{text(service.sort_order)}</td><td><div className="onsite-service-actions"><button className="text-action" onClick={() => edit(service)}>编辑</button><button className="text-action" onClick={() => openPayment(service, "wechat")}>微信收款码</button><button className="text-action" onClick={() => openPayment(service, "alipay")}>支付宝收款码</button><button className="text-action" onClick={() => void action({ action: "service-status", id: Number(service.id), status: text(service.status) === "active" ? "inactive" : "active" })}>{text(service.status) === "active" ? "下架" : "上架"}</button><button className="text-action danger-action" onClick={() => setDeleteTarget(service)}>删除</button></div></td></tr>; })}</tbody></table></div> : <p className="tree-empty">当前筛选条件下暂无服务项，可点击“＋ 增加服务项”新增。</p>}</div>}</section>; })}{!providerGroups.length && <div className="system-init-empty"><b>没有符合筛选条件的数据</b><p>请调整技术人员、状态或关键词筛选条件。</p></div>}</div>}
     {form && <Modal title={form.id ? "编辑技术服务" : "发布技术服务"} onClose={() => setForm(null)}><form className="onsite-editor-form" onSubmit={async (event) => { event.preventDefault(); const modes = [form.online ? "online" : "", form.onsite ? "onsite" : ""].filter(Boolean).join(","); const ok = await action({ action: "service-save", id: form.id || 0, providerId: form.providerId, slug: form.slug, title: form.title, summary: form.summary, deliveryModes: modes, coverage: form.coverage, pricingMode: form.pricingMode, price: form.price, unit: form.unit, onlineResponse: form.onlineResponse, onsiteArrival: form.onsiteArrival, serviceIncludesText: form.serviceIncludesText, deliveryNotesText: form.deliveryNotesText, homepageFeatured: form.homepageFeatured ? 1 : 0, sortOrder: form.sortOrder, status: form.status }); if (ok) setForm(null); }}>
       <FormSection title="服务基础信息" description="先确定服务名称、服务者和前台展示状态">
         <Field label="服务名称"><input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="请输入技术服务名称" /></Field>
