@@ -2,6 +2,8 @@
 
 验证站点：`https://www.yxstar.shop`。
 
+当前状态：2026-10-22 用户确认百度站点文件验证成功。保留 `/home/www/baidu_verify_codeva-pxfWVWjVV4.html` 原文件及其可访问路径，后续更新商城时也保留；此状态依据用户验收反馈。
+
 用户服务器截图确认：
 
 - 应用目录：`/home/www/yxshop/yxshopdev`。
@@ -89,6 +91,6 @@ nginx -t && nginx -s reload
 
 由用户点击百度页面的“确认验证文件可以正常访问”，核对响应为原验证文件内容，而不是商城首页、登录页或 404；随后点击“完成验证”。验证成功后保留该 HTML 文件，后续更新部署也应保留它。
 
-本次只提供项目内配置参考与部署步骤，没有连接服务器、上传验证文件、重载 Nginx 或使用浏览器验收。最终以服务器 `nginx -t` 及百度验证结果为准。
+助手仅提供项目内配置参考与部署步骤，没有连接服务器、上传验证文件、重载 Nginx 或使用浏览器验收；用户已反馈实际百度验证成功。
 
 参考：[Nginx root 与 location](https://nginx.org/en/docs/http/ngx_http_core_module.html#root)、[try_files](https://nginx.org/en/docs/http/ngx_http_core_module.html#try_files)、[平滑重载](https://nginx.org/en/docs/control.html)。
