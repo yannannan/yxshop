@@ -34,6 +34,7 @@ test('分享文字提取完整链接，拒绝凭据、协议和异常端口', ()
   assert.equal(options.sharedVideoUrl('https://www.facebook.com/watch/?v=123#abc'), 'https://www.facebook.com/watch/?v=123');
   for (const value of [null, '没有链接', 'file:///video.mp4', 'https://u:p@example.com/x', 'http://example.com:3000/x', 'a'.repeat(9000)]) assert.throws(() => options.sharedVideoUrl(value));
   assert.equal(options.videoTaskId('../result'), false);
+  assert.equal(options.sharedVideoUrl('1.56 复制打开抖音 https\\://v.douyin.com/hpy7HCcu6IY/ :6pm'), 'https://v.douyin.com/hpy7HCcu6IY/');
 });
 test('公网地址规则拦截 IPv4/IPv6 私网、映射、保留与文档网络', async () => {
   for (const ip of ['127.0.0.1','10.1.2.3','172.16.0.1','192.168.0.1','169.254.169.254','100.64.0.1','198.19.0.1','203.0.113.2','0.0.0.0','::1','::ffff:127.0.0.1','fc00::1','fe80::1','2001:db8::1','2002:7f00:1::','2001:0:1::','64:ff9b::7f00:1']) assert.equal(network.publicVideoAddress(ip), false, ip);
@@ -96,8 +97,32 @@ test('连接固定已校验 IP，重定向重新检查；认证和 Cookie 不转
 });
 
 const kuaishou = load('../lib/video-kuaishou.ts');
-const engineBase = { './video-options': options, './video-network': network, './video-kuaishou': kuaishou };
+const publicPages = load('../lib/video-public-pages.ts');
+const engineBase = { './video-options': options, './video-network': network, './video-kuaishou': kuaishou, './video-public-pages': publicPages };
 const engine = load('../lib/video-engine.ts', engineBase);
+test('好看视频公开状态提供多档画质，直接读取媒体源且不依赖平台程序',async()=>{
+  const source='https://haokan.baidu.com/v?pd=wisenatural&vid=6658134627915427060';
+  const html='<script>window.__PRELOADED_STATE__='+JSON.stringify({curVideoMeta:{id:'6658134627915427060',title:'好看视频测试',duration:80,poster:'https://cdn.example/cover.png',clarityUrl:[{title:'标清',url:'https://cdn.example/sd.mp4',vodVideoHW:'360$$640'},{title:'蓝光',url:'https://cdn.example/hd.mp4',vodVideoHW:'1080$$1920'}]}})+';</script>';
+  const configured=load('../lib/video-engine.ts',{...engineBase,'./video-network':{...network,videoUrlAddress:async()=>({}),videoResponse:async url=>({url,response:url.includes('haokan.baidu.com')?stream(Buffer.from(html),{'content-type':'text/html'}):stream(media,{'content-type':'video/mp4','content-length':String(media.length)})})},'node:child_process':{execFile(){throw Error('不应启动外部解析程序');}}});
+  const info=await configured.inspectVideo(source);assert.equal(info.title,'好看视频测试');assert.equal(info.duration,80);assert.equal(info.formats.length,2);assert.match(info.formats[0].label,/蓝光/);assert.equal(info.formats[0].height,1080);
+});
+test('抖音公开分享页可匿名读取路由数据，短链和 ies 分享地址转成准确视频编号',async()=>{
+  const url='https://www.iesdouyin.com/share/video/7421576130160905483/';
+  const html='<script>window._ROUTER_DATA='+JSON.stringify({loaderData:{'video_(id)/page':{videoInfoRes:{item_list:[{aweme_id:'7421576130160905483',desc:'公开测试视频',video:{duration:12000,height:720,play_addr:{url_list:['https://cdn.example/video.mp4']}}}]}}}})+';</script>';
+  const requests=[];const configured=load('../lib/video-engine.ts',{...engineBase,'./video-network':{...network,videoUrlAddress:async()=>({}),videoResponse:async(raw,headers)=>{requests.push({raw,headers});return raw.includes('douyin.com')?{url,response:stream(Buffer.from(html),{'content-type':'text/html'})}:{url:raw,response:stream(media)};}},'node:child_process':{execFile(){throw Error('不应要求浏览器 Cookie 或启动平台程序');}}});
+  const info=await configured.inspectVideo('https://v.douyin.com/hpy7HCcu6IY/');assert.equal(info.formats.length,1);assert.equal(info.duration,12);assert.ok(requests.every(r=>!r.headers.Cookie));
+  assert.equal(await configured.platformVideoUrl(url),'https://www.douyin.com/video/7421576130160905483');
+  assert.equal(publicPages.douyinCanonicalUrl('https://www.douyin.com/?modal_id=7421576130160905483'),'https://www.douyin.com/video/7421576130160905483');
+});
+test('抖音图文及源站访问校验分别提示，不把匿名 Cookie 校验说成必须登录账户',async t=>{
+  const url='https://www.iesdouyin.com/share/video/7421576130160905483/';
+  const html='<script>window._ROUTER_DATA='+JSON.stringify({loaderData:{page:{aweme_id:'7421576130160905483',aweme_type:68,images:[{}],video:{}}}})+';</script>';
+  assert.equal(publicPages.douyinPageVideo(html,url).imagePost,true);
+  assert.equal(publicPages.douyinPageVideo('<script>window._ROUTER_DATA=executeDangerousCode()</script>',url).media.length,0);
+  const root=await scratch(t);await mkdir(join(root,'vendor/video-engine'),{recursive:true});await writeFile(join(root,'vendor/video-engine',process.platform==='win32'?'yt-dlp.exe':'yt-dlp'),'stub',{mode:0o755});
+  let argument='';const configured=load('../lib/video-engine.ts',{...engineBase,'./video-network':{...network,videoUrlAddress:async()=>({}),videoResponse:async()=>({url,response:stream(Buffer.from('<script>window._ROUTER_DATA={"loaderData":{}};</script>'))})},'node:child_process':{execFile(_file,args,_config,callback){argument=args.at(-1);callback(Object.assign(new Error('platform'),{stderr:'Fresh cookies (not necessarily logged in) are needed'}));}}},{process:{...process,cwd:()=>root,env:{}}});
+  await assert.rejects(configured.inspectVideo('https://v.douyin.com/hpy7HCcu6IY/'),error=>/访问校验/.test(error.message)&&/不代表必须登录/.test(error.message));assert.equal(argument,'https://www.douyin.com/video/7421576130160905483');
+});
 test('网页源解析支持 HTML5、OG、JSON-LD、相对路径和封面，不执行网页脚本', () => {
   const parsed = engine.htmlVideoSources(`<title>网页标题</title><video poster="/cover.png"><source src="/video.mp4?x=1&amp;y=2"></video><meta property="og:video" content="https://cdn.example.com/v.webm"><script type="application/ld+json">{"@type":"VideoObject","name":"结构化视频","contentUrl":"/third.mov"}</script>`, 'https://example.com/watch');
   assert.equal(parsed.title, '结构化视频'); assert.equal(parsed.thumbnail, 'https://example.com/cover.png');

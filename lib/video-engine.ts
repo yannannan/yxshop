@@ -7,6 +7,7 @@ import { Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { videoResponse, videoResponseBytes, videoUrlAddress, videoRequestHeaders } from './video-network';
 import { isKuaishouPage, kuaishouVideoSources } from './video-kuaishou';
+import { douyinCanonicalUrl, douyinVideoId, douyinPageVideo, haokanPageVideo, isDouyinPage, isHaokanPage, publicVideoPageUserAgent, type PublicVideoPage } from './video-public-pages';
 import { VideoError, videoTaskId, type VideoFormat, type VideoInfo } from './video-options';
 
 const execute = promisify(execFile);
@@ -21,17 +22,17 @@ export function videoTaskDirectory(id: string) {
 async function executable(path: string) { try { await access(path, constants.X_OK); return (await stat(path)).isFile(); } catch { return false; } }
 export async function videoEngineHealth() { const [engineReady, mergeReady] = await Promise.all([executable(enginePath()), executable(mergePath())]); return { engineReady, mergeReady, maxSizeMb: videoMaxBytes() / 1024 ** 2 }; }
 const platforms = ['douyin.com', 'iesdouyin.com', 'kuaishou.com', 'chenzhongtech.com', 'gifshow.com', 'xiaohongshu.com', 'xhslink.com', 'bilibili.com', 'b23.tv', 'youtube.com', 'youtu.be', 'tiktok.com', 'vimeo.com', 'facebook.com', 'fb.watch', 'fb.com', 'instagram.com', 'twitter.com', 'x.com', 'weibo.com', 'weibo.cn', 'dailymotion.com'];
-export const videoPlatform = (host: string) => platforms.some(domain => host === domain || host.endsWith(`.${domain}`));
+export const videoPlatform = (host: string) => isDouyinPage(host) || isHaokanPage(host) || platforms.some(domain => host === domain || host.endsWith(`.${domain}`));
 export async function platformVideoUrl(raw: string) {
   const url = new URL(raw);
   if (/(^|\.)facebook\.com$/.test(url.hostname) && /^\/(?:l\.php|flx\/warn)/.test(url.pathname)) throw new VideoError('请粘贴 Facebook 视频本身的分享链接，而非外部跳转链接');
   if (['b23.tv', 'youtu.be', 'fb.watch', 'xhslink.com', 'v.douyin.com'].some(host => url.hostname === host || url.hostname.endsWith(`.${host}`))) {
     // 分享短链常由通用提取器跳转；我们自行安全解开，再交给指定平台规则。
-    const resolved = await videoResponse(raw, {}, 0, 8000); resolved.response.destroy();
+    const resolved = await videoResponse(raw, { 'User-Agent': publicVideoPageUserAgent }, 0, 8000); resolved.response.destroy();
     if (!videoPlatform(new URL(resolved.url).hostname)) throw new VideoError('分享链接跳转到了不支持的平台，请复制原视频链接', 422);
-    return resolved.url;
+    return isDouyinPage(new URL(resolved.url).hostname) ? douyinCanonicalUrl(resolved.url) || resolved.url : resolved.url;
   }
-  return raw;
+  return isDouyinPage(url.hostname) ? douyinCanonicalUrl(raw) || raw : raw;
 }
 const number = (value: unknown) => Number.isFinite(Number(value)) && Number(value) > 0 ? Number(value) : 0;
 const clean = (value: unknown, length = 500) => typeof value === 'string' ? value.replace(/[\u0000-\u001f]/g, '').slice(0, length) : '';
@@ -97,19 +98,56 @@ export function engineFormats(metadata: Record<string, unknown>, mergeReady: boo
   }
   return result.sort((a, b) => b.height - a.height || a.size - b.size).slice(0, 12);
 }
+async function publicPage(raw: string) {
+  const { response, url } = await videoResponse(raw, { 'User-Agent': publicVideoPageUserAgent }, 0, 12000);
+  if (!isDouyinPage(new URL(url).hostname) && !isHaokanPage(new URL(url).hostname)) { response.destroy(); throw new VideoError('分享页跳转到了不支持的平台', 422); }
+  return { html: (await videoResponseBytes(response, 2 * 1024 ** 2)).toString('utf8'), url };
+}
+async function pageVideo(info: PublicVideoPage, sourceUrl: string, referer: string): Promise<VideoInfo | null> {
+  if (info.imagePost) throw new VideoError('这是抖音图文作品，当前工具只提取视频，暂不支持图文转视频', 422);
+  if (info.duration > 3600) throw new VideoError('暂不支持超过 60 分钟的视频', 422);
+  const formats: VideoFormat[] = [];
+  const started = Date.now();
+  for (const item of info.media) {
+    if (Date.now() - started > 20000) break;
+    if (item.size > videoMaxBytes()) continue;
+    try {
+      const found = await probe(item.url, { Referer: referer, 'User-Agent': publicVideoPageUserAgent });
+      if (found.extension && found.size <= videoMaxBytes()) formats.push({ id: `page-${formats.length}`, label: `${item.label} · ${found.extension.toUpperCase()}`, extension: found.extension, height: item.height, size: found.size || item.size, parts: [{ url: found.url, headers: { Referer: referer, 'User-Agent': publicVideoPageUserAgent }, extension: found.extension }] });
+    } catch { /* 单个公开画质失效时继续其他候选，不发放或扣费。 */ }
+  }
+  return formats.length ? { title: clean(info.title) || '分享视频', source: new URL(sourceUrl).hostname, sourceUrl, duration: info.duration, thumbnail: info.thumbnail, formats: formats.sort((a, b) => b.height - a.height) } : null;
+}
 export async function inspectVideo(sourceUrl: string, embedded = false): Promise<VideoInfo> {
   const started = Date.now();
   await videoUrlAddress(sourceUrl);
+  const haokan = isHaokanPage(new URL(sourceUrl).hostname), douyin = isDouyinPage(new URL(sourceUrl).hostname);
+  let publicSource = sourceUrl;
+  if (haokan || douyin) {
+    try {
+      const id = douyin ? douyinVideoId(sourceUrl) : '';
+      const page = await publicPage(id ? `https://www.iesdouyin.com/share/video/${id}/` : sourceUrl);
+      publicSource = page.url;
+      const info = haokan ? haokanPageVideo(page.html, page.url) : douyinPageVideo(page.html, page.url);
+      const found = await pageVideo(info, sourceUrl, page.url);
+      if (found) return found;
+    } catch (error) { if (haokan || error instanceof VideoError && /图文|60 分钟/.test(error.message)) throw error; }
+    if (haokan) throw new VideoError('好看视频页面未返回可读取的视频源，请确认作品公开且尚未失效', 422);
+  }
   const kuaishou = isKuaishouPage(new URL(sourceUrl).hostname);
   if (!kuaishou && videoPlatform(new URL(sourceUrl).hostname)) {
     const health = await videoEngineHealth();
     if (!health.engineReady) throw new VideoError('该平台解析暂未开放，可尝试视频直链或稍后重试', 503);
     let metadata: Record<string, unknown>;
-    const platformUrl = await platformVideoUrl(sourceUrl);
+    const platformUrl = await platformVideoUrl(publicSource);
     try {
-      const { stdout } = await execute(enginePath(), ['--ignore-config', '--no-plugin-dirs', '--no-cache-dir', '--no-remote-components', '--no-js-runtimes', '--js-runtimes', `node:${process.execPath}`, '--no-playlist', '--playlist-items', '1', '--dump-single-json', '--skip-download', '--no-warnings', '--socket-timeout', '12', '--retries', '1', '--extractor-retries', '1', '--use-extractors', 'default,-generic', '--', platformUrl], { timeout: 45000, maxBuffer: 2 * 1024 ** 2, windowsHide: true, cwd: process.cwd() });
+      const { stdout } = await execute(enginePath(), ['--ignore-config', '--no-plugin-dirs', '--no-cache-dir', '--no-remote-components', '--no-js-runtimes', '--js-runtimes', `node:${process.execPath}`, '--no-playlist', '--playlist-items', '1', '--dump-single-json', '--skip-download', '--no-warnings', '--socket-timeout', '12', '--retries', '1', '--extractor-retries', '1', '--use-extractors', 'default,-generic', '--', platformUrl], { timeout: Math.min(45000, Math.max(1000, 50000 - (Date.now() - started))), maxBuffer: 2 * 1024 ** 2, windowsHide: true, cwd: process.cwd() });
       metadata = JSON.parse(stdout);
-    } catch { throw new VideoError('当前链接未能解析，可能需要站点登录、验证或暂不支持，请换一个公开链接重试', 422); }
+    } catch (error) {
+      const reason = String((error as { stderr?: string }).stderr || '');
+      if (douyin) throw new VideoError(/Unsupported URL/i.test(reason) ? '抖音分享链接未识别到视频编号，请重新复制完整分享链接' : '抖音当前返回访问校验，公开分享页未提供可读取的视频源；这不代表必须登录抖音，请稍后重试或换一个公开作品', 422);
+      throw new VideoError(/timed? ?out|ETIMEDOUT|socket/i.test(reason) ? '视频平台连接超时，请稍后重试' : '平台未返回可提取的视频，可能存在访问校验或链接已失效', 422);
+    }
     if (metadata.is_live || metadata.live_status === 'is_live' || number(metadata.duration) > 3600 || metadata._type === 'playlist') throw new VideoError('暂不支持直播、合集或超过 60 分钟的视频', 422);
     const formats = engineFormats(metadata, health.mergeReady);
     if (!formats.length) {

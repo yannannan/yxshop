@@ -4,3 +4,5 @@
 @media(max-width:550px){.product-grid.refined-grid.homepage-product-grid,.technical-services-section .technical-services-grid{grid-template-columns:1fr}.product-directory-page{padding:0 18px 38px}.product-category-section>header{gap:15px}.catalog-more-link{font-size:12px}.catalog-pagination{gap:10px}.technical-services-heading>div:last-child{flex-wrap:wrap;gap:10px}}
 
 .catalog-list-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:24px 0 18px}.catalog-list-heading h2{margin:0;font-size:22px;color:#272a2f}button.catalog-more-link{border:0;padding:0;background:transparent;cursor:pointer}
+
+.catalog-load-error{padding:16px 20px;border:1px solid #f1d7c5;border-radius:12px;background:#fff6ef;color:#ac633e;font-size:13px;line-height:1.8;margin:22px 0}

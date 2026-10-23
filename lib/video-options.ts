@@ -16,7 +16,8 @@ export type VideoAccess = { signedIn: boolean; canExtract: boolean; chargeType: 
 
 export function sharedVideoUrl(value: unknown) {
   if (typeof value !== 'string' || value.length > 8192) throw new VideoError('请粘贴视频链接或分享文字，最多 8000 字符');
-  const match = value.match(/https?:\/\/[^\s<>，。！？，；“”‘’）】》]+/i)?.[0]?.replace(/[;"')]+$/, '');
+  const normalized = value.replace(/https?\\:\/\//gi, match => match.replace('\\:', ':'));
+  const match = normalized.match(/https?:\/\/[^\s<>，。！？，；“”‘’）】》]+/i)?.[0]?.replace(/[;"')]+$/, '');
   if (!match || match.length > 4096) throw new VideoError('没有找到有效链接，请粘贴完整的 http / https 视频地址');
   let url;
   try { url = new URL(match); } catch { throw new VideoError('视频链接格式不正确'); }

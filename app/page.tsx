@@ -39,6 +39,7 @@ export default function StorePage() {
   const [tools, setTools] = useState<ToolService[]>([]);
   const [toolsLoading, setToolsLoading] = useState(true);
   const [toolsError, setToolsError] = useState('');
+  const [productsError, setProductsError] = useState('');
   const [homepageDisplay, setHomepageDisplay] = useState(defaultHomepageDisplay);
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
@@ -75,22 +76,19 @@ export default function StorePage() {
   ).size;
 
   useEffect(() => {
-    const savedPhone = window.localStorage.getItem("mall_phone");
-    if (savedPhone) {
-      setPhone(savedPhone);
-      setLoggedIn(true);
-    }
-    const searchParams = new URLSearchParams(window.location.search);
-    if (searchParams.get("channel") === "technical") {
-      setChannel("technical");
-    }
-    if (searchParams.get("allServices") === "1") setShowAllTechnical(true);
-    if (["/points", "/tools/video-extractor.html"].includes(searchParams.get("returnTo") || "")) setAuthOpen(true);
-    const requested = Number(searchParams.get("product"));
-    if (requested) {
-      setPendingProduct(requested);
-      setAuthOpen(true);
-    }
+    let active = true;
+    void Promise.resolve().then(() => {
+      if (!active) return;
+      const savedPhone = window.localStorage.getItem("mall_phone");
+      if (savedPhone) setPhone(savedPhone);
+      const searchParams = new URLSearchParams(window.location.search);
+      if (searchParams.get("channel") === "technical") setChannel("technical");
+      if (searchParams.get("allServices") === "1") setShowAllTechnical(true);
+      if (["/points", "/tools/video-extractor.html"].includes(searchParams.get("returnTo") || "")) setAuthOpen(true);
+      const requested = Number(searchParams.get("product"));
+      if (requested) { setPendingProduct(requested); setAuthOpen(true); }
+    });
+    return () => { active = false; };
   }, []);
 
   useEffect(() => {
@@ -100,18 +98,16 @@ export default function StorePage() {
   }, [channel]);
 
   useEffect(() => {
-    if (!loggedIn) {
-      setIsAdmin(false);
-      setIsTechnician(false);
-      return;
-    }
     let active = true;
-    fetch("/api/admin/session", { cache: "no-store" })
-      .then((response) => { if (active) setIsAdmin(response.ok); })
-      .catch(() => { if (active) setIsAdmin(false); });
-    fetch("/api/technician", { cache: "no-store" })
-      .then((response) => { if (active) setIsTechnician(response.ok); })
-      .catch(() => { if (active) setIsTechnician(false); });
+    fetch('/api/auth/session', { cache: 'no-store' }).then(async response => {
+      if (!response.ok) return;
+      const session = await response.json() as { authenticated?: boolean; phone?: string; isAdmin?: boolean; isTechnician?: boolean };
+      if (!active) return;
+      setIsAdmin(session.authenticated === true && session.isAdmin === true);
+      setIsTechnician(session.authenticated === true && session.isTechnician === true);
+      setLoggedIn(session.authenticated === true);
+      if (session.authenticated && session.phone) setPhone(session.phone);
+    }).catch(() => { if (active) { setIsAdmin(false); setIsTechnician(false); } });
     return () => {
       active = false;
     };
@@ -130,11 +126,11 @@ export default function StorePage() {
       .catch(() => setToolsError('工具服务暂不可用，请稍后重试'))
       .finally(() => setToolsLoading(false));
     fetch("/api/products", { cache: "no-store" })
-      .then((response) => (response.ok ? response.json() : []))
+      .then(async response => { const result = await response.json().catch(() => null) as unknown; if (!response.ok) throw new Error((result as { message?: string })?.message || '商品列表暂不可用'); if (!Array.isArray(result)) throw new Error('商品列表暂不可用'); return result; })
       .then((result: unknown) => {
-        if (Array.isArray(result)) setProducts(result as CatalogProduct[]);
+        if (Array.isArray(result)) { setProducts(result as CatalogProduct[]); setProductsError(''); }
       })
-      .catch(() => null);
+      .catch(error => { setProducts([]); setProductsError((error as Error).message || '商品列表读取失败，请稍后刷新'); });
     fetch("/api/categories")
       .then((response) => (response.ok ? response.json() : []))
       .then((result: unknown) => {
@@ -571,6 +567,7 @@ export default function StorePage() {
             )}
           </div>
 
+          {!isToolsCategory && productsError && <p className="catalog-load-error" role="alert">{productsError}。请稍后刷新，或联系客服。</p>}
           {isToolsCategory ? <ToolDirectory key={query} tools={visibleTools} loading={toolsLoading} error={toolsError} /> : showGroupedCatalog ? (
             <HomepageCatalog products={visible} tools={visibleTools} settings={homepageDisplay} loading={toolsLoading} error={toolsError} query={query} renderProduct={renderProductCard} />
           ) : (
@@ -640,7 +637,7 @@ export default function StorePage() {
 
       <footer className="store-footer">
         <div>
-          <a className="brand" href="/">
+          <Link className="brand" href="/">
             <span className="brand-mark">
               <Image
                 src="/yxstar_logo.png"
@@ -650,7 +647,7 @@ export default function StorePage() {
               />
             </span>
             <span>宇星商城</span>
-          </a>
+          </Link>
           <p>简单、透明、可靠的数字商品购买体验。</p>
         </div>
         <div>

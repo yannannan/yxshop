@@ -222,9 +222,38 @@ test('商品目录只读取上架普通商品；分类树包含仅一级或二�
     '@/db/mysql-runtime': { env: { DB: { prepare(sql) { reads.push(sql); return { async all() { return { results: sql.includes('FROM products') ? products : [{ id: 1, parent_id: null, name: '一级' }, { id: 2, parent_id: 1, name: '二级' }, { id: 3, parent_id: null, name: '仅一级' }] }; } }; } } } },
   });
   assert.equal((await data.getPublishedProducts()).length, 30);
-  assert.match(reads[0], /status='active' AND product_type NOT IN \('tool','points'\)/);
+  assert.match(reads[0], /status='active' AND COALESCE\(product_type,'digital'\) NOT IN \('tool','points'\)/);
   assert.match(reads[0], /ORDER BY sort_order,id/);
   assert.deepEqual(JSON.parse(JSON.stringify(await data.getPublishedCategories())), [{ name: '一级', children: [{ name: '二级', children: [] }] }, { name: '仅一级', children: [] }]);
+});
+
+test('商品接口不依赖验证码建表权限，旧展示字段缺失仍返回商品且不泄露内部字段',async()=>{
+  const reads=[];
+  const rows=[{id:1,name:'旧商品',category:'账号服务',price:'20.50',product_type:null,status:'active',cost_price:'1.00',tool_url:'https://private.example',tool_plans_json:'secret'}];
+  const runtime={env:{DB:{prepare(sql){reads.push(sql);return{async all(){return{results:rows};}};}}}};
+  const data=load('../lib/product-data.ts',{'@/db/mysql-runtime':runtime});
+  const route=load('../app/api/products/route.ts',{'@/db/mysql-runtime':runtime,'@/lib/product-data':data,'@/lib/tool-services':toolHelpers});
+  const response=await route.GET(new Request('http://localhost/api/products'));const result=await response.json();
+  assert.equal(response.status,200);assert.equal(result.length,1);assert.equal(result[0].price,20.5);assert.equal(result[0].productType,'digital');assert.equal(result[0].attributesJson,'[]');assert.equal(result[0].detailImage,'');
+  for(const key of ['cost_price','tool_url','tool_plans_json'])assert.equal(key in result[0],false);
+  assert.ok(reads.every(sql=>sql.startsWith('SELECT')));assert.ok(reads.every(sql=>!sql.includes('attributes_json')&&!sql.includes('verification')));assert.match(reads[0],/COALESCE\(product_type,'digital'\)/);
+});
+test('商品数据库失败返回明确非成功状态与 JSON，不能被当成空商品列表',async()=>{
+  const runtime={env:{}};
+  const route=load('../app/api/products/route.ts',{'@/db/mysql-runtime':runtime,'@/lib/product-data':{getPublishedProducts:async()=>{throw Object.assign(Error('private SQL'),{code:'ER_BAD_FIELD_ERROR'});}},'@/lib/tool-services':toolHelpers});
+  const response=await route.GET(new Request('http://localhost/api/products'));const body=await response.json();assert.equal(response.status,503);assert.equal(body.code,'ER_BAD_FIELD_ERROR');assert.match(body.message,/商品列表暂不可用/);assert.ok(!JSON.stringify(body).includes('private SQL'));
+});
+test('只保存工具模块顺序时仍追加所有普通商品分类，维持各区分页和更多入口',()=>{
+  const component=load('../components/homepage-catalog.tsx',{'next/link':Link,'../lib/homepage-display':helpers,'./tool-directory':directory,'./catalog-pagination':pagination});
+  const html=markup(React.createElement(component.HomepageCatalog,{products,tools,settings:{mode:'grouped',sectionOrder:['tools'],itemOrder:[]},query:'',renderProduct}));
+  assert.equal((html.match(/data-product=/g)||[]).length,24);assert.equal((html.match(/class="tool-entry-card"/g)||[]).length,6);assert.ok(html.includes('会员'));assert.ok(html.includes('短信'));assert.equal((html.match(/更多商品 →/g)||[]).length,2);assert.ok(html.indexOf('工具服务')<html.indexOf('共 15 件商品'));
+});
+test('导航身份接口只使用签名会话，支持数字和字符串管理员权限，停用账号不显示管理入口',async()=>{
+  for(const setup of [{phone:null},{permission:'10001'},{permission:10002},{permission:'10002'},{permission:'10003'},{permission:'10002',status:'disabled'}]){
+    let reads=0;
+    const route=load('../app/api/auth/session/route.ts',{'@/db/setup':{getVerifiedSessionPhone:()=>setup.phone===null?null:'13800000000'},'@/db/mysql-runtime':{env:{DB:{prepare(sql){reads++;assert.match(sql,/^SELECT/);return{bind(){return this;},async first(){return{phone:'13800000000',status:setup.status||'active',permission_type:setup.permission};}};}}}}});
+    const response=await route.GET(new Request('http://localhost/api/auth/session'));const body=await response.json();assert.equal(body.isAdmin,setup.status!=='disabled'&&String(setup.permission)==='10002');assert.equal(body.isTechnician,String(setup.permission)==='10003');if(setup.phone===null)assert.equal(reads,0);assert.equal(response.headers.get('cache-control'),'private, no-store');
+  }
 });
 
 // 模拟组件状态更新，直接执行事件回调；不启动浏览器或应用服务。
@@ -247,6 +276,16 @@ function textOf(node) {
   if (Array.isArray(node)) return node.map(textOf).join('');
   return React.isValidElement(node) ? textOf(node.props.children) : typeof node === 'string' || typeof node === 'number' ? String(node) : '';
 }
+test('独立页面导航自动读取真实管理员会话，普通用户不出现后台入口',async()=>{
+  for(const isAdmin of [false,true]){
+    const host=hookHost('../components/storefront-header.tsx','StorefrontHeader',{'next/link':Link,'next/image':Image},{fetch:async url=>{assert.equal(url,'/api/auth/session');return Response.json({authenticated:true,isAdmin,isTechnician:false});}});
+    assert.ok(!markup(host.render({})).includes('进入管理后台'));host.mountEffects();await new Promise(resolve=>setImmediate(resolve));assert.equal(markup(host.render({})).includes('进入管理后台'),isAdmin);
+  }
+});
+test('显式传入角色的首页导航沿用受控身份，不重复请求身份接口',()=>{
+  const host=hookHost('../components/storefront-header.tsx','StorefrontHeader',{'next/link':Link,'next/image':Image},{fetch:()=>{throw Error('不应重复查询');}});
+  assert.ok(markup(host.render({isAdmin:true,isTechnician:false})).includes('进入管理后台'));host.mountEffects();
+});
 
 test('首页工具翻页按钮确实切换到后 6 个工具，数据缩减不会停留在空页', () => {
   const host = hookHost('../components/tool-directory.tsx', 'ToolDirectory', directoryMocks);
@@ -260,7 +299,7 @@ test('首页工具翻页按钮确实切换到后 6 个工具，数据缩减不�
   assert.ok(html.includes('/tools/tool-1.html'));
 });
 
-function storefrontHost() {
+function storefrontHost(globals = {}) {
   const fixtures = Array.from({ length: 26 }, (_, i) => ({ ...products[0], id: i + 1 }));
   const services = Array.from({ length: 26 }, (_, i) => ({ ...technicalHelpers.technicalServices[0], slug: `service-${i + 1}`, title: `技术服务${i + 1}`, homepageFeatured: i < 14 }));
   return hookHost('../app/page.tsx', 'default', {
@@ -275,8 +314,18 @@ function storefrontHost() {
     '../lib/catalog': { ...catalogHelpers, catalog: fixtures },
     '../lib/categories': { ...categoryHelpers, categoryTree: [{ name: '账号服务', children: [{ name: '会员', children: [] }] }, { name: '工具服务', children: [] }] },
     '../lib/technical-services': { ...technicalHelpers, technicalServices: services },
-  });
+  }, globals);
 }
+
+test('首页有有效管理员 Cookie 即显示入口，无需 localStorage 手机号；全部同时保留工具和普通商品',async()=>{
+  const host=storefrontHost({window:{localStorage:{getItem:()=>null},location:{search:'',hash:''}},fetch:async url=>Response.json(url==='/api/auth/session'?{authenticated:true,phone:'13800000000',isAdmin:true,isTechnician:false}:url==='/api/products'?products:url==='/api/tools'?tools:url==='/api/homepage-display'?{mode:'grouped',sectionOrder:['tools'],itemOrder:[]}:[])});
+  host.render();host.mountEffects();await new Promise(resolve=>setImmediate(resolve));const html=markup(host.render());
+  assert.ok(html.includes('进入管理后台'));assert.ok(html.includes('138 **** 0000'));assert.equal((html.match(/class="product-card refined-card"/g)||[]).length,24);assert.equal((html.match(/class="tool-entry-card"/g)||[]).length,6);
+});
+test('商品接口 HTTP 500 时首页明确提示读取失败，不能静默显示成只有工具',async()=>{
+  const host=storefrontHost({window:{localStorage:{getItem:()=>null},location:{search:'',hash:''}},fetch:async url=>url==='/api/products'?new Response('server error',{status:500}):Response.json(url==='/api/tools'?tools:url==='/api/auth/session'?{authenticated:false}:[])});
+  host.render();host.mountEffects();await new Promise(resolve=>setImmediate(resolve));const html=markup(host.render());assert.ok(html.includes('商品列表暂不可用'));assert.ok(html.includes('role="alert"'));assert.equal((html.match(/class="tool-entry-card"/g)||[]).length,6);assert.equal((html.match(/class="product-card refined-card"/g)||[]).length,0);
+});
 
 test('首页分类列表每页 12 件，点击翻页换商品，切换分类重置页码且含更多入口', () => {
   const host = storefrontHost();
