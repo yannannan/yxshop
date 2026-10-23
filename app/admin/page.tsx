@@ -4,6 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { parseProductAttributes } from '../../lib/catalog';
+import { HomepageDisplayManagement } from '../../components/admin-homepage-display';
 import { ToolManagement, type ToolDraft } from '../../components/admin-tool-management';
 import { OnsiteProviderManagement, OnsiteServiceManagement } from '../../components/admin-onsite-management';
 import { OnsiteApplicationManagement, OnsiteAppointmentManagement, OnsiteConsultationManagement, OnsiteOrderManagement, OnsiteReviewManagement } from '../../components/admin-onsite-operations';
@@ -33,6 +34,7 @@ const tabs = [
   { key: 'users', label: '用户管理', icon: '◎' },
   { key: 'credentials', label: '账号 / 卡密', icon: '⌘' },
   { key: 'notifications', label: '订单通知', icon: '✉' },
+  { key: 'homepage-display', label: '首页展示', icon: '排' },
 ] as const;
 
 const fallbackMenuTree: AdminMenu[] = [
@@ -511,6 +513,7 @@ export default function AdminPage() {
           {active === 'service-consultations' && <OnsiteConsultationManagement />}
           {active === 'provider-applications' && <OnsiteApplicationManagement />}
           {active === 'service-reviews' && <OnsiteReviewManagement />}
+          {active === 'homepage-display' && <HomepageDisplayManagement />}
           {active === 'tools' && <ToolManagement autoCreate={toolCreateRequested} initialDraft={toolDraft} onCreateClose={() => { setToolCreateRequested(false); setToolDraft(undefined); }} />}
           {active === 'products' && <>
             <div className="panel-title"><div><h2>商品列表</h2><p>可维护商品分类、价格、库存及前台详情内容</p></div><div className="panel-title-actions"><button className="refresh-list-button" disabled={refreshing} onClick={() => void load(true)}>{refreshing ? '正在刷新…' : '↻ 刷新列表'}</button><button onClick={() => startProduct()}>＋ 新增商品</button></div></div>

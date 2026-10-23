@@ -105,6 +105,12 @@ export const orderNotifications = sqliteTable('order_notifications', {
   sentAt: text('sent_at'),
 });
 
+export const homepageDisplaySettings = sqliteTable('homepage_display_settings', {
+  id: integer('id').primaryKey(),
+  configJson: text('config_json').notNull(),
+  updatedAt: text('updated_at'),
+});
+
 export const emailConfig = sqliteTable('email_config', {
   id: integer('id').primaryKey(),
   provider: text('provider').notNull().default('smtp'),

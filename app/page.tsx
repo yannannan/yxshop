@@ -7,12 +7,13 @@ import { TechnicalSupportChat } from "../components/technical-support-chat";
 import { TechnicalProviderApplication } from "../components/technical-provider-application";
 import { ToolDirectory } from "../components/tool-directory";
 import { StorefrontBanners } from "../components/storefront-banners";
+import { StoreProductCard } from "../components/store-product-card";
+import { HomepageCatalog } from "../components/homepage-catalog";
+import { CatalogPagination } from "../components/catalog-pagination";
+import { defaultHomepageDisplay, readHomepageDisplay, orderItems, paginate } from "../lib/homepage-display";
 import type { ToolService } from "../lib/tool-services";
 import {
-  billingCyclePriceText,
   catalog,
-  defaultBillingCycle,
-  parseProductAttributes,
   type CatalogProduct,
 } from "../lib/catalog";
 import { categoryTree, matchesProductCategory, type CategoryNode } from "../lib/categories";
@@ -25,7 +26,7 @@ import {
 } from "../lib/technical-services";
 
 type CategoryGroup = CategoryNode & { id?: number };
-const pageSize = 9;
+const pageSize = 12;
 
 export default function StorePage() {
   const [category, setCategory] = useState("全部商品");
@@ -37,6 +38,7 @@ export default function StorePage() {
   const [tools, setTools] = useState<ToolService[]>([]);
   const [toolsLoading, setToolsLoading] = useState(true);
   const [toolsError, setToolsError] = useState('');
+  const [homepageDisplay, setHomepageDisplay] = useState(defaultHomepageDisplay);
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
   const [authOpen, setAuthOpen] = useState(false);
@@ -60,10 +62,13 @@ export default function StorePage() {
     useState<TechnicalService | null>(null);
   const [technicalServiceItems, setTechnicalServiceItems] =
     useState<TechnicalService[]>(technicalServices);
+  const [showAllTechnical, setShowAllTechnical] = useState(false);
+  const [technicalPage, setTechnicalPage] = useState(1);
   const homepageTechnicalServices = useMemo(
-    () => technicalServiceItems.filter((service) => service.homepageFeatured),
-    [technicalServiceItems],
+    () => technicalServiceItems.filter((service) => showAllTechnical || service.homepageFeatured),
+    [technicalServiceItems, showAllTechnical],
   );
+  const technicalResult = paginate(homepageTechnicalServices, technicalPage, 12);
   const homepageTechnicalProviderCount = new Set(
     homepageTechnicalServices.map((service) => service.providerId),
   ).size;
@@ -78,6 +83,7 @@ export default function StorePage() {
     if (searchParams.get("channel") === "technical") {
       setChannel("technical");
     }
+    if (searchParams.get("allServices") === "1") setShowAllTechnical(true);
     const requested = Number(searchParams.get("product"));
     if (requested) {
       setPendingProduct(requested);
@@ -104,6 +110,10 @@ export default function StorePage() {
   }, [loggedIn]);
 
   useEffect(() => {
+    fetch('/api/homepage-display', { cache: 'no-store' })
+      .then(response => response.ok ? response.json() : null)
+      .then(result => { if (result) setHomepageDisplay(readHomepageDisplay(result)); })
+      .catch(() => null);
     fetch('/api/tools', { cache: 'no-store' })
       .then(async response => {
         if (!response.ok) throw new Error('工具服务暂不可用，请稍后重试');
@@ -152,7 +162,7 @@ export default function StorePage() {
 
   const selectedPrimary = categoryGroups.find((item) => item.name === category);
   const isToolsCategory = category === '工具服务';
-  const visibleTools = tools.filter(tool => `${tool.name} ${tool.description}`.toLowerCase().includes(query.trim().toLowerCase()));
+  const visibleTools = orderItems(tools, homepageDisplay.itemOrder).filter(tool => `${tool.name} ${tool.description}`.toLowerCase().includes(query.trim().toLowerCase()));
   const selectedSecondary = selectedPrimary?.children.find(
     (item) => item.name === subcategory,
   );
@@ -160,7 +170,7 @@ export default function StorePage() {
 
   const visible = useMemo(() => {
     const keyword = query.trim().toLowerCase();
-    return products.filter((product) => {
+    return orderItems(products, homepageDisplay.itemOrder).filter((product) => {
       return (
         matchesProductCategory(product, categoryGroups, category, subcategory, thirdCategory) &&
         `${product.name}${product.desc}`.toLowerCase().includes(keyword)
@@ -173,6 +183,7 @@ export default function StorePage() {
     thirdCategory,
     query,
     categoryGroups,
+    homepageDisplay.itemOrder,
   ]);
   const totalPages = Math.max(1, Math.ceil(visible.length / pageSize));
   const currentPage = Math.min(page, totalPages);
@@ -184,18 +195,8 @@ export default function StorePage() {
     category === "全部商品" &&
     subcategory === "全部" &&
     thirdCategory === "全部";
-  const showToolsInAll = showGroupedCatalog && (toolsLoading || Boolean(toolsError) || visibleTools.length > 0);
   const showCatalogEmpty = !isToolsCategory && visible.length === 0 &&
     (!showGroupedCatalog || (!toolsLoading && !toolsError && visibleTools.length === 0));
-  const groupedVisibleProducts = useMemo(() => {
-    const groups = new Map<string, CatalogProduct[]>();
-    for (const product of visible) {
-      const items = groups.get(product.category) || [];
-      items.push(product);
-      groups.set(product.category, items);
-    }
-    return Array.from(groups, ([name, items]) => ({ name, items }));
-  }, [visible]);
   const categories = ["全部商品", ...categoryGroups.map((item) => item.name)];
   const availableSubcategories =
     category === "全部商品"
@@ -205,6 +206,10 @@ export default function StorePage() {
     subcategory === "全部"
       ? ["全部"]
       : ["全部", ...(selectedSecondary?.children.map((item) => item.name) || [])];
+  const moreProductsParams = new URLSearchParams({ category });
+  if (subcategory !== '全部') moreProductsParams.set('secondary', subcategory);
+  if (thirdCategory !== '全部') moreProductsParams.set('third', thirdCategory);
+  if (query.trim()) moreProductsParams.set('q', query.trim());
 
   function order(id: number) {
     if (!loggedIn) {
@@ -236,88 +241,7 @@ export default function StorePage() {
   }
 
   function renderProductCard(product: CatalogProduct) {
-    return (
-      <article
-        className="product-card refined-card"
-        key={product.id}
-        role="link"
-        tabIndex={0}
-        aria-label={`查看${product.name}详情`}
-        onClick={(event) => {
-          if ((event.target as HTMLElement).closest("a,button")) return;
-          window.location.href = `/product/${product.id}`;
-        }}
-        onKeyDown={(event) => {
-          if (
-            (event.key === "Enter" || event.key === " ") &&
-            !(event.target as HTMLElement).closest("a,button")
-          ) {
-            event.preventDefault();
-            window.location.href = `/product/${product.id}`;
-          }
-        }}
-      >
-        <a
-          className={`product-visual ${product.tone}${product.coverImage ? " has-upload-image" : ""}`}
-          href={`/product/${product.id}`}
-          aria-label={`查看${product.name}详情`}
-        >
-          <span className="badge">热销</span>
-          {product.coverImage ? (
-            <Image
-              className="product-upload-image"
-              unoptimized
-              src={product.coverImage}
-              alt={product.name}
-              fill
-              sizes="(max-width: 720px) 100vw, 33vw"
-            />
-          ) : (
-            <span className="product-logo">{product.initial}</span>
-          )}
-          <span className="visual-arrow">查看详情 →</span>
-        </a>
-        <div className="product-info">
-          <div className="product-meta">
-            <span>
-              {[product.category, product.subcategory].filter(Boolean).join(' · ')}
-            </span>
-            <i>库存充足</i>
-          </div>
-          <h3>
-            <a href={`/product/${product.id}`}>{product.name}</a>
-          </h3>
-          <p>{product.desc}</p>
-          <div className="delivery-note">
-            <span>✓</span> 支付后自动发至订单邮箱
-          </div>
-          <div className="product-attribute-tags">
-            {parseProductAttributes(product.attributesJson)
-              .slice(0, 3)
-              .map((attribute) => (
-                <span key={attribute.name}>
-                  {attribute.name}：{attribute.value}
-                </span>
-              ))}
-          </div>
-          <div className="buy-row">
-            <div>
-              <strong>
-                <small>¥</small>
-                {product.price}
-                <em className="price-cycle">
-                  {billingCyclePriceText(
-                    product.billingCycle || defaultBillingCycle(product.id),
-                  )}
-                </em>
-              </strong>
-              <del>¥{product.oldPrice}</del>
-            </div>
-            <button onClick={() => order(product.id)}>立即下单</button>
-          </div>
-        </div>
-      </article>
-    );
+    return <StoreProductCard key={product.id} product={product} onOrder={order} />;
   }
 
   function renderTechnicalServiceCard(service: TechnicalService) {
@@ -633,30 +557,6 @@ export default function StorePage() {
               </label>
               <div className="product-tools product-tools-row">
                 <span>{isToolsCategory ? `共 ${visibleTools.length} 个工具` : showGroupedCatalog ? `共 ${visibleTools.length} 个工具 · ${visible.length} 件商品` : `共 ${visible.length} 件`}</span>
-                {!isToolsCategory && !showGroupedCatalog && visible.length > pageSize && (
-                  <nav
-                    className="pagination pagination-inline"
-                    aria-label="商品翻页"
-                  >
-                    <button
-                      disabled={currentPage === 1}
-                      onClick={() => setPage((value) => Math.max(1, value - 1))}
-                    >
-                      ← 上一页
-                    </button>
-                    <span>
-                      {currentPage} / {totalPages}
-                    </span>
-                    <button
-                      disabled={currentPage === totalPages}
-                      onClick={() =>
-                        setPage((value) => Math.min(totalPages, value + 1))
-                      }
-                    >
-                      下一页 →
-                    </button>
-                  </nav>
-                )}
               </div>
             </div>
             {!isToolsCategory && category !== "全部商品" && availableSubcategories.length > 1 && (
@@ -702,27 +602,10 @@ export default function StorePage() {
             )}
           </div>
 
-          {isToolsCategory ? <ToolDirectory tools={visibleTools} loading={toolsLoading} error={toolsError} /> : showGroupedCatalog ? (
-            <>
-            {showToolsInAll && <ToolDirectory title="工具服务" tools={visibleTools} loading={toolsLoading} error={toolsError} />}
-            <div className="product-category-groups">
-              {groupedVisibleProducts.map((group) => (
-                <section className="product-category-section" key={group.name}>
-                  <header>
-                    <h2>{group.name}</h2>
-                    <span>{group.items.length} 件商品</span>
-                  </header>
-                  <div className="product-grid refined-grid">
-                    {group.items.map(renderProductCard)}
-                  </div>
-                </section>
-              ))}
-            </div>
-            </>
+          {isToolsCategory ? <ToolDirectory key={query} tools={visibleTools} loading={toolsLoading} error={toolsError} /> : showGroupedCatalog ? (
+            <HomepageCatalog products={visible} tools={visibleTools} settings={homepageDisplay} loading={toolsLoading} error={toolsError} query={query} renderProduct={renderProductCard} />
           ) : (
-            <div className="product-grid refined-grid">
-              {pagedProducts.map(renderProductCard)}
-            </div>
+            <><div className="catalog-list-heading"><h2>{thirdCategory !== '全部' ? thirdCategory : subcategory !== '全部' ? subcategory : category}</h2><Link className="catalog-more-link" href={`/products?${moreProductsParams}`}>更多商品 →</Link></div><div className="product-grid refined-grid homepage-product-grid">{pagedProducts.map(renderProductCard)}</div><CatalogPagination page={currentPage} totalPages={totalPages} onChange={setPage} label="商品分页" /></>
           )}
           {showCatalogEmpty && (
             <div className="empty refined-empty">
@@ -763,11 +646,13 @@ export default function StorePage() {
                   <h2 id="technical-services-title">上门技术服务</h2>
                   <p>认证技术人才 · 固定价格或价格面议 · 在线沟通与到场服务</p>
                 </div>
-                <span>共 {homepageTechnicalProviderCount} 位服务者</span>
+                <div><span>共 {homepageTechnicalProviderCount} 位服务者</span><button type="button" className="catalog-more-link" onClick={() => { setShowAllTechnical(!showAllTechnical); setTechnicalPage(1); }}>{showAllTechnical ? "返回首页推荐 →" : "更多服务 →"}</button></div>
               </header>
               <div className="technical-services-grid">
-                {homepageTechnicalServices.map(renderTechnicalServiceCard)}
+                {technicalResult.items.map(renderTechnicalServiceCard)}
               </div>
+              {!homepageTechnicalServices.length && <p className="tool-directory-empty">暂无可展示的技术服务。</p>}
+              <CatalogPagination page={technicalResult.page} totalPages={technicalResult.totalPages} onChange={setTechnicalPage} label="技术服务分页" />
               <section className="talent-entry" id="talent-entry">
                 <div>
                   <span>TECH TALENT</span>

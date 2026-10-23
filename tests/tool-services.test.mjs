@@ -8,6 +8,7 @@ import ts from 'typescript';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import * as helpers from '../lib/tool-services.ts';
+import * as homepageHelpers from '../lib/homepage-display.ts';
 
 const require = createRequire(import.meta.url);
 function load(file, mocks, globals = {}) {
@@ -145,6 +146,8 @@ test('sitemap 与 robots 路由包含独立工具页面并返回正确类型', a
 test('工具目录渲染入口导航卡片，不渲染普通商品的下单卡片', () => {
   const directory = load('../components/tool-directory.tsx', {
     '../lib/tool-services': helpers,
+    '../lib/homepage-display': homepageHelpers,
+    './catalog-pagination': load('../components/catalog-pagination.tsx', { 'next/link': ({ href, children, ...props }) => React.createElement('a', { href, ...props }, children) }),
     'next/link': ({ href, children, ...props }) => React.createElement('a', { href, ...props }, children),
     'next/image': ({ src, alt }) => React.createElement('img', { src, alt }),
   });

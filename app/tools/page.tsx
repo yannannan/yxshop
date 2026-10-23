@@ -3,6 +3,8 @@ import Link from 'next/link';
 import { ToolDirectory } from '@/components/tool-directory';
 import { getPublishedTools } from '@/lib/tool-service-data';
 import { siteOrigin } from '@/lib/tool-services';
+import { getHomepageDisplay } from '@/lib/homepage-display-data';
+import { orderItems } from '@/lib/homepage-display';
 
 export const dynamic = 'force-dynamic';
 export const metadata: Metadata = {
@@ -10,7 +12,7 @@ export const metadata: Metadata = {
   alternates: { canonical: `${siteOrigin()}/tools` },
 };
 
-export default async function ToolsPage() {
-  const tools = await getPublishedTools();
-  return <main className="tools-page"><header className="tools-page-header"><Link href="/" className="tools-brand">宇星商城</Link><Link href="/">返回商城</Link></header><ToolDirectory tools={tools} /></main>;
+export default async function ToolsPage({ searchParams }: { searchParams?: Promise<{ page?: string }> }) {
+  const [tools, config, params] = await Promise.all([getPublishedTools(), getHomepageDisplay(), searchParams]);
+  return <main className="tools-page"><header className="tools-page-header"><Link href="/" className="tools-brand">宇星商城</Link><Link href="/">返回商城</Link></header><ToolDirectory tools={orderItems(tools, config.itemOrder)} pageSize={12} page={Number(params?.page || 1)} moreHref={null} /></main>;
 }

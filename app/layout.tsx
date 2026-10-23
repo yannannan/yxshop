@@ -7,6 +7,7 @@ import './technical-services.css';
 import './technician/technician.css';
 import './tools.css';
 import './storefront-banners.css';
+import './homepage-display.css';
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'https://www.yxstar.shop'),
   title: '宇星商城｜精选数字商品',
