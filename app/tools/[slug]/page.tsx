@@ -5,6 +5,7 @@ import { notFound, permanentRedirect } from 'next/navigation';
 import { ToolLaunch } from '@/components/tool-launch';
 import { StorefrontHeader } from '@/components/storefront-header';
 import { StampMaker } from '@/components/stamp-maker';
+import { VideoExtractor } from '@/components/video-extractor';
 import { getPublishedTool } from '@/lib/tool-service-data';
 import { isToolSlug, siteOrigin, toolPlanKey, toolPlanLabel, toolChargeLabels, toolPagePath, toolPlanPrice, toolPriceSummary } from '@/lib/tool-services';
 
@@ -18,7 +19,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const tool = isToolSlug(slug) ? await getPublishedTool(slug) : null;
   if (!tool) return { title: '工具不存在｜宇星商城', robots: { index: false, follow: false } };
   const title = tool.seoTitle || `${tool.name}｜宇星商城`;
-  const description = tool.seoDescription || (slug === 'stamp-maker' ? '在线设计圆形、椭圆形、方形及姓名印章，实时预览，支持 256 至 4096 像素，可导出 PNG、JPG 及 SVG。支持按次、包月及包年套餐。' : tool.description || tool.detail.slice(0, 160));
+  const description = tool.seoDescription || (slug === 'stamp-maker' ? '在线设计圆形、椭圆形、方形及姓名印章，实时预览，支持 256 至 4096 像素，可导出 PNG、JPG 及 SVG。支持按次、包月及包年套餐。' : slug === 'video-extractor' ? '解析抖音、快手、小红书、B站、Facebook 等公开视频分享链接及网页视频源，选择画质并提取下载。解析免费，生成文件成功后使用积分或套餐权益。' : tool.description || tool.detail.slice(0, 160));
   const url = `${siteOrigin()}${toolPagePath(tool.slug)}`;
   return { title, description, alternates: { canonical: url }, openGraph: { title, description, url, type: 'website', images: tool.logo ? [tool.logo] : [] } };
 }
@@ -37,6 +38,7 @@ export default async function ToolPage({ params }: Props) {
     ...(tool.chargeType === 'free' ? { offers: { '@type': 'Offer', price: 0, priceCurrency: 'CNY' } } : tool.chargeType === 'paid' ? { offers: tool.plans.map(plan => ({ '@type': 'Offer', name: toolPlanLabel(plan), price: plan.price, priceCurrency: 'CNY' })) } : {}),
   };
   if (slug === 'stamp-maker') return <><StorefrontHeader /><StampMaker tool={tool} /><script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData).replace(/</g, '\\u003c') }} /></>;
+  if (slug === 'video-extractor') return <><StorefrontHeader /><VideoExtractor tool={tool} /><script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData).replace(/</g, '\\u003c') }} /></>;
   return <main className="tools-page"><header className="tools-page-header"><Link className="tools-brand" href="/">宇星商城</Link><Link href="/tools">全部工具</Link></header>
     <nav className="tool-breadcrumb" aria-label="面包屑"><Link href="/">商城首页</Link><span>›</span><Link href="/tools">工具服务</Link><span>›</span><span>{tool.name}</span></nav>
     <article className="tool-detail"><div className="tool-detail-intro">{tool.logo ? <Image unoptimized src={tool.logo} alt="" width={80} height={80} /> : <span className="tool-logo-fallback">{tool.name.slice(0, 1)}</span>}<span className={`tool-charge-badge ${tool.chargeType}`}>{toolChargeLabels[tool.chargeType]}{tool.chargeType === 'points' ? ` · ${tool.pointsCost} 积分 / 次` : tool.chargeType === 'paid' ? ` · ${toolPriceSummary(tool)}` : ''}</span><h1>{tool.name}</h1><p>{tool.description}</p>{tool.chargeType === 'paid' && <ul className="tool-plan-summary">{tool.plans.map(plan => <li key={toolPlanKey(plan)}>{toolPlanLabel(plan)}：{toolPlanPrice(plan)}</li>)}</ul>}<ToolLaunch tool={tool} /></div>

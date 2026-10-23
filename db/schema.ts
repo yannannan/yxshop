@@ -1,5 +1,12 @@
 import { integer, real, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
+export const videoExtractionPreviews = sqliteTable('video_extraction_previews', {
+  id: text('id').primaryKey(), userId: integer('user_id').notNull(), productId: integer('product_id').notNull(), sourceUrl: text('source_url').notNull(), metadataJson: text('metadata_json').notNull(), createdAt: text('created_at').notNull(), expiresAt: text('expires_at').notNull(),
+});
+export const videoExtractionTasks = sqliteTable('video_extraction_tasks', {
+  id: text('id').primaryKey(), userId: integer('user_id').notNull(), productId: integer('product_id').notNull(), requestHash: text('request_hash').notNull(), title: text('title').notNull(), formatLabel: text('format_label').notNull(), formatJson: text('format_json').notNull(), billingMode: text('billing_mode').notNull(), pointsCost: integer('points_cost').notNull().default(0), status: text('status').notNull().default('queued'), progress: integer('progress').notNull().default(0), fileExtension: text('file_extension').notNull(), fileSize: integer('file_size').notNull().default(0), charged: integer('charged').notNull().default(0), pointsSpent: integer('points_spent').notNull().default(0), billingOrderId: text('billing_order_id').notNull().default(''), errorMessage: text('error_message').notNull().default(''), createdAt: text('created_at').notNull(), updatedAt: text('updated_at').notNull(), expiresAt: text('expires_at').notNull(),
+});
+
 export const toolGenerationResults = sqliteTable('tool_generation_results', {
   id: text('id').primaryKey(), userId: integer('user_id').notNull(), productId: integer('product_id').notNull(), orderId: text('order_id').notNull(), requestHash: text('request_hash').notNull(), imageBase64: text('image_base64').notNull(), imageSize: integer('image_size').notNull(), charged: integer('charged').notNull().default(0), createdAt: text('created_at').notNull(),
 });

@@ -25,7 +25,8 @@ export async function POST(request: Request) {
 
 export async function GET(request: Request) {
   const key = new URL(request.url).searchParams.get('key') || '';
-  if (!key.startsWith('products/') || normalize(key).includes('..')) return Response.json({ message: '图片不存在' }, { status: 404 });
+  // 只允许商品图片文件，不能通过 products/../ 读取私有工具成品。
+  if (!/^products\/[a-zA-Z0-9_.-]+\.(?:jpg|jpeg|png|webp)$/.test(key) || normalize(key).includes('..')) return Response.json({ message: '图片不存在' }, { status: 404 });
   try {
     const body = await readFile(join(uploadDirectory, key));
     return new Response(body, { headers: { 'content-type': contentTypes[extname(key).toLowerCase()] || 'application/octet-stream', 'cache-control': 'public, max-age=31536000, immutable' } });

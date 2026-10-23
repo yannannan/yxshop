@@ -10,3 +10,5 @@
 /sslcrt证书/
 *.key
 *.pem
+/vendor/video-engine/
+/uploads/video-extractions/

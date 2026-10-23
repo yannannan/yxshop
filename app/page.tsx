@@ -85,7 +85,7 @@ export default function StorePage() {
       setChannel("technical");
     }
     if (searchParams.get("allServices") === "1") setShowAllTechnical(true);
-    if (searchParams.get("returnTo") === "/points") setAuthOpen(true);
+    if (["/points", "/tools/video-extractor.html"].includes(searchParams.get("returnTo") || "")) setAuthOpen(true);
     const requested = Number(searchParams.get("product"));
     if (requested) {
       setPendingProduct(requested);
@@ -399,7 +399,8 @@ export default function StorePage() {
     window.localStorage.setItem("mall_phone", phone);
     setLoggedIn(true);
     setAuthOpen(false);
-    if (new URLSearchParams(window.location.search).get("returnTo") === "/points") { window.location.assign("/points"); return; }
+    const returnTo = new URLSearchParams(window.location.search).get("returnTo");
+    if (returnTo && ["/points", "/tools/video-extractor.html"].includes(returnTo)) { window.location.assign(returnTo); return; }
     if (pendingProduct) { const params = new URLSearchParams(window.location.search); const selected = new URLSearchParams(); for (const key of ["cycle", "plan"]) { const value = params.get(key); if (value) selected.set(key, value); } window.location.href = `/product/${pendingProduct}${selected.size ? `?${selected}` : ""}`; }
   }
 

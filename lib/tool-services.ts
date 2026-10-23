@@ -57,7 +57,7 @@ export type ToolService = {
 
 export const toolChargeLabels: Record<ToolChargeType, string> = { free: '免费使用', paid: '付费使用', pending: '收费待确认', points: '通用积分' };
 export const toolPagePath = (slug: string) => `/tools/${encodeURIComponent(slug)}.html`;
-export const builtInToolEntry = (slug: string | undefined) => slug === 'stamp-maker' ? '/tools/stamp-maker.html' : '';
+export const builtInToolEntry = (slug: string | undefined) => slug === 'stamp-maker' || slug === 'video-extractor' ? toolPagePath(slug) : '';
 export const siteOrigin = () => (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.yxstar.shop').replace(/\/$/, '');
 export const isToolSlug = (value: string) => /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value) && value.length <= 100;
 

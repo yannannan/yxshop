@@ -11,6 +11,7 @@ import './storefront-navigation.css';
 import './stamp-maker.css';
 import './homepage-display.css';
 import './points.css';
+import './video-extractor.css';
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'https://www.yxstar.shop'),
   title: '宇星商城｜精选数字商品',

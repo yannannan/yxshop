@@ -19,7 +19,7 @@ const require = createRequire(import.meta.url);
 function load(file, mocks = {}, globals = {}) {
   const exports = {};
   const code = ts.transpileModule(readFileSync(new URL(file, import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText;
-  vm.runInNewContext(code, { exports, Response, Request, URL, Buffer, crypto: webcrypto, console: { error() {} }, ...globals, require(name) { if (name in mocks) return mocks[name]; if (name === '@/lib/points') return points; if (['@/lib/points-service', './points-service'].includes(name)) return { PointsError: class extends Error {} }; if (name === '@/lib/tool-points-usage') return {};  if (['react', 'react/jsx-runtime', 'node:crypto'].includes(name)) return require(name); throw new Error(`Unexpected module: ${name}`); } });
+  vm.runInNewContext(code, { exports, Response, Request, URL, Buffer, crypto: webcrypto, console: { error() {} }, ...globals, require(name) { if (name in mocks) return mocks[name]; if (name === '@/components/video-extractor') return { VideoExtractor: () => null }; if (name === '@/lib/points') return points; if (['@/lib/points-service', './points-service'].includes(name)) return { PointsError: class extends Error {} }; if (name === '@/lib/tool-points-usage') return {};  if (['react', 'react/jsx-runtime', 'node:crypto'].includes(name)) return require(name); throw new Error(`Unexpected module: ${name}`); } });
   return exports;
 }
 const pureEntitlements = load('../lib/tool-entitlements.ts', { '@/db/mysql-runtime': { env: {} }, './tool-services': tools });
