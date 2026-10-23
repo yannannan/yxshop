@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { parseStampOptions } from '@/lib/stamp-options';
+import { parseStampOptions, stampImageData } from '@/lib/stamp-options';
 import { renderStamp } from '@/lib/stamp-renderer';
 import { findStampResult, getStampTool, savePaidStamp, stampAccess, StampError, stampUser } from '@/lib/stamp-service';
 
@@ -36,7 +36,9 @@ export async function POST(request: Request) {
     if (!body || !validId(body.id)) throw new StampError('制作任务编号不正确');
     let options;
     try { options = parseStampOptions(body.options); } catch (error) { throw new StampError((error as Error).message); }
-    const id = body.id.toLowerCase(), hash = createHash('sha256').update(JSON.stringify(options)).digest('hex');
+    // 默认 PNG 延用旧参数指纹，升级前已成功的任务仍可原编号重试。
+    const { format, ...legacyOptions } = options;
+    const id = body.id.toLowerCase(), hash = createHash('sha256').update(JSON.stringify(format === 'png' ? legacyOptions : options)).digest('hex');
     const tool = await getStampTool(), user = await stampUser(request);
     if (tool.tool_charge_type === 'pending') throw new StampError('收费方式待确认，目前可以预览，暂未开放制作', 409);
     if (tool.tool_charge_type === 'paid') {
@@ -46,8 +48,8 @@ export async function POST(request: Request) {
       const access = await stampAccess(tool, user);
       if (!access.canGenerate) throw new StampError('暂无可用套餐，请购买或续费并完成支付核验', 402);
     }
-    const png = await renderStamp(options);
-    const result = tool.tool_charge_type === 'paid' && user ? await savePaidStamp(user.id, tool.id, id, hash, png, options.size) : { id, image: `data:image/png;base64,${png.toString('base64')}`, size: options.size, createdAt: new Date().toISOString(), charged: false, reused: false };
+    const image = await renderStamp(options);
+    const result = tool.tool_charge_type === 'paid' && user ? await savePaidStamp(user.id, tool.id, id, hash, image, options.size) : { id, ...stampImageData(image.toString('base64')), size: options.size, createdAt: new Date().toISOString(), charged: false, reused: false };
     return Response.json({ result }, { headers });
   } catch (error) {
     if (error instanceof SyntaxError) return Response.json({ message: '印章参数格式不正确' }, { status: 400, headers });

@@ -3,7 +3,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { defaultStampOptions, parseStampOptions, stampFonts, stampPresets, type StampAccess, type StampOptions, type StampResult } from '../lib/stamp-options';
+import { defaultStampOptions, parseStampOptions, stampFonts, stampFormats, stampPresets, stampSizes, type StampAccess, type StampOptions, type StampResult } from '../lib/stamp-options';
 import { toolBillingLabels, toolPlanPrice, toolPlanKey, toolPlanQuery, toolPlanLabel, type ToolService } from '../lib/tool-services';
 
 function time(value: string) {
@@ -75,7 +75,7 @@ export function StampMaker({ tool }: { tool: ToolService }) {
   }, [signature, previewVersion]);
   useEffect(() => () => { if (previewObjectUrl.current) URL.revokeObjectURL(previewObjectUrl.current); }, []);
 
-  function update(patch: Partial<StampOptions>) { setOptions(previous => ({ ...previous, ...patch })); setMessage(''); setRetryPending(false); }
+  function update(patch: Partial<StampOptions>) { setOptions(previous => { const next = { ...previous, ...patch }; return next.format === 'jpeg' ? { ...next, background: 'white' } : next; }); setMessage(''); setRetryPending(false); }
   async function generate() {
     if (working.current || !normalized || (!access?.canGenerate && !retryPending)) return;
     working.current = true; setBusy(true); setMessage(''); setMessageSuccess(false);
@@ -105,6 +105,7 @@ export function StampMaker({ tool }: { tool: ToolService }) {
   const maxText = options.shape === 'name' ? 4 : options.shape === 'square' ? 12 : 32;
   const chosenPlan = tool.plans.find(plan => toolPlanKey(plan) === selectedPlan) || tool.plans[0];
   const buyHref = `/product/${tool.id}${chosenPlan ? `?${toolPlanQuery(chosenPlan)}` : ''}`;
+  const resultFormat = stampFormats[result?.format || 'png'];
 
   const layoutPanel = <section className="stamp-panel stamp-layout-panel" aria-labelledby="stamp-layout-title">
           <div className="stamp-panel-heading"><h2 id="stamp-layout-title">颜色与排版</h2></div>
@@ -119,29 +120,31 @@ export function StampMaker({ tool }: { tool: ToolService }) {
             </div>
           </fieldset>
         </section>;
-  const exportPanel = <section className="stamp-panel stamp-export-panel" aria-labelledby="stamp-export-title"><div className="stamp-panel-heading"><div><span className="stamp-step">03</span><h2 id="stamp-export-title">制作与下载</h2></div></div>
-          <div className="stamp-export-bar">
-          <fieldset className="stamp-export-options" disabled={busy}><legend className="sr-only">导出设置</legend><label>导出尺寸<select value={options.size} onChange={event => update({ size: Number(event.target.value) as StampOptions['size'] })}><option value={1024}>1024 × 1024 px</option><option value={1600}>1600 × 1600 px · 推荐</option><option value={2048}>2048 × 2048 px</option></select></label><label>图片背景<select value={options.background} onChange={event => update({ background: event.target.value as StampOptions['background'] })}><option value="transparent">透明背景</option><option value="white">白色背景</option></select></label></fieldset>
-          <div className="stamp-entitlement"><div><span>当前使用权益</span><button className="stamp-text-button" type="button" disabled={checking || busy} onClick={() => void refresh()}>{checking ? '读取中…' : '刷新'}</button></div><strong>{entitlementText(access)}</strong>{access?.expiresAt && <p>有效期至 {time(access.expiresAt)}（北京时间）</p>}{access?.cycle && access.cycle !== 'times' && <p>当前有效权益内制作不扣次</p>}{access?.cycle === 'times' && <p>每成功制作一张，扣 1 次</p>}{access?.chargeType === 'free' && <p>无需购买，制作后直接下载</p>}{access?.chargeType === 'pending' && <p>你可以先调整样式并查看预览</p>}</div>
-          <div className="stamp-export-action">
-          {accessError && <p className="stamp-inline-error" role="alert">{accessError}</p>}
-          {access?.chargeType === 'paid' && !access.canGenerate && !retryPending ? <Link className="stamp-create-button" href={buyHref}>{access.signedIn ? '购买 / 续购套餐' : '登录并购买套餐'} <span>↗</span></Link> : <button className="stamp-create-button" type="button" disabled={busy || checking || (!access?.canGenerate && !retryPending) || Boolean(validationError) || sameResult} onClick={() => void generate()}>{busy ? '正在处理…' : sameResult ? '制作完成，请下载' : retryPending ? '重试本次制作' : '制作高清印章'}<span>{busy ? '…' : '→'}</span></button>}
-          <p className="stamp-charge-note">失败不扣次；重复下载不扣次。按次、包月、包年等规则以所购套餐为准。</p>
-          </div>
-          </div>
-          {message && <p className={`stamp-operation-message${messageSuccess ? ' success' : ''}`} role={messageSuccess ? 'status' : 'alert'}>{message}</p>}
-        </section>;
+  const exportPanel = <section className="stamp-panel stamp-export-panel" aria-labelledby="stamp-export-title">
+    <div className="stamp-panel-heading"><div><span className="stamp-step">03</span><h2 id="stamp-export-title">导出下载设置</h2></div><div className="stamp-export-entitlement" aria-live="polite"><span>当前权益</span><strong>{entitlementText(access)}</strong>{access?.expiresAt && <small>至 {time(access.expiresAt)}（北京时间）</small>}<button className="stamp-text-button" type="button" disabled={checking || busy} onClick={() => void refresh()}>{checking ? '读取中…' : '刷新'}</button></div></div>
+    <div className="stamp-export-bar">
+      <fieldset className="stamp-export-options" disabled={busy}><legend className="sr-only">导出设置</legend>
+        <label>导出尺寸<select value={options.size} onChange={event => update({ size: Number(event.target.value) as StampOptions['size'] })}>{stampSizes.map(size => <option key={size} value={size}>{size} × {size} px{size === 1600 ? ' · 推荐' : ''}</option>)}</select></label>
+        <label>导出格式<select value={options.format} onChange={event => update({ format: event.target.value as StampOptions['format'] })}>{Object.entries(stampFormats).map(([format, info]) => <option key={format} value={format}>{info.label}{format === 'svg' ? ' · 矢量' : format === 'jpeg' ? ' · 白底' : ''}</option>)}</select></label>
+        <label>图片背景<select value={options.background} disabled={options.format === 'jpeg'} onChange={event => update({ background: event.target.value as StampOptions['background'] })}><option value="transparent">透明背景</option><option value="white">白色背景</option></select></label>
+      </fieldset>
+      <div className="stamp-export-action">{access?.chargeType === 'paid' && !access.canGenerate && !retryPending ? <Link className="stamp-create-button" href={buyHref}>{access.signedIn ? '购买 / 续购套餐' : '登录并购买套餐'} <span>↗</span></Link> : <button className="stamp-create-button" type="button" disabled={busy || checking || (!access?.canGenerate && !retryPending) || Boolean(validationError) || sameResult} onClick={() => void generate()}>{busy ? '正在处理…' : sameResult ? '制作完成，请下载' : retryPending ? '重试本次制作' : '制作高清印章'}<span>{busy ? '…' : '→'}</span></button>}</div>
+    </div>
+    <p className="stamp-charge-note">{options.format === 'jpeg' ? 'JPG 使用白色背景。' : ''}失败不扣次；重复下载不扣次。按次、包月、包年等规则以所购套餐为准。</p>
+    {accessError && <p className="stamp-inline-error" role="alert">{accessError}</p>}
+    {message && <p className={`stamp-operation-message${messageSuccess ? ' success' : ''}`} role={messageSuccess ? 'status' : 'alert'}>{message}</p>}
+  </section>;
 
   return <main className="stamp-page">
     <nav className="stamp-breadcrumb" aria-label="面包屑"><Link href="/">商城首页</Link><span>／</span><Link href="/tools">工具服务</Link><span>／</span><span>{tool.name}</span></nav>
-    <header className="stamp-heading"><div><span className="stamp-kicker">YXSTAR CREATIVE TOOLS</span><h1>{tool.name}</h1><p>选一个样式，写下你的文字。让每一枚印章，都有自己的表达。</p></div><div className="stamp-help"><span>简单三步，完成制作</span><ol><li><b>选择样式</b><p>从经典圆章、椭圆、方章或姓名章开始。</p></li><li><b>调整文字</b><p>编辑文字、配色与排版，查看实时效果。</p></li><li><b>制作并下载</b><p>生成高清 PNG，透明背景便于使用。</p></li></ol></div><div className="stamp-feature-pills"><span>透明 PNG</span><span>最高 2048 像素</span><span>预览不扣次</span></div></header>
+    <header className="stamp-heading"><div><span className="stamp-kicker">YXSTAR CREATIVE TOOLS</span><h1>{tool.name}</h1><p>选一个样式，写下你的文字。让每一枚印章，都有自己的表达。</p></div><div className="stamp-help"><span>简单三步，完成制作</span><ol><li><b>选择样式</b><p>从经典圆章、椭圆、方章或姓名章开始。</p></li><li><b>调整文字</b><p>编辑文字、配色与排版，查看实时效果。</p></li><li><b>制作并下载</b><p>生成高清 PNG，透明背景便于使用。</p></li></ol></div><div className="stamp-feature-pills"><span>PNG · JPG · SVG</span><span>最高 4096 像素</span><span>预览不扣次</span></div></header>
 
     <div className="stamp-workspace">
       <section className="stamp-panel stamp-settings" aria-labelledby="stamp-settings-title">
         <div className="stamp-panel-heading"><div><span className="stamp-step">01</span><h2 id="stamp-settings-title">设计你的印章</h2></div><button type="button" className="stamp-text-button" disabled={busy} onClick={() => update(defaultStampOptions())}>重置</button></div>
         <fieldset disabled={busy} className="stamp-fields"><legend className="sr-only">印章设置</legend>
           <label className="stamp-field-title">选择样式</label>
-          <div className="stamp-templates">{stampPresets.map(preset => <button type="button" key={preset.shape} className={options.shape === preset.shape ? 'selected' : ''} aria-pressed={options.shape === preset.shape} onClick={() => update({ ...preset.options, size: options.size, background: options.background, color: options.color, font: options.font, textInset: options.textInset })}><Image src={`/stamp-previews/${preset.shape}.png`} alt="" width={76} height={76} unoptimized /><b>{preset.name}</b><small>{preset.note}</small></button>)}</div>
+          <div className="stamp-templates">{stampPresets.map(preset => <button type="button" key={preset.shape} className={options.shape === preset.shape ? 'selected' : ''} aria-pressed={options.shape === preset.shape} onClick={() => update({ ...preset.options, size: options.size, background: options.background, color: options.color, font: options.font, textInset: options.textInset, format: options.format })}><Image src={`/stamp-previews/${preset.shape}.png`} alt="" width={76} height={76} unoptimized /><b>{preset.name}</b><small>{preset.note}</small></button>)}</div>
           <div className="stamp-form-section"><h3>印章内容</h3><label>印章名称<span>{[...options.text].length} / {maxText}</span><input value={options.text} maxLength={maxText} onChange={event => update({ text: event.target.value })} placeholder={options.shape === 'name' ? '填写二至四个字' : '例如：宇星创意工作室'} /></label>
             {options.shape !== 'name' && <><label>辅助文字<small>选填</small><input value={options.subtitle} maxLength={12} onChange={event => update({ subtitle: event.target.value })} placeholder="例如：设计专用章" /></label><label>底部编号<small>选填</small><input value={options.code} maxLength={20} onChange={event => update({ code: event.target.value })} placeholder="字母、数字或短横线" /></label></>}
           </div>
@@ -151,7 +154,7 @@ export function StampMaker({ tool }: { tool: ToolService }) {
       <section className="stamp-center" aria-labelledby="stamp-preview-title">
         <div className="stamp-panel stamp-preview-panel"><div className="stamp-panel-heading"><div><span className="stamp-step">02</span><h2 id="stamp-preview-title">效果预览</h2></div><span className="stamp-preview-indicator">{updatingPreview ? '正在更新' : '实时预览'}</span></div><div className={`stamp-preview-stage ${options.background === 'white' ? 'white' : ''}`} aria-busy={updatingPreview}><span className="stamp-corner top-left" /><span className="stamp-corner bottom-right" /><Image className={updatingPreview ? 'is-updating' : ''} unoptimized src={preview} width={420} height={420} alt="当前印章的带水印效果预览" /><div className="stamp-preview-caption">{options.background === 'transparent' ? '棋盘格表示透明背景' : '白色背景'}<span>成品将移除预览水印</span></div></div>{(validationError || previewError) && <div className="stamp-inline-error stamp-preview-error" role="alert"><span>{validationError || previewError}</span>{previewError && !validationError && <button type="button" className="stamp-preview-retry" disabled={updatingPreview} onClick={() => setPreviewVersion(previous => previous + 1)}>重新预览</button>}</div>}<div className="stamp-preview-footer"><span>修改参数后自动更新</span><b>预览免费 · 制作成功才使用权益</b></div></div>
         {exportPanel}
-        {result && <div className="stamp-panel stamp-result"><div><span className="stamp-success-icon">✓</span><div><h2>你的印章已制作完成</h2><p>{result.size} × {result.size} px · PNG{result.signature && !sameResult ? ' · 这是修改参数前的成品' : ''}</p></div></div><Image unoptimized src={result.image} alt="已制作的高清印章成品" width={160} height={160} /><a className="stamp-download-button" href={result.image} download={`yxstar-stamp-${result.id}.png`}>下载高清 PNG <span>↓</span></a><small>重复下载此成品不会扣次。修改参数并重新制作属于一次新的处理。</small></div>}
+        {result && <div className="stamp-panel stamp-result"><div><span className="stamp-success-icon">✓</span><div><h2>你的印章已制作完成</h2><p>{result.size} × {result.size} px · {resultFormat.label}{result.signature && !sameResult ? ' · 这是修改参数前的成品' : ''}</p></div></div><Image unoptimized src={result.image} alt="已制作的高清印章成品" width={160} height={160} /><a className="stamp-download-button" href={result.image} download={`yxstar-stamp-${result.id}.${resultFormat.extension}`}>下载 {resultFormat.label} <span>↓</span></a><small>重复下载此成品不会扣次。修改参数并重新制作属于一次新的处理。</small></div>}
       </section>
 
       <aside className="stamp-sidebar" aria-labelledby="stamp-layout-title">
@@ -161,6 +164,6 @@ export function StampMaker({ tool }: { tool: ToolService }) {
         <Link className="stamp-back-tools" href="/tools">← 发现更多实用工具</Link>
       </aside>
     </div>
-    <section className="stamp-about"><h2>关于印章在线制作</h2><p>在浏览器中设计印章图片，支持圆形、椭圆形、方形和个人姓名章。调整名称、辅助文字、边框与颜色，生成清晰的透明或白底 PNG 图片。</p>{tool.detail && !tool.detail.includes('实际工具入口') && <p>{tool.detail}</p>}<div><article><h3>预览会消耗次数吗？</h3><p>不会。修改文字、颜色和样式都可以预览；点击制作且成功生成成品后，按次套餐才会扣除一次。</p></article><article><h3>包月、包年如何使用？</h3><p>沿用本工具后台配置的套餐及价格，在有效期内使用；有效时长权益优先于按次权益。</p></article><article><h3>下载失败怎么办？</h3><p>付费制作的成品会保留在最近制作中，同一成品可以重新打开和下载，不会重复扣次。</p></article></div></section>
+    <section className="stamp-about"><h2>关于印章在线制作</h2><p>在浏览器中设计印章图片，支持圆形、椭圆形、方形和个人姓名章。调整名称、辅助文字、边框与颜色，导出 PNG、JPG 图片或文字已转为轮廓的 SVG 矢量文件。</p>{tool.detail && !tool.detail.includes('实际工具入口') && <p>{tool.detail}</p>}<div><article><h3>预览会消耗次数吗？</h3><p>不会。修改文字、颜色和样式都可以预览；点击制作且成功生成成品后，按次套餐才会扣除一次。</p></article><article><h3>包月、包年如何使用？</h3><p>沿用本工具后台配置的套餐及价格，在有效期内使用；有效时长权益优先于按次权益。</p></article><article><h3>下载失败怎么办？</h3><p>付费制作的成品会保留在最近制作中，同一成品可以重新打开和下载，不会重复扣次。</p></article></div></section>
   </main>;
 }

@@ -18,7 +18,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const tool = isToolSlug(slug) ? await getPublishedTool(slug) : null;
   if (!tool) return { title: '工具不存在｜宇星商城', robots: { index: false, follow: false } };
   const title = tool.seoTitle || `${tool.name}｜宇星商城`;
-  const description = tool.seoDescription || (slug === 'stamp-maker' ? '在线设计圆形、椭圆形、方形及姓名印章，实时预览，生成最高 2048 像素的透明 PNG。支持按次、包月及包年套餐。' : tool.description || tool.detail.slice(0, 160));
+  const description = tool.seoDescription || (slug === 'stamp-maker' ? '在线设计圆形、椭圆形、方形及姓名印章，实时预览，支持 256 至 4096 像素，可导出 PNG、JPG 及 SVG。支持按次、包月及包年套餐。' : tool.description || tool.detail.slice(0, 160));
   const url = `${siteOrigin()}${toolPagePath(tool.slug)}`;
   return { title, description, alternates: { canonical: url }, openGraph: { title, description, url, type: 'website', images: tool.logo ? [tool.logo] : [] } };
 }

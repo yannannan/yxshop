@@ -1,13 +1,15 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { webcrypto } from 'node:crypto';
+import { createHash, webcrypto } from 'node:crypto';
 import vm from 'node:vm';
 import { inflateSync } from 'node:zlib';
 import test from 'node:test';
 import ts from 'typescript';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import jpeg from 'jpeg-js';
+import { Resvg } from '@resvg/resvg-wasm';
 import * as options from '../lib/stamp-options.ts';
 import * as tools from '../lib/tool-services.ts';
 import { renderStamp, stampSvg } from '../lib/stamp-renderer.ts';
@@ -20,7 +22,7 @@ function load(file, mocks = {}, globals = {}) {
   return exports;
 }
 const pureEntitlements = load('../lib/tool-entitlements.ts', { '@/db/mysql-runtime': { env: {} }, './tool-services': tools });
-const serviceBase = { '@/db/mysql-runtime': { env: {} }, '@/db/setup': { getVerifiedSessionPhone: () => null }, './tool-entitlements': pureEntitlements, './tool-services': tools };
+const serviceBase = { '@/db/mysql-runtime': { env: {} }, '@/db/setup': { getVerifiedSessionPhone: () => null }, './tool-entitlements': pureEntitlements, './tool-services': tools, './stamp-options': options };
 const { StampError } = load('../lib/stamp-service.ts', serviceBase);
 const id = '11111111-1111-4111-8111-111111111111', otherId = '22222222-2222-4222-8222-222222222222';
 const stampTool = { id: 40, tool_charge_type: 'paid' };
@@ -38,7 +40,7 @@ test('真实 WebAssembly 中文渲染：各样式返回 PNG，预览固定 420�
     const png = await renderStamp(preset.options, true);
     assert.equal(png.subarray(1, 4).toString(), 'PNG'); assert.equal(png.readUInt32BE(16), 420); assert.equal(png.readUInt32BE(20), 420); assert.ok(png.length > 15000, '中文及图形应有实际像素内容');
   }
-  for (const size of [1024, 1600, 2048]) {
+  for (const size of options.stampSizes) {
     const png = await renderStamp({ ...standard, size });
     assert.equal(png.readUInt32BE(16), size); assert.equal(png.readUInt32BE(20), size);
     assert.equal(cornerAlpha(png), 0, '透明导出应保留透明通道');
@@ -48,6 +50,44 @@ test('真实 WebAssembly 中文渲染：各样式返回 PNG，预览固定 420�
   assert.ok(svg.includes('&amp;')); assert.ok(!svg.includes('file:')); assert.ok(!svg.includes('效果预览'));
   assert.ok(stampSvg(standard, true).includes('效果预览'));
   assert.ok(stampSvg({ ...standard, background: 'white' }).includes('fill="white"'));
+});
+
+test('十档尺寸和三种格式受服务端白名单校验，旧参数默认 PNG，JPG 强制白底', () => {
+  assert.equal(options.stampSizes.length, 10);
+  assert.deepEqual([...options.stampSizes].sort((a, b) => a - b), options.stampSizes);
+  for (const size of options.stampSizes) for (const format of Object.keys(options.stampFormats)) assert.equal(options.parseStampOptions({ ...standard, size, format }).format, format);
+  for (const patch of [{ size: 128 }, { size: 500 }, { size: 8192 }, { size: '1024' }, { format: 'webp' }, { format: 'toString' }, { format: '<svg>' }, { format: null }]) assert.throws(() => options.parseStampOptions({ ...standard, ...patch }));
+  const { format, ...legacy } = standard;
+  assert.equal(format, 'png'); assert.deepEqual(options.parseStampOptions(legacy), standard);
+  assert.equal(options.parseStampOptions({ ...standard, format: 'jpeg', background: 'transparent' }).background, 'white');
+});
+
+test('JPG 生成真实文件且背景为白色，支持最小与最大尺寸；预览仍固定 PNG', async () => {
+  for (const size of [256, 4096]) {
+    const encoded = await renderStamp({ ...standard, size, format: 'jpeg', background: 'transparent' });
+    assert.equal(encoded.readUInt16BE(0), 0xffd8);
+    const decoded = jpeg.decode(encoded, { useTArray: true });
+    assert.equal(decoded.width, size); assert.equal(decoded.height, size);
+    assert.ok([...decoded.data.slice(0, 3)].every(channel => channel >= 250), 'JPG 透明区域应合成为白底');
+  }
+  for (const format of ['jpeg', 'svg']) {
+    const preview = await renderStamp({ ...standard, size: 4096, format }, true);
+    assert.equal(preview.subarray(1, 4).toString(), 'PNG'); assert.equal(preview.readUInt32BE(16), 420);
+  }
+});
+
+test('SVG 中文转为轮廓，不依赖字体；尺寸和透明或白底可在无字体条件下还原', async () => {
+  for (const { value: font } of options.stampFonts) for (const background of ['transparent', 'white']) {
+    const svg = (await renderStamp({ ...standard, font, background, format: 'svg', size: 4096 })).toString();
+    assert.match(svg, /^<svg width="4096" height="4096"/);
+    assert.ok(svg.includes('<path')); assert.ok(!svg.includes('<text')); assert.ok(!svg.includes('效果预览'));
+    assert.ok(!/(?:href|src)="(?:https?:|file:)|<script/i.test(svg));
+    const renderer = new Resvg(svg, { fitTo: { mode: 'width', value: 256 } });
+    try { const result = renderer.render(); try {
+      assert.equal(result.pixels[3], background === 'white' ? 255 : 0);
+      assert.ok(result.pixels.some((value, index) => index % 4 === 0 && value > 100), '无需字体也应有实际印章像素');
+    } finally { result.free(); } } finally { renderer.free(); }
+  }
 });
 
 test('旧请求自动使用宋体和原间距，未知字体、文件路径及越界间距被拒绝', () => {
@@ -119,7 +159,7 @@ function cornerAlpha(png) {
   return inflateSync(Buffer.concat(data))[4];
 }
 
-function api({ charge = 'paid', user = { id: 1 }, entitled = true, previous = null, renderFails = false, saveFails = false } = {}) {
+function api({ charge = 'paid', user = { id: 1 }, entitled = true, previous = null, renderFails = false, saveFails = false, renderImage = Buffer.from('png') } = {}) {
   const calls = [];
   const service = {
     StampError,
@@ -128,7 +168,7 @@ function api({ charge = 'paid', user = { id: 1 }, entitled = true, previous = nu
     stampAccess: async () => ({ canGenerate: entitled, chargeType: charge }),
     savePaidStamp: async (...args) => { calls.push(['save', ...args]); if (saveFails) throw new Error('保存成品失败'); return { id: args[2], charged: true, image: 'data:image/png;base64,cG5n', reused: false }; },
   };
-  const mocks = { '@/lib/stamp-options': options, '@/lib/stamp-service': service, '@/lib/stamp-renderer': { async renderStamp(...args) { calls.push(['render', ...args]); if (renderFails) throw new Error('渲染失败'); return Buffer.from('png'); } } };
+  const mocks = { '@/lib/stamp-options': options, '@/lib/stamp-service': service, '@/lib/stamp-renderer': { async renderStamp(...args) { calls.push(['render', ...args]); if (renderFails) throw new Error('渲染失败'); return renderImage; } } };
   const route = load('../app/api/tools/stamp-maker/route.ts', mocks);
   const preview = load('../app/api/tools/stamp-maker/preview/route.ts', mocks);
   return { calls, route, preview, generate: body => route.POST(new Request('http://localhost/api/tools/stamp-maker', { method: 'POST', body: JSON.stringify({ id, options: standard, ...body }) })) };
@@ -152,6 +192,33 @@ test('付费制作先完成渲染，再由服务端当前用户、工具、参�
   assert.deepEqual(setup.calls.map(call => call[0]), ['find', 'render', 'save']);
   const saved = setup.calls.find(call => call[0] === 'save');
   assert.equal(saved[1], 1); assert.equal(saved[2], 40); assert.equal(saved[3], id); assert.match(saved[4], /^[a-f0-9]{64}$/);
+});
+
+test('API 返回实际文件的 MIME 和格式，格式参与任务指纹；付费保存原始文件字节', async () => {
+  const hashes = [];
+  for (const format of Object.keys(options.stampFormats)) {
+    const selected = { ...standard, size: 512, format }, image = await renderStamp(selected);
+    const response = await api({ charge: 'free', user: null, renderImage: image }).generate({ options: selected });
+    assert.equal(response.status, 200);
+    const result = (await response.json()).result;
+    assert.equal(result.format, format); assert.ok(result.image.startsWith(`data:${options.stampFormats[format].mime};base64,`));
+    assert.deepEqual(Buffer.from(result.image.split(',')[1], 'base64'), image);
+    const paid = api({ renderImage: image });
+    assert.equal((await paid.generate({ options: selected })).status, 200);
+    const saved = paid.calls.find(call => call[0] === 'save');
+    assert.deepEqual(saved[5], image); assert.equal(saved[6], 512); hashes.push(saved[4]);
+  }
+  assert.equal(new Set(hashes).size, 3);
+});
+
+test('PNG 兼容升级前的任务指纹，旧页面重试不会因新增格式参数被拒绝', async () => {
+  const { format, ...legacy } = standard;
+  assert.equal(format, 'png');
+  const expected = createHash('sha256').update(JSON.stringify(legacy)).digest('hex');
+  for (const selected of [standard, legacy]) {
+    const setup = api(); assert.equal((await setup.generate({ options: selected })).status, 200);
+    assert.equal(setup.calls.find(call => call[0] === 'save')[4], expected);
+  }
 });
 test('预览与成品接收相同字体和间距，更改任一项会生成不同参数指纹', async () => {
   const hashes = [];
@@ -247,6 +314,20 @@ test('并发重试同一任务仅保存一次和扣一次，之后可重复读�
   const restored = await setup.service.findStampResult(1, 40, id);
   assert.equal(restored.image, results[0].image); assert.equal(restored.reused, true);
 });
+
+test('付费多格式成品按真实文件头恢复，重复下载保留原始格式且不再次扣次', async () => {
+  for (const format of Object.keys(options.stampFormats)) {
+    const image = await renderStamp({ ...standard, size: 256, format }), setup = ledger();
+    const saved = await setup.service.savePaidStamp(1, 40, id, 'a'.repeat(64), image, 256);
+    const restored = await setup.service.findStampResult(1, 40, id);
+    const replayed = await setup.service.savePaidStamp(1, 40, id, 'a'.repeat(64), image, 256);
+    assert.equal(saved.format, format); assert.equal(restored.format, format); assert.equal(replayed.format, format);
+    assert.equal(restored.image, saved.image); assert.equal(replayed.image, saved.image);
+    assert.ok(saved.image.startsWith(`data:${options.stampFormats[format].mime};base64,`));
+    assert.equal(restored.charged, false); assert.equal(replayed.charged, false);
+    assert.equal(setup.state.events.length, 1); assert.equal(setup.state.orders[0].tool_uses_remaining, 0);
+  }
+});
 for (const fail of ['event', 'result']) test(`${fail} 写入失败回滚次数和所有记录，避免扣次但没有成品`, async () => {
   const setup = ledger({ fail });
   await assert.rejects(setup.save(), /写入失败/);
@@ -323,10 +404,10 @@ test('印章独立页渲染商城导航、三栏工作台、各会员套餐及�
   const tool = { id: 40, slug: 'stamp-maker', name: '印章在线制作', plans: memberPlans, chargeType: 'paid', detail: '', description: '', seoTitle: '', seoDescription: '', entryConfigured: true };
   const page = load('../app/tools/[slug]/page.tsx', { 'next/link': Link, 'next/image': Image, 'next/navigation': { notFound() { throw new Error('404'); }, permanentRedirect() { throw new Error('redirect'); } }, '@/components/tool-launch': { ToolLaunch: () => null }, '@/components/storefront-header': header, '@/components/stamp-maker': workspace, '@/lib/tool-services': tools, '@/lib/tool-service-data': { getPublishedTool: async () => tool } });
   const html = renderToStaticMarkup(await page.default({ params: Promise.resolve({ slug: 'stamp-maker.html' }) }));
-  for (const text of ['主导航', '印章在线制作', '效果预览', '制作与下载', '基础会员', '专业会员', '单次制作', '制作高清印章', '文字距边框', '印章字体', '宋体', '黑体', '霞鹜文楷']) assert.ok(html.includes(text));
+  for (const text of ['主导航', '印章在线制作', '效果预览', '导出下载设置', '导出格式', '基础会员', '专业会员', '单次制作', '制作高清印章', '文字距边框', '印章字体', '宋体', '黑体', '霞鹜文楷']) assert.ok(html.includes(text));
   assert.ok(html.includes('/product/40?plan=basic-month&amp;cycle=month')); assert.ok(html.includes('application/ld+json'));
   const metadata = await page.generateMetadata({ params: Promise.resolve({ slug: 'stamp-maker.html' }) });
-  assert.ok(metadata.description.includes('2048'));
+  assert.ok(metadata.description.includes('4096'));
 });
 
 test('界面可调整间距和字体，切换样式保留选择，重置恢复原设置', () => {
@@ -341,10 +422,16 @@ test('界面可调整间距和字体，切换样式保留选择，重置恢复�
   const control = (tree, title, type) => all(all(tree).find(node => node.type === 'label' && text(node).startsWith(title))).find(node => node.type === type);
   control(render(), '文字距边框', 'input').props.onChange({ target: { value: '68' } });
   control(render(), '印章字体', 'select').props.onChange({ target: { value: 'kai' } });
+  control(render(), '导出格式', 'select').props.onChange({ target: { value: 'jpeg' } });
+  control(render(), '导出尺寸', 'select').props.onChange({ target: { value: '4096' } });
+  assert.equal(control(render(), '图片背景', 'select').props.value, 'white');
+  assert.equal(control(render(), '图片背景', 'select').props.disabled, true);
   for (const shape of ['简约椭圆', '方形印章', '个人姓名章', '经典圆章']) {
     all(render()).find(node => node.type === 'button' && text(node).includes(shape)).props.onClick();
     const tree = render();
     assert.equal(control(tree, '印章字体', 'select').props.value, 'kai');
+    assert.equal(control(tree, '导出格式', 'select').props.value, 'jpeg');
+    assert.equal(control(tree, '导出尺寸', 'select').props.value, 4096);
     const inset = control(tree, '文字距边框', 'input');
     if (['经典圆章', '简约椭圆'].includes(shape)) assert.equal(inset.props.value, 68);
     else assert.equal(inset, undefined);
@@ -352,6 +439,8 @@ test('界面可调整间距和字体，切换样式保留选择，重置恢复�
   all(render()).find(node => node.type === 'button' && text(node) === '重置').props.onClick();
   assert.equal(control(render(), '文字距边框', 'input').props.value, 12);
   assert.equal(control(render(), '印章字体', 'select').props.value, 'serif');
+  assert.equal(control(render(), '导出格式', 'select').props.value, 'png');
+  assert.equal(control(render(), '图片背景', 'select').props.disabled, false);
 });
 
 test('预览失败后可单独重试相同参数，成功后清除错误，始终不发起制作请求', async () => {

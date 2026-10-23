@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 import { initWasm, Resvg } from '@resvg/resvg-wasm';
+import jpeg from 'jpeg-js';
 import type { StampFont, StampOptions } from './stamp-options';
 
 const fonts = {
@@ -98,10 +99,18 @@ export function stampSvg(options: StampOptions, preview = false) {
 
 export async function renderStamp(options: StampOptions, preview = false): Promise<Buffer> {
   const buffers = await resources(options.font);
-  const renderer = new Resvg(stampSvg(options, preview), { font: { fontBuffers: buffers, defaultFontFamily: fonts[options.font].family }, fitTo: { mode: 'width', value: preview ? 420 : options.size } });
+  const normalized = options.format === 'jpeg' ? { ...options, background: 'white' as const } : options;
+  const renderer = new Resvg(stampSvg(normalized, preview), { font: { fontBuffers: buffers, defaultFontFamily: fonts[options.font].family }, fitTo: { mode: 'width', value: preview ? 420 : options.size } });
   try {
+    if (!preview && options.format === 'svg') {
+      // Resvg 输出字形轮廓，矢量成品无需用户另装字体。
+      return Buffer.from(renderer.toString().replace(/^<svg width="[^"]+" height="[^"]+"/, `<svg width="${options.size}" height="${options.size}"`));
+    }
     const result = renderer.render();
-    try { return Buffer.from(result.asPng()); }
+    try {
+      if (!preview && options.format === 'jpeg') return Buffer.from(jpeg.encode({ data: Buffer.from(result.pixels), width: result.width, height: result.height }, 92).data);
+      return Buffer.from(result.asPng());
+    }
     finally { result.free(); }
   } finally { renderer.free(); }
 }

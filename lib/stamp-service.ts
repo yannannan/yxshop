@@ -2,7 +2,7 @@ import { env } from '@/db/mysql-runtime';
 import { getVerifiedSessionPhone } from '@/db/setup';
 import { usableToolOrder, type ToolOrderAccess } from './tool-entitlements';
 import { toolAccessExpiresAt } from './tool-services';
-import type { StampAccess, StampResult } from './stamp-options';
+import { stampImageData, type StampAccess, type StampResult } from './stamp-options';
 
 export class StampError extends Error {
   constructor(message: string, public status = 400) { super(message); }
@@ -10,7 +10,7 @@ export class StampError extends Error {
 export type StampTool = { id: number; tool_charge_type: 'free' | 'paid' | 'pending' };
 type ResultRow = { id: string; user_id: number; product_id: number; request_hash: string; image_base64: string; image_size: number; created_at: string; charged: number };
 const resultColumns = 'id,user_id,product_id,request_hash,image_base64,image_size,created_at,charged';
-const publicResult = (row: ResultRow, reused: boolean): StampResult => ({ id: row.id, image: `data:image/png;base64,${row.image_base64}`, size: Number(row.image_size), createdAt: row.created_at, charged: !reused && Boolean(row.charged), reused });
+const publicResult = (row: ResultRow, reused: boolean): StampResult => ({ id: row.id, ...stampImageData(row.image_base64), size: Number(row.image_size), createdAt: row.created_at, charged: !reused && Boolean(row.charged), reused });
 
 export async function getStampTool(): Promise<StampTool> {
   const tool = await env.DB.prepare("SELECT id,tool_charge_type FROM products WHERE tool_slug='stamp-maker' AND product_type='tool' AND status='active'").first<StampTool>();
@@ -64,6 +64,6 @@ export async function savePaidStamp(userId: number, productId: number, id: strin
     await db.prepare('INSERT INTO tool_usage_events (operation_id,order_id,created_at) VALUES (?,?,?)').bind(`stamp:${id}`, order.id, now).run();
     const base64 = image.toString('base64');
     await db.prepare('INSERT INTO tool_generation_results (id,user_id,product_id,order_id,request_hash,image_base64,image_size,charged,created_at) VALUES (?,?,?,?,?,?,?,?,?)').bind(id, userId, productId, order.id, hash, base64, size, charged ? 1 : 0, now).run();
-    return { id, image: `data:image/png;base64,${base64}`, size, createdAt: now, charged, reused: false };
+    return { id, ...stampImageData(base64), size, createdAt: now, charged, reused: false };
   });
 }
