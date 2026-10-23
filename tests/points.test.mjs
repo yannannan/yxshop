@@ -215,12 +215,13 @@ test('普通下单接口不能绕过积分充值快照；未配置收款码不�
 test('后台充值套餐校验价格、数量并按保存金额配置收款码，不能改普通商品', async () => {
   const f = fixture(), writes = [], prepared = [];
   const DB = { prepare(sql) { let args = []; return { bind(...values) { args = values; return this; }, async first() { if (sql.includes("product_type='points'")) return args[0] === 101 ? { id: 101 } : null; return null; }, async all() { return { results: [{ id: 101, name: '轻享积分包', points: 200, price: 20, status: 'active' }] }; }, async run() { assert.equal((sql.match(/\?/g) || []).length, args.length); writes.push({ sql, args }); return { meta: { last_row_id: 105 } }; } }; } };
+  DB.transaction = work => work(DB);
   const service = { ...f.service, pointsPackages: async () => [{ id: 101, price: 20 }] };
   const route = load('../app/api/admin/points/route.ts', { '@/db/mysql-runtime': { env: { DB } }, '@/db/setup': { ensurePaymentQrRecords: async (...args) => prepared.push(args) }, '@/lib/points-service': service, '@/lib/points': points, '@/lib/admin-auth': { getAdminContext: async () => ({}), hasAdminPermission: () => true } });
   const post = body => route.POST(new Request('http://localhost/api/admin/points', { method: 'POST', body: JSON.stringify(body) }));
   for (const body of [{ points: 0 }, { points: 1.5 }, { price: 0 }, { price: 20.001 }]) assert.equal((await post({ action: 'save', name: '积分', points: 200, price: 20, ...body })).status, 400);
   assert.equal((await post({ action: 'save', id: 40, name: '积分', points: 200, price: 20 })).status, 404);
-  assert.equal((await post({ action: 'save', id: 101, name: '积分', points: 200, price: 20, status: 'active' })).status, 200); assert.deepEqual(prepared, [[101, 20]]);
+  assert.equal((await post({ action: 'save', id: 101, name: '积分', points: 200, price: 20, status: 'active' })).status, 200); assert.ok(writes.some(row => row.sql.startsWith('UPDATE products')));
   assert.equal((await post({ action: 'qr-save', id: 101, amount: 21, type: 'wechat', imageUrl: 'data:image/png;base64,YQ==' })).status, 400);
   assert.equal((await post({ action: 'qr-save', id: 101, amount: 20, type: 'wechat', imageUrl: 'data:image/png;base64,YQ==', enabled: true })).status, 200); assert.equal(writes.at(-1).args[1], 'active');
 });

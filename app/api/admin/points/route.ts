@@ -61,17 +61,41 @@ export async function POST(request: Request) {
     const name = String(body.name || '').trim(), description = String(body.description || '').trim().slice(0, 1000);
     const points = Number(body.points), price = Number(body.price);
     if (!name || name.length > 100 || !validPoints(points) || !Number.isFinite(price) || price <= 0 || price > 1000000 || Math.abs(price * 100 - Math.round(price * 100)) > .000001) throw new PointsError('请填写名称、正整数积分及有效的两位小数充值金额');
-    const status = body.status === 'active' ? 'active' : 'inactive', now = new Date().toISOString();
-    let productId = id;
-    if (id) {
-      const existing = await env.DB.prepare("SELECT id FROM products WHERE id=? AND product_type='points'").bind(id).first();
-      if (!existing) throw new PointsError('充值套餐不存在', 404);
-      await env.DB.prepare("UPDATE products SET name=?,description=?,points_amount=?,price=?,status=?,updated_at=? WHERE id=? AND product_type='points'").bind(name, description, points, price, status, now, id).run();
-    } else {
-      const result = await env.DB.prepare("INSERT INTO products (name,category,subcategory,price,attributes_json,description,detail,cover_image,detail_image,status,stock,sort_order,product_type,points_amount,updated_at) VALUES (?,'积分充值','',?,'[]',?,'','','',?,99999,10000,'points',?,?)").bind(name, price, description, status, points, now).run();
-      productId = Number(result.meta.last_row_id);
+    type PaymentDraft = { type: 'wechat' | 'alipay'; amount: number; imageUrl: string; enabled: boolean };
+    let paymentQrs: PaymentDraft[] | undefined;
+    if (body.paymentQrs !== undefined) {
+      if (!Array.isArray(body.paymentQrs) || body.paymentQrs.length !== 2) throw new PointsError('请同时提交微信和支付宝的收款配置');
+      const methods = new Set<string>();
+      paymentQrs = body.paymentQrs.map((item: unknown) => {
+        if (!item || typeof item !== 'object') throw new PointsError('收款配置不正确');
+        const qr = item as Record<string, unknown>;
+        if (!['wechat', 'alipay'].includes(String(qr.type)) || methods.has(String(qr.type)) || typeof qr.enabled !== 'boolean' || typeof qr.imageUrl !== 'string' || qr.amount !== price) throw new PointsError('收款配置须包含两种支付方式，并匹配当前充值金额');
+        methods.add(String(qr.type));
+        if (qr.imageUrl && (!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(qr.imageUrl) || qr.imageUrl.length > 1400000)) throw new PointsError('收款码支持不超过 1MB 的 JPG、PNG、WebP 图片');
+        if (qr.enabled && !qr.imageUrl) throw new PointsError('请上传收款码后再启用该支付方式');
+        return { type: qr.type as PaymentDraft['type'], amount: price, imageUrl: qr.imageUrl, enabled: qr.enabled };
+      });
     }
-    await ensurePaymentQrRecords(productId, price);
-    return Response.json({ ok: true, id: productId });
+    const status = body.status === 'active' ? 'active' : 'inactive', now = new Date().toISOString();
+    const productId = await env.DB.transaction(async db => {
+      let savedId = id;
+      if (id) {
+        const existing = await db.prepare("SELECT id FROM products WHERE id=? AND product_type='points' FOR UPDATE").bind(id).first();
+        if (!existing) throw new PointsError('充值套餐不存在', 404);
+        await db.prepare("UPDATE products SET name=?,description=?,points_amount=?,price=?,status=?,updated_at=? WHERE id=? AND product_type='points'").bind(name, description, points, price, status, now, id).run();
+      } else {
+        const result = await db.prepare("INSERT INTO products (name,category,subcategory,price,attributes_json,description,detail,cover_image,detail_image,status,stock,sort_order,product_type,points_amount,updated_at) VALUES (?,'积分充值','',?,'[]',?,'','','',?,99999,10000,'points',?,?)").bind(name, price, description, status, points, now).run();
+        savedId = Number(result.meta.last_row_id);
+      }
+      // 套餐及两种收款配置一起提交；保留其他金额的二维码，供既有订单继续付款。
+      for (const type of ['wechat', 'alipay'] as const) {
+        const existing = await db.prepare('SELECT id FROM payment_qrs WHERE product_id=? AND type=? AND amount=? FOR UPDATE').bind(savedId, type, price).first();
+        const draft = paymentQrs?.find(qr => qr.type === type);
+        if (existing && draft) await db.prepare('UPDATE payment_qrs SET image_url=?,status=? WHERE product_id=? AND amount=? AND type=?').bind(draft.imageUrl || null, draft.enabled ? 'active' : 'inactive', savedId, price, type).run();
+        else if (!existing) await db.prepare('INSERT INTO payment_qrs (product_id,name,type,amount,image_url,status) VALUES (?,?,?,?,?,?)').bind(savedId, `${type === 'wechat' ? '微信支付' : '支付宝'} ¥${price.toFixed(2)} 收款码`, type, price, draft?.imageUrl || null, draft?.enabled ? 'active' : 'inactive').run();
+      }
+      return savedId;
+    });
+    return Response.json({ ok: true, id: productId, message: '套餐及收款配置已保存' });
   } catch (error) { return pointsFailure(error); }
 }
