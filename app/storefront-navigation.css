@@ -1,0 +1,3 @@
+.site-navigation a.active{background:#fff1e9;color:#dd5723;box-shadow:inset 0 -2px 0 #ff6b2c}
+.catalog-home-link{display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:0 15px;border:1px solid #17191d;border-radius:10px;background:#fff;text-decoration:none;font-size:13px;font-weight:700;white-space:nowrap}
+.catalog-home-link:hover{background:#f7f6f2}

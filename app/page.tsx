@@ -7,6 +7,7 @@ import { TechnicalSupportChat } from "../components/technical-support-chat";
 import { TechnicalProviderApplication } from "../components/technical-provider-application";
 import { ToolDirectory } from "../components/tool-directory";
 import { StorefrontBanners } from "../components/storefront-banners";
+import { StorefrontHeader } from "../components/storefront-header";
 import { StoreProductCard } from "../components/store-product-card";
 import { HomepageCatalog } from "../components/homepage-catalog";
 import { CatalogPagination } from "../components/catalog-pagination";
@@ -90,6 +91,12 @@ export default function StorePage() {
       setAuthOpen(true);
     }
   }, []);
+
+  useEffect(() => {
+    if (channel === 'technical' && window.location.hash === '#talent-entry') {
+      document.getElementById('talent-entry')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [channel]);
 
   useEffect(() => {
     if (!loggedIn) {
@@ -408,49 +415,7 @@ export default function StorePage() {
 
   return (
     <main className="store-shell refined-store">
-      <header
-        className={`topbar refined-topbar compact-topbar${isAdmin || isTechnician ? " has-admin-entry" : ""}`}
-      >
-        <a className="brand" href="/" aria-label="宇星商城首页">
-          <span className="brand-mark">
-            <Image
-              src="/yxstar_logo.png"
-              alt="宇星商城 Logo"
-              fill
-              sizes="34px"
-            />
-          </span>
-          <span>宇星商城</span>
-        </a>
-        <nav className="site-navigation" aria-label="主导航">
-          <button
-            className={channel === "mall" ? "active" : ""}
-            onClick={() => switchChannel("mall", "content")}
-          >
-            AI商城服务
-          </button>
-          <button
-            className={channel === "technical" ? "active" : ""}
-            onClick={() => switchChannel("technical", "content")}
-          >
-            上门技术服务
-          </button>
-          <a
-            href="#talent-entry"
-            onClick={(event) => {
-              event.preventDefault();
-              switchChannel("technical", "talent-entry");
-            }}
-          >
-            技术人才入驻
-          </a>
-        </nav>
-        {isAdmin && (
-          <a className="admin-entry" href="/admin" target="_blank" rel="noopener noreferrer">进入管理后台</a>
-        )}
-        {isTechnician && (
-          <a className="admin-entry" href="/technician">进入技术人员工作台</a>
-        )}
+      <StorefrontHeader channel={channel} onNavigate={switchChannel} isAdmin={isAdmin} isTechnician={isTechnician}>
         <div className="account-actions">
           {loggedIn ? (
             <>
@@ -470,7 +435,7 @@ export default function StorePage() {
             </button>
           )}
         </div>
-      </header>
+      </StorefrontHeader>
 
       <div className="store-layout refined-layout no-sidebar-layout">
         <section className="content refined-content">

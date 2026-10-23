@@ -31,6 +31,7 @@ function load(file, mocks = {}, globals = {}) {
 
 const Link = ({ href, children, ...props }) => React.createElement('a', { href, ...props }, children);
 const Image = ({ src, alt }) => React.createElement('img', { src, alt });
+const storefrontHeader = load('../components/storefront-header.tsx', { 'next/link': Link, 'next/image': Image });
 const pagination = load('../components/catalog-pagination.tsx', { 'next/link': Link });
 const directoryMocks = { '../lib/tool-services': toolHelpers, '../lib/homepage-display': helpers, './catalog-pagination': pagination, 'next/link': Link, 'next/image': Image };
 const directory = load('../components/tool-directory.tsx', directoryMocks);
@@ -187,6 +188,7 @@ test('商品独立目录按后台顺序分页，二三级分类与搜索条件�
   const categories = [{ name: '账号服务', children: [{ name: '会员', children: [{ name: '充值', children: [] }] }] }];
   const fixtures = Array.from({ length: 26 }, (_, i) => ({ ...products[0], id: i + 1, name: `AI商品${i + 1}`, subcategory: '充值' }));
   const page = load('../app/products/page.tsx', {
+    '@/components/storefront-header': storefrontHeader,
     'next/link': Link, '@/lib/product-data': { getPublishedProducts: async () => [...fixtures, { ...products[15], id: 99 }], getPublishedCategories: async () => categories },
     '@/lib/homepage-display-data': { getHomepageDisplay: async () => ({ ...helpers.defaultHomepageDisplay(), itemOrder: [26, 1] }) },
     '@/lib/homepage-display': helpers, '@/lib/categories': categoryHelpers,
@@ -204,6 +206,7 @@ test('商品独立目录按后台顺序分页，二三级分类与搜索条件�
 
 test('独立工具目录分页使用保存的工具顺序并生成下一页链接', async () => {
   const page = load('../app/tools/page.tsx', {
+    '@/components/storefront-header': storefrontHeader,
     'next/link': Link, '@/components/tool-directory': directory, '@/lib/tool-services': toolHelpers, '@/lib/tool-service-data': { getPublishedTools: async () => tools },
     '@/lib/homepage-display': helpers, '@/lib/homepage-display-data': { getHomepageDisplay: async () => ({ ...helpers.defaultHomepageDisplay(), itemOrder: [125, 101] }) },
   });
@@ -261,6 +264,7 @@ function storefrontHost() {
   const fixtures = Array.from({ length: 26 }, (_, i) => ({ ...products[0], id: i + 1 }));
   const services = Array.from({ length: 26 }, (_, i) => ({ ...technicalHelpers.technicalServices[0], slug: `service-${i + 1}`, title: `技术服务${i + 1}`, homepageFeatured: i < 14 }));
   return hookHost('../app/page.tsx', 'default', {
+    '../components/storefront-header': storefrontHeader,
     'next/link': Link, 'next/image': Image,
     '../components/technical-support-chat': { TechnicalSupportChat: () => null },
     '../components/technical-provider-application': { TechnicalProviderApplication: () => null },

@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
+import { StorefrontHeader } from '@/components/storefront-header';
 import { ToolDirectory } from '@/components/tool-directory';
 import { getPublishedTools } from '@/lib/tool-service-data';
 import { siteOrigin } from '@/lib/tool-services';
@@ -14,5 +14,5 @@ export const metadata: Metadata = {
 
 export default async function ToolsPage({ searchParams }: { searchParams?: Promise<{ page?: string }> }) {
   const [tools, config, params] = await Promise.all([getPublishedTools(), getHomepageDisplay(), searchParams]);
-  return <main className="tools-page"><header className="tools-page-header"><Link href="/" className="tools-brand">宇星商城</Link><Link href="/">返回商城</Link></header><ToolDirectory tools={orderItems(tools, config.itemOrder)} pageSize={12} page={Number(params?.page || 1)} moreHref={null} /></main>;
+  return <><StorefrontHeader /><main className="tools-page"><ToolDirectory tools={orderItems(tools, config.itemOrder)} pageSize={12} page={Number(params?.page || 1)} moreHref={null} /></main></>;
 }
