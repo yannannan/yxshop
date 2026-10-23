@@ -9,8 +9,27 @@ const fonts = {
   sans: { file: 'NotoSansCJKsc-Regular.otf', family: 'Noto Sans CJK SC' },
   kai: { file: 'LXGWWenKai-Regular.ttf', family: 'LXGW WenKai' },
 } satisfies Record<StampFont, { file: string; family: string }>;
-let ready: Promise<void> | undefined;
+// 开发热更新会重新执行本模块，外部 Wasm 包却仍然是同一实例。
+// 按初始化函数实例保存 Promise，既跨热更新共享，也隔离不同模块运行时。
+const runtime = globalThis as typeof globalThis & { __yxshopStampWasm?: WeakMap<typeof initWasm, Promise<void>> };
+const wasmReady = runtime.__yxshopStampWasm ??= new WeakMap();
 const fontBuffers = new Map<StampFont, Promise<Uint8Array>>();
+function initializeRenderer() {
+  let ready = wasmReady.get(initWasm);
+  if (!ready) {
+    ready = readFile(createRequire(import.meta.url).resolve('@resvg/resvg-wasm/index_bg.wasm')).then(async wasm => {
+      try { await initWasm(wasm); }
+      catch (error) {
+        // 兼容修复前已经初始化的开发进程；通过实际实例确认可用后才复用。
+        if ((error as Error)?.message !== 'Already initialized. The `initWasm()` function can be used only once.') throw error;
+        const probe = new Resvg('<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>');
+        probe.free();
+      }
+    }).catch(error => { wasmReady.delete(initWasm); throw error; });
+    wasmReady.set(initWasm, ready);
+  }
+  return ready;
+}
 function loadFont(font: StampFont) {
   let buffer = fontBuffers.get(font);
   if (!buffer) {
@@ -20,9 +39,8 @@ function loadFont(font: StampFont) {
   return buffer;
 }
 async function resources(font: StampFont) {
-  ready ??= readFile(createRequire(import.meta.url).resolve('@resvg/resvg-wasm/index_bg.wasm')).then(wasm => initWasm(wasm)).catch(error => { ready = undefined; throw error; });
   // 宋体兼作水印及罕用汉字的后备字体；字体只从随项目发布的白名单文件读取。
-  const [, selected, fallback] = await Promise.all([ready, loadFont(font), loadFont('serif')]);
+  const [, selected, fallback] = await Promise.all([initializeRenderer(), loadFont(font), loadFont('serif')]);
   return font === 'serif' ? [selected] : [selected, fallback];
 }
 const escape = (text: string) => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');

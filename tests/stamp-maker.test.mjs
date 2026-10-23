@@ -59,6 +59,23 @@ test('旧请求自动使用宋体和原间距，未知字体、文件路径及�
   assert.equal(font, 'serif'); assert.equal(textInset, 12);
 });
 
+test('渲染模块热更新和并发加载复用同一 Wasm 实例，预览及成品继续可用', async () => {
+  const [first, second] = await Promise.all([import('../lib/stamp-renderer.ts?hot=first'), import('../lib/stamp-renderer.ts?hot=second')]);
+  const images = await Promise.all([first.renderStamp(standard, true), second.renderStamp({ ...standard, font: 'kai', size: 1024 }), renderStamp({ ...standard, font: 'sans' }, true)]);
+  assert.deepEqual(images.map(image => image.readUInt32BE(16)), [420, 1024, 420]);
+  assert.ok(images.every(image => image.subarray(1, 4).toString() === 'PNG'));
+});
+
+test('修复前已初始化的开发进程可直接恢复，不把热更新重复初始化误报为预览失败', async () => {
+  const previous = globalThis.__yxshopStampWasm;
+  delete globalThis.__yxshopStampWasm;
+  try {
+    const updated = await import('../lib/stamp-renderer.ts?hot=legacy-process');
+    const png = await updated.renderStamp(standard, true);
+    assert.equal(png.readUInt32BE(16), 420);
+  } finally { globalThis.__yxshopStampWasm = previous; }
+});
+
 test('圆形与椭圆文字可独立向内移动，不改变边框、字号、弧度或辅助文字', () => {
   for (const shape of ['circle', 'ellipse']) {
     const sample = { ...standard, shape, text: '印', subtitle: '设计专用', code: '123', symbol: 'none' };
@@ -335,6 +352,29 @@ test('界面可调整间距和字体，切换样式保留选择，重置恢复�
   all(render()).find(node => node.type === 'button' && text(node) === '重置').props.onClick();
   assert.equal(control(render(), '文字距边框', 'input').props.value, 12);
   assert.equal(control(render(), '印章字体', 'select').props.value, 'serif');
+});
+
+test('预览失败后可单独重试相同参数，成功后清除错误，始终不发起制作请求', async () => {
+  const slots = [], effects = [], requests = [];
+  let cursor = 0;
+  const react = { ...React, useState(initial) { const i = cursor++; if (!(i in slots)) slots[i] = typeof initial === 'function' ? initial() : initial; return [slots[i], value => { slots[i] = typeof value === 'function' ? value(slots[i]) : value; }]; }, useRef(initial) { const i = cursor++; return slots[i] ??= { current: initial }; }, useCallback: fn => fn, useEffect: fn => effects.push(fn) };
+  const workspace = load('../components/stamp-maker.tsx', { react, 'next/link': () => null, 'next/image': () => null, '../lib/stamp-options': options, '../lib/tool-services': tools }, {
+    window: { setTimeout(fn) { queueMicrotask(fn); return 1; }, clearTimeout() {} }, AbortController,
+    async fetch(url, config) {
+      assert.equal(url, '/api/tools/stamp-maker/preview');
+      requests.push(JSON.parse(config.body));
+      return requests.length === 1 ? Response.json({ message: '预览暂不可用' }, { status: 503 }) : new Response('png', { headers: { 'Content-Type': 'image/png' } });
+    },
+  });
+  const render = () => { cursor = 0; effects.length = 0; return workspace.StampMaker({ tool: { id: 40, name: '印章在线制作', chargeType: 'free', plans: [], detail: '' } }); };
+  const all = node => Array.isArray(node) ? node.flatMap(all) : React.isValidElement(node) ? [node, ...all(node.props.children)] : [];
+  render(); effects[1](); await new Promise(resolve => setImmediate(resolve));
+  const retry = all(render()).find(node => node.type === 'button' && node.props.children === '重新预览');
+  assert.ok(retry); retry.props.onClick();
+  render(); effects[1](); await new Promise(resolve => setImmediate(resolve));
+  assert.ok(!all(render()).some(node => node.type === 'button' && node.props.children === '重新预览'));
+  assert.equal(requests.length, 2); assert.deepEqual(requests[0], requests[1]);
+  effects[2]()();
 });
 
 test('客户端网络重试保留同一任务编号，即使刷新权益后剩余为零也能恢复成品', async () => {
