@@ -9,6 +9,9 @@ import { videoResponse, videoResponseBytes, videoUrlAddress, videoRequestHeaders
 import { isKuaishouPage, kuaishouVideoSources } from './video-kuaishou';
 import { douyinCanonicalUrl, douyinVideoId, douyinPageVideo, haokanPageVideo, isDouyinPage, isHaokanPage, publicVideoPageUserAgent, type PublicVideoPage } from './video-public-pages';
 import { VideoError, videoTaskId, type VideoFormat, type VideoInfo } from './video-options';
+import { openVideoProxy } from './video-proxy';
+import { inspectBrowserVideo, videoBrowserExecutable } from './video-browser';
+import { hlsVariants, hlsSegments, hlsMediaHeader } from './video-hls';
 
 const execute = promisify(execFile);
 export const videoMaxBytes = () => Math.max(20, Math.min(1024, Number(process.env.VIDEO_MAX_FILE_MB) || 200)) * 1024 ** 2;
@@ -20,7 +23,7 @@ export function videoTaskDirectory(id: string) {
   return join(videoStorage(), id);
 }
 async function executable(path: string) { try { await access(path, constants.X_OK); return (await stat(path)).isFile(); } catch { return false; } }
-export async function videoEngineHealth() { const [engineReady, mergeReady] = await Promise.all([executable(enginePath()), executable(mergePath())]); return { engineReady, mergeReady, maxSizeMb: videoMaxBytes() / 1024 ** 2 }; }
+export async function videoEngineHealth() { const [engineReady, mergeReady, browser] = await Promise.all([executable(enginePath()), executable(mergePath()), videoBrowserExecutable()]); return { engineReady, mergeReady, browserReady: Boolean(browser) && process.env.VIDEO_BROWSER_ENABLED !== '0', maxSizeMb: videoMaxBytes() / 1024 ** 2 }; }
 const platforms = ['douyin.com', 'iesdouyin.com', 'kuaishou.com', 'chenzhongtech.com', 'gifshow.com', 'xiaohongshu.com', 'xhslink.com', 'bilibili.com', 'b23.tv', 'youtube.com', 'youtu.be', 'tiktok.com', 'vimeo.com', 'facebook.com', 'fb.watch', 'fb.com', 'instagram.com', 'twitter.com', 'x.com', 'weibo.com', 'weibo.cn', 'dailymotion.com'];
 export const videoPlatform = (host: string) => isDouyinPage(host) || isHaokanPage(host) || platforms.some(domain => host === domain || host.endsWith(`.${domain}`));
 export async function platformVideoUrl(raw: string) {
@@ -74,6 +77,7 @@ export function videoFileExtension(bytes: Buffer): 'mp4' | 'webm' | 'mov' | null
 async function probe(raw: string, headers: Record<string, string> = {}) {
   const { response, url } = await videoResponse(raw, { ...headers, Range: 'bytes=0-65535' }, 0, 8000);
   const contentType = String(response.headers['content-type'] || '').toLowerCase();
+  if (/mpegurl/.test(contentType) || /\.m3u8(?:[?#]|$)/i.test(url)) { response.destroy(); const full = await videoResponse(url, headers, 0, 8000); return { html: '', url: full.url, size: 0, extension: null, hls: (await videoResponseBytes(full.response, 1024 ** 2)).toString('utf8') }; }
   if (contentType.includes('text/html') || contentType.includes('application/xhtml')) return { html: (await videoResponseBytes(response, 2 * 1024 ** 2)).toString('utf8'), url, size: 0, extension: null };
   const size = number(response.headers['content-range']?.match(/\/(\d+)$/)?.[1]) || number(response.headers['content-length']);
   const chunks: Buffer[] = [];
@@ -82,14 +86,16 @@ async function probe(raw: string, headers: Record<string, string> = {}) {
 }
 export function engineFormats(metadata: Record<string, unknown>, mergeReady: boolean): VideoFormat[] {
   const rows = (Array.isArray(metadata.formats) ? metadata.formats : [metadata]).filter(item => item && typeof item === 'object') as Record<string, unknown>[];
-  const audio = rows.filter(item => !item.has_drm && ['m4a', 'mp4', 'webm'].includes(String(item.ext)) && item.vcodec === 'none' && item.acodec && item.acodec !== 'none' && /^https?:\/\//.test(String(item.url)) && ['http', 'https'].includes(String(item.protocol || 'https'))).sort((a, b) => Number(b.ext === 'm4a') - Number(a.ext === 'm4a') || number(b.abr) - number(a.abr))[0];
+  const protocols = ['http', 'https', 'm3u8', 'm3u8_native'];
+  const audio = rows.filter(item => !item.has_drm && ['m4a', 'mp4', 'webm'].includes(String(item.ext)) && item.vcodec === 'none' && item.acodec && item.acodec !== 'none' && /^https?:\/\//.test(String(item.url)) && protocols.includes(String(item.protocol || 'https'))).sort((a, b) => Number(b.ext === 'm4a') - Number(a.ext === 'm4a') || number(b.abr) - number(a.abr))[0];
   const result: VideoFormat[] = [];
   for (const row of rows) {
-    if (row.has_drm || row.vcodec === 'none' || !/^https?:\/\//.test(String(row.url)) || !['http', 'https'].includes(String(row.protocol || 'https')) || !['mp4', 'webm', 'mov'].includes(String(row.ext))) continue;
+    if (row.has_drm || row.vcodec === 'none' || !/^https?:\/\//.test(String(row.url)) || !protocols.includes(String(row.protocol || 'https')) || !['mp4', 'webm', 'mov'].includes(String(row.ext))) continue;
+    if (String(row.protocol).startsWith('m3u8') && (!mergeReady || row.ext !== 'mp4')) continue;
     const separated = row.acodec === 'none';
     if (separated && (!mergeReady || !audio)) continue;
     if (separated && row.ext === 'webm' && !['opus', 'vorbis'].includes(String(audio?.acodec))) continue;
-    const parts = [row, ...(separated ? [audio!] : [])].map(item => ({ url: String(item.url), headers: videoRequestHeaders(item.http_headers || metadata.http_headers), extension: clean(item.ext, 8) || 'mp4' }));
+    const parts = [row, ...(separated ? [audio!] : [])].map(item => ({ url: String(item.url), headers: videoRequestHeaders(item.http_headers || metadata.http_headers), extension: clean(item.ext, 8) || 'mp4', ...(String(item.protocol).startsWith('m3u8') ? { playlist: 'hls' as const } : {}) }));
     const height = number(row.height), extension = String(row.ext) as VideoFormat['extension'];
     const size = number(row.filesize || row.filesize_approx) + (separated ? number(audio?.filesize || audio?.filesize_approx) : 0);
     if (size > videoMaxBytes()) continue;
@@ -98,12 +104,51 @@ export function engineFormats(metadata: Record<string, unknown>, mergeReady: boo
   }
   return result.sort((a, b) => b.height - a.height || a.size - b.size).slice(0, 12);
 }
+async function hlsFormats(text: string, url: string, headers: Record<string, string>): Promise<VideoFormat[]> {
+  if (!await executable(mergePath())) throw new VideoError('此视频需要转换播放分段，请管理员先配置 FFmpeg', 503);
+  const variants = hlsVariants(text, url);
+  if (!variants.length) { hlsSegments(text, url); return [{ id: 'hls-0', label: '原始画质 · MP4', extension: 'mp4', height: 0, size: 0, parts: [{ url, headers, extension: 'mp4', playlist: 'hls' }] }]; }
+  return variants.map((variant, index) => ({ id: `hls-${index}`, label: variant.label, extension: 'mp4', height: variant.height, size: 0, parts: [{ url: variant.url, headers, extension: 'mp4', playlist: 'hls' }, ...(variant.audio ? [{ url: variant.audio, headers, extension: 'm4a', playlist: 'hls' as const }] : [])] }));
+}
+async function browserVideo(source: string, started: number): Promise<VideoInfo | null> {
+  const remaining = 55000 - (Date.now() - started);
+  if (remaining < 3000) return null;
+  const result = await inspectBrowserVideo(source, Math.min(24000, remaining));
+  if (!result) return null;
+  const found = await pageVideo(result.page, source, result.referer, result.userAgent);
+  if (found) return found;
+  for (const url of result.urls) {
+    try {
+      const headers = { Referer: result.referer, 'User-Agent': result.userAgent }, file = await probe(url, headers);
+      const formats = file.hls ? await hlsFormats(file.hls, file.url, headers) : file.extension && file.size <= videoMaxBytes() ? [{ id: 'browser-0', label: `原始画质 · ${file.extension.toUpperCase()}`, extension: file.extension, size: file.size, height: 0, parts: [{ url: file.url, headers, extension: file.extension }] }] : [];
+      if (formats.length) return { title: clean(result.page.title) || '网页视频', thumbnail: result.page.thumbnail, duration: result.page.duration, sourceUrl: source, source: new URL(source).hostname, formats };
+    } catch (error) { if (error instanceof VideoError && /加密|直播/.test(error.message)) throw error; }
+  }
+  return null;
+}
+async function nativeVideo(source: string, platformUrl: string, started: number, fast = false): Promise<VideoInfo> {
+  const health = await videoEngineHealth();
+  if (!health.engineReady) throw new VideoError('平台解析引擎尚未安装，请管理员完成视频引擎安装', 503);
+  const proxy = await openVideoProxy();
+  try {
+    const { stdout } = await execute(enginePath(), ['--ignore-config', '--no-plugin-dirs', '--no-cache-dir', '--no-remote-components', '--no-js-runtimes', '--js-runtimes', `node:${process.execPath}`, '--proxy', proxy.url, '--geo-verification-proxy', proxy.url, '--no-playlist', '--playlist-items', '1', '--dump-single-json', '--skip-download', '--no-warnings', '--socket-timeout', '10', '--retries', '0', '--extractor-retries', '0', '--use-extractors', 'default', '--', platformUrl], { timeout: Math.min(fast ? 18000 : 40000, Math.max(1000, 53000 - (Date.now() - started))), maxBuffer: 2 * 1024 ** 2, windowsHide: true, cwd: process.cwd() });
+    const metadata = JSON.parse(stdout) as Record<string, unknown>;
+    if (metadata.is_live || metadata.live_status === 'is_live' || number(metadata.duration) > 3600 || metadata._type === 'playlist') throw new VideoError('暂不支持直播、合集或超过 60 分钟的视频', 422);
+    const formats = engineFormats(metadata, health.mergeReady);
+    if (!formats.length) {
+      if (!health.mergeReady && engineFormats(metadata, true).length) throw new VideoError('此视频需要音视频合并或分段转换，服务器尚未配置 FFmpeg，请管理员先安装合并组件', 503);
+      throw new VideoError('没有找到可提取的公开视频文件，请换一个链接或稍后重试', 422);
+    }
+    for (const format of formats) for (const part of format.parts) await videoUrlAddress(part.url);
+    return { title: clean(metadata.title) || '链接视频', source: new URL(source).hostname, sourceUrl: source, duration: number(metadata.duration), thumbnail: clean(metadata.thumbnail, 4096), formats };
+  } finally { await proxy.close(); }
+}
 async function publicPage(raw: string) {
   const { response, url } = await videoResponse(raw, { 'User-Agent': publicVideoPageUserAgent }, 0, 12000);
   if (!isDouyinPage(new URL(url).hostname) && !isHaokanPage(new URL(url).hostname)) { response.destroy(); throw new VideoError('分享页跳转到了不支持的平台', 422); }
   return { html: (await videoResponseBytes(response, 2 * 1024 ** 2)).toString('utf8'), url };
 }
-async function pageVideo(info: PublicVideoPage, sourceUrl: string, referer: string): Promise<VideoInfo | null> {
+async function pageVideo(info: PublicVideoPage, sourceUrl: string, referer: string, userAgent = publicVideoPageUserAgent): Promise<VideoInfo | null> {
   if (info.imagePost) throw new VideoError('这是抖音图文作品，当前工具只提取视频，暂不支持图文转视频', 422);
   if (info.duration > 3600) throw new VideoError('暂不支持超过 60 分钟的视频', 422);
   const formats: VideoFormat[] = [];
@@ -112,8 +157,8 @@ async function pageVideo(info: PublicVideoPage, sourceUrl: string, referer: stri
     if (Date.now() - started > 20000) break;
     if (item.size > videoMaxBytes()) continue;
     try {
-      const found = await probe(item.url, { Referer: referer, 'User-Agent': publicVideoPageUserAgent });
-      if (found.extension && found.size <= videoMaxBytes()) formats.push({ id: `page-${formats.length}`, label: `${item.label} · ${found.extension.toUpperCase()}`, extension: found.extension, height: item.height, size: found.size || item.size, parts: [{ url: found.url, headers: { Referer: referer, 'User-Agent': publicVideoPageUserAgent }, extension: found.extension }] });
+      const found = await probe(item.url, { Referer: referer, 'User-Agent': userAgent });
+      if (found.extension && found.size <= videoMaxBytes()) formats.push({ id: `page-${formats.length}`, label: `${item.label} · ${found.extension.toUpperCase()}`, extension: found.extension, height: item.height, size: found.size || item.size, parts: [{ url: found.url, headers: { Referer: referer, 'User-Agent': userAgent }, extension: found.extension }] });
     } catch { /* 单个公开画质失效时继续其他候选，不发放或扣费。 */ }
   }
   return formats.length ? { title: clean(info.title) || '分享视频', source: new URL(sourceUrl).hostname, sourceUrl, duration: info.duration, thumbnail: info.thumbnail, formats: formats.sort((a, b) => b.height - a.height) } : null;
@@ -132,34 +177,35 @@ export async function inspectVideo(sourceUrl: string, embedded = false): Promise
       const found = await pageVideo(info, sourceUrl, page.url);
       if (found) return found;
     } catch (error) { if (haokan || error instanceof VideoError && /图文|60 分钟/.test(error.message)) throw error; }
-    if (haokan) throw new VideoError('好看视频页面未返回可读取的视频源，请确认作品公开且尚未失效', 422);
+    if (douyin) {
+      const url = await platformVideoUrl(publicSource);
+      const found = await browserVideo(url, started); if (found) return { ...found, sourceUrl, source: new URL(sourceUrl).hostname };
+    }
   }
   const kuaishou = isKuaishouPage(new URL(sourceUrl).hostname);
   if (!kuaishou && videoPlatform(new URL(sourceUrl).hostname)) {
-    const health = await videoEngineHealth();
-    if (!health.engineReady) throw new VideoError('该平台解析暂未开放，可尝试视频直链或稍后重试', 503);
-    let metadata: Record<string, unknown>;
     const platformUrl = await platformVideoUrl(publicSource);
     try {
-      const { stdout } = await execute(enginePath(), ['--ignore-config', '--no-plugin-dirs', '--no-cache-dir', '--no-remote-components', '--no-js-runtimes', '--js-runtimes', `node:${process.execPath}`, '--no-playlist', '--playlist-items', '1', '--dump-single-json', '--skip-download', '--no-warnings', '--socket-timeout', '12', '--retries', '1', '--extractor-retries', '1', '--use-extractors', 'default,-generic', '--', platformUrl], { timeout: Math.min(45000, Math.max(1000, 50000 - (Date.now() - started))), maxBuffer: 2 * 1024 ** 2, windowsHide: true, cwd: process.cwd() });
-      metadata = JSON.parse(stdout);
+      return await nativeVideo(sourceUrl, platformUrl, started, Boolean(await videoBrowserExecutable()));
     } catch (error) {
+      if (error instanceof VideoError && /FFmpeg|直播|60 分钟/.test(error.message)) throw error;
+      if (!douyin) { const found = await browserVideo(sourceUrl, started); if (found) return found; }
       const reason = String((error as { stderr?: string }).stderr || '');
-      if (douyin) throw new VideoError(/Unsupported URL/i.test(reason) ? '抖音分享链接未识别到视频编号，请重新复制完整分享链接' : '抖音当前返回访问校验，公开分享页未提供可读取的视频源；这不代表必须登录抖音，请稍后重试或换一个公开作品', 422);
+      if (douyin) throw new VideoError(/Unsupported URL/i.test(reason) ? '抖音分享链接未识别到视频编号，请重新复制完整分享链接' : '抖音当前未返回可读取的视频源，请确认作品公开；管理员可检查网页解析引擎是否就绪', 422);
+      if (error instanceof VideoError) throw error;
       throw new VideoError(/timed? ?out|ETIMEDOUT|socket/i.test(reason) ? '视频平台连接超时，请稍后重试' : '平台未返回可提取的视频，可能存在访问校验或链接已失效', 422);
     }
-    if (metadata.is_live || metadata.live_status === 'is_live' || number(metadata.duration) > 3600 || metadata._type === 'playlist') throw new VideoError('暂不支持直播、合集或超过 60 分钟的视频', 422);
-    const formats = engineFormats(metadata, health.mergeReady);
-    if (!formats.length) {
-      if (!health.mergeReady && engineFormats(metadata, true).length) throw new VideoError('此视频的音频和画面需要合并，服务器尚未配置 FFmpeg，请管理员先安装合并组件', 503);
-      throw new VideoError('没有找到可提取的公开视频文件，请换一个链接或稍后重试', 422);
-    }
-    for (const format of formats) for (const part of format.parts) await videoUrlAddress(part.url);
-    return { title: clean(metadata.title) || '链接视频', source: new URL(sourceUrl).hostname, sourceUrl, duration: number(metadata.duration), thumbnail: clean(metadata.thumbnail, 4096), formats };
   }
-  const first = await probe(sourceUrl);
+  let first: Awaited<ReturnType<typeof probe>>;
+  try { first = await probe(sourceUrl); }
+  catch (error) {
+    try { return await nativeVideo(sourceUrl, sourceUrl, started, true); } catch (nativeError) { if (nativeError instanceof VideoError && /FFmpeg|直播|60 分钟/.test(nativeError.message)) throw nativeError; }
+    const found = await browserVideo(sourceUrl, started); if (found) return found;
+    throw error;
+  }
   let title = decode(new URL(first.url).pathname.split('/').pop() || '链接视频'), thumbnail = '', duration = 0, formats: VideoFormat[] = [];
-  if (first.extension && first.size <= videoMaxBytes()) formats = [{ id: 'direct', label: `原始文件 · ${first.extension.toUpperCase()}`, extension: first.extension, height: 0, size: first.size, parts: [{ url: first.url, headers: {}, extension: first.extension }] }];
+  if (first.hls) formats = await hlsFormats(first.hls, first.url, {});
+  else if (first.extension && first.size <= videoMaxBytes()) formats = [{ id: 'direct', label: `原始文件 · ${first.extension.toUpperCase()}`, extension: first.extension, height: 0, size: first.size, parts: [{ url: first.url, headers: {}, extension: first.extension }] }];
   else if (first.html) {
     const parsed = htmlVideoSources(first.html, first.url); title = parsed.title; thumbnail = parsed.thumbnail;
     if (kuaishou && isKuaishouPage(new URL(first.url).hostname)) {
@@ -172,7 +218,8 @@ export async function inspectVideo(sourceUrl: string, embedded = false): Promise
       if (Date.now() - started > 32000) break;
       try {
         const found = await probe(raw, { Referer: first.url });
-        if (found.extension && found.size <= videoMaxBytes()) formats.push({ id: `web-${formats.length}`, label: `网页视频 ${formats.length + 1} · ${found.extension.toUpperCase()}`, extension: found.extension, height: 0, size: found.size, parts: [{ url: found.url, headers: { Referer: first.url }, extension: found.extension }] });
+        if (found.hls) formats.push(...await hlsFormats(found.hls, found.url, { Referer: first.url }));
+        else if (found.extension && found.size <= videoMaxBytes()) formats.push({ id: `web-${formats.length}`, label: `网页视频 ${formats.length + 1} · ${found.extension.toUpperCase()}`, extension: found.extension, height: 0, size: found.size, parts: [{ url: found.url, headers: { Referer: first.url }, extension: found.extension }] });
       } catch { /* 某个网页候选不可用时继续其他公开候选。 */ }
     }
     if (!formats.length && !embedded && Date.now() - started < 8000) for (const tag of first.html.match(/<iframe\b[^>]{0,8192}>/gi) || []) {
@@ -182,7 +229,12 @@ export async function inspectVideo(sourceUrl: string, embedded = false): Promise
       } catch { /* 只接续已支持平台的嵌入视频，不递归浏览任意网页。 */ }
     }
   }
-  if (!formats.length) throw new VideoError(kuaishou ? '快手分享页未返回可读取的视频，可能需要登录或验证，请换一个公开视频链接' : '未找到可直接提取的视频，支持公开 MP4 / WebM / MOV 直链及包含视频源的网页', 422);
+  if (!formats.length) {
+    try { return await nativeVideo(sourceUrl, first.url, started, true); } catch (error) { if (error instanceof VideoError && /FFmpeg|直播|60 分钟/.test(error.message)) throw error; }
+    const found = await browserVideo(sourceUrl, started); if (found) return found;
+    throw new VideoError(kuaishou ? '快手未返回可读取的公开视频，请确认链接有效且作品公开' : '未找到可提取的视频，请确认页面包含公开且未加密的视频', 422);
+  }
+  formats = formats.slice(0, 12).map((format, index) => ({ ...format, id: `web-${index}` }));
   return { title: clean(title), source: new URL(first.url).hostname, sourceUrl, duration, thumbnail, formats };
 }
 
@@ -190,26 +242,39 @@ export async function materializeVideo(id: string, format: VideoFormat, progress
   const directory = videoTaskDirectory(id); await mkdir(directory, { recursive: true });
   const output = join(directory, `result.${format.extension}`), temporary: string[] = [];
   let received = 0;
+  const deadline = Date.now() + 180000;
   try {
     for (const [index, part] of format.parts.entries()) {
       const path = join(directory, `part-${index}.media`); temporary.push(path);
-      const { response } = await videoResponse(part.url, part.headers);
+      let sources: { url: string; range?: { start: number; end: number } }[] = [{ url: part.url }];
+      if (part.playlist === 'hls') {
+        if (!await executable(mergePath())) throw new VideoError('此视频需要 FFmpeg 转换，请管理员先安装合并组件', 503);
+        const playlist = await videoResponse(part.url, part.headers, 0, 10000);
+        sources = hlsSegments((await videoResponseBytes(playlist.response, 1024 ** 2)).toString('utf8'), playlist.url).parts;
+      }
+      for (const [segment, source] of sources.entries()) {
+      const remaining = deadline - Date.now(); if (remaining <= 0) throw new VideoError('视频提取超时，请稍后重试', 504);
+      const { response } = await videoResponse(source.url, { ...part.headers, ...(source.range ? { Range: `bytes=${source.range.start}-${source.range.end}` } : {}) }, 0, remaining);
+      if (source.range && (response.statusCode !== 206 || String(response.headers['content-range']).split('/')[0] !== `bytes ${source.range.start}-${source.range.end}`)) { response.destroy(); throw new VideoError('视频站点未返回请求的分段范围', 422); }
       if (number(response.headers['content-length']) + received > videoMaxBytes()) { response.destroy(); throw new VideoError('视频文件超过单次大小限制，请选择较低清晰度', 413); }
+      let segmentBytes = 0;
       const meter = new Transform({ transform(chunk: Buffer, _encoding, callback) {
-        received += chunk.length;
+        received += chunk.length; segmentBytes += chunk.length;
         if (received > videoMaxBytes()) { callback(new VideoError('视频文件超过单次大小限制', 413)); return; }
         progress(format.size ? Math.min(90, Math.floor(received / format.size * 90)) : Math.min(85, 10 + Math.floor(received / videoMaxBytes() * 70)));
         callback(null, chunk);
       } });
-      const timer = setTimeout(() => response.destroy(new VideoError('视频提取超时，请稍后重试', 504)), 180000);
-      try { await pipeline(response, meter, createWriteStream(path, { flags: 'wx' })); } finally { clearTimeout(timer); }
+      const timer = setTimeout(() => response.destroy(new VideoError('视频提取超时，请稍后重试', 504)), remaining);
+      try { await pipeline(response, meter, createWriteStream(path, { flags: segment ? 'a' : 'wx' })); } finally { clearTimeout(timer); }
+      if (source.range && segmentBytes !== source.range.end - source.range.start + 1) throw new VideoError('视频分段数据长度不正确，请稍后重试', 422);
+      }
       // 输入只能是媒体容器，不能让 FFmpeg 将网页或播放列表当成本地文件清单读取。
       const partFile = await open(path, 'r');
-      try { const header = Buffer.alloc(64); await partFile.read(header, 0, 64, 0); if (!videoFileExtension(header)) throw new VideoError('站点返回的不是有效视频文件，请换一个链接', 422); } finally { await partFile.close(); }
+      try { const header = Buffer.alloc(512); await partFile.read(header, 0, 512, 0); if (!videoFileExtension(header) && !(part.playlist === 'hls' && hlsMediaHeader(header))) throw new VideoError('站点返回的不是有效视频文件，请换一个链接', 422); } finally { await partFile.close(); }
     }
-    if (format.parts.length > 1) {
+    if (format.parts.length > 1 || format.parts.some(part => part.playlist === 'hls')) {
       if (!await executable(mergePath())) throw new VideoError('当前画质暂不能生成，请选择其他画质', 503);
-      try { await execute(mergePath(), ['-nostdin', '-hide_banner', '-loglevel', 'error', '-y', '-protocol_whitelist', 'file,pipe', '-i', temporary[0], '-protocol_whitelist', 'file,pipe', '-i', temporary[1], '-map', '0:v:0', '-map', '1:a:0', '-c', 'copy', ...(format.extension === 'mp4' ? ['-movflags', '+faststart'] : []), output], { timeout: 60000, maxBuffer: 256000, windowsHide: true }); }
+      try { await execute(mergePath(), ['-nostdin', '-hide_banner', '-loglevel', 'error', '-y', '-protocol_whitelist', 'file,pipe', '-i', temporary[0], ...(format.parts.length > 1 ? ['-protocol_whitelist', 'file,pipe', '-i', temporary[1], '-map', '0:v:0', '-map', '1:a:0'] : ['-map', '0:v:0', '-map', '0:a:0?']), '-c', 'copy', ...(format.extension === 'mp4' ? ['-movflags', '+faststart'] : []), output], { timeout: 60000, maxBuffer: 256000, windowsHide: true }); }
       catch { throw new VideoError('音视频合并失败，请选择其他画质后重试', 422); }
     } else {
       const { rename } = await import('node:fs/promises'); await rename(temporary[0], output);

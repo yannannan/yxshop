@@ -7,12 +7,12 @@ export const videoPage = '/tools/video-extractor.html';
 export const videoLogin = '/?returnTo=%2Ftools%2Fvideo-extractor.html';
 export const videoRetentionHours = 24;
 export const videoTaskId = (value: unknown): value is string => typeof value === 'string' && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(value);
-export type VideoPart = { url: string; headers: Record<string, string>; extension: string };
+export type VideoPart = { url: string; headers: Record<string, string>; extension: string; playlist?: 'hls' };
 export type VideoFormat = { id: string; label: string; extension: 'mp4' | 'webm' | 'mov'; height: number; size: number; parts: VideoPart[] };
 export type VideoInfo = { title: string; source: string; sourceUrl: string; duration: number; thumbnail: string; formats: VideoFormat[] };
 export type VideoPreview = Omit<VideoInfo, 'formats' | 'thumbnail'> & { id: string; expiresAt: string; formats: Omit<VideoFormat, 'parts'>[]; coverUrl: string };
 export type VideoTask = { id: string; title: string; status: 'queued' | 'processing' | 'ready' | 'failed'; format: string; extension: string; size: number; progress: number; error: string; createdAt: string; expiresAt: string; charged: boolean; pointsSpent: number; downloadUrl: string };
-export type VideoAccess = { signedIn: boolean; canExtract: boolean; chargeType: string; pointsBalance: number; pointsCost: number; remaining: number; membershipName: string; purchaseUrl: string; engineReady: boolean; mergeReady: boolean; maxSizeMb: number; history: VideoTask[]; page: number; total: number };
+export type VideoAccess = { signedIn: boolean; canExtract: boolean; chargeType: string; pointsBalance: number; pointsCost: number; remaining: number; membershipName: string; purchaseUrl: string; engineReady: boolean; mergeReady: boolean; browserReady?: boolean; maxSizeMb: number; history: VideoTask[]; page: number; total: number };
 
 export function sharedVideoUrl(value: unknown) {
   if (typeof value !== 'string' || value.length > 8192) throw new VideoError('请粘贴视频链接或分享文字，最多 8000 字符');

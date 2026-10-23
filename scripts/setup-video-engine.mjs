@@ -1,6 +1,6 @@
 // 引擎只安装到项目目录；--ffmpeg 使用 FFmpeg 官网链接的 Gyan Windows 构建。
 import { createHash } from 'node:crypto';
-import { mkdir, realpath, writeFile, rename, chmod, unlink } from 'node:fs/promises';
+import { mkdir, realpath, writeFile, rename, chmod, unlink, readFile, access, readdir } from 'node:fs/promises';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFile } from 'node:child_process';
@@ -26,6 +26,29 @@ try {
       try { const { stdout } = await execute(path, args, { timeout: 10000, maxBuffer: 100000, windowsHide: true }); console.log(`${name}：${stdout.split(/\r?\n/)[0]}`); }
       catch { console.error(`${name} 未就绪，请按 docs/链接视频提取与部署.md 配置。`); process.exitCode = 1; }
     }
+    try {
+      const runtime = JSON.parse(await readFile(join(directory, 'browser-runtime.json'), 'utf8'));
+      const { stdout } = await execute(process.env.VIDEO_BROWSER_PATH || runtime.executable, ['--version'], { timeout: 10000, windowsHide: true });
+      console.log(`网页解析：${stdout.trim()}`);
+    } catch { console.error('网页解析未就绪，抖音等动态页面请先执行 node scripts/setup-video-engine.mjs --browser'); process.exitCode = 1; }
+  } else if (process.argv.includes('--browser')) {
+    await mkdir(directory, { recursive: true });
+    if (await realpath(directory) !== directory) throw new Error('安装目标不是项目内的实际目录');
+    const browserDirectory = join(directory, 'browser');
+    await mkdir(browserDirectory, { recursive: true });
+    if (await realpath(browserDirectory) !== browserDirectory) throw new Error('浏览器安装目录不能使用链接');
+    console.log('安装后端网页解析运行时（Playwright 官方 Chromium Headless Shell，仅项目目录）…');
+    await execute(process.execPath, [join(root, 'node_modules/playwright-core/cli.js'), 'install', 'chromium', '--only-shell'], { cwd: root, env: { ...process.env, PLAYWRIGHT_BROWSERS_PATH: browserDirectory }, timeout: 240000, maxBuffer: 2 * 1024 ** 2, windowsHide: true });
+    const specification = JSON.parse(await readFile(join(root, 'node_modules/playwright-core/browsers.json'), 'utf8'));
+    const revision = specification.browsers.find(item => item.name === 'chromium-headless-shell')?.revision;
+    if (!/^\d+$/.test(revision || '')) throw new Error('网页解析版本信息缺失');
+    const installation = join(browserDirectory, `chromium_headless_shell-${revision}`), candidates = [];
+    for (const child of await readdir(installation, { withFileTypes: true })) if (child.isDirectory() && !child.isSymbolicLink()) for (const name of ['headless_shell', 'chrome-headless-shell', 'chrome-headless-shell.exe']) candidates.push(join(installation, child.name, name));
+    let executable = '';
+    for (const candidate of candidates) try { await access(candidate); executable = candidate; break; } catch { /* 当前平台的文件名不同。 */ }
+    if (!executable) throw new Error('网页解析程序文件缺失');
+    await writeFile(join(directory, 'browser-runtime.json'), JSON.stringify({ executable, revision, platform: process.platform }, null, 2));
+    console.log('网页解析引擎已就绪；Linux 需使用支持 Chromium 的系统和非 root 服务账号。');
   } else if (process.argv.includes('--ffmpeg')) {
     if (process.platform !== 'win32' || process.arch !== 'x64') throw new Error('--ffmpeg 当前支持 Windows x64；其他系统请配置兼容系统的 FFmpeg 路径。');
     await mkdir(directory, { recursive: true });

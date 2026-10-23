@@ -4,7 +4,7 @@ import vm from 'node:vm';
 import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
 import { mkdir, mkdtemp, writeFile, readFile, stat, readdir, rm } from 'node:fs/promises';
-import { join, resolve, relative, isAbsolute } from 'node:path';
+import { join, relative, isAbsolute } from 'node:path';
 import { webcrypto, createHash } from 'node:crypto';
 import { Readable } from 'node:stream';
 import { EventEmitter } from 'node:events';
@@ -98,7 +98,8 @@ test('连接固定已校验 IP，重定向重新检查；认证和 Cookie 不转
 
 const kuaishou = load('../lib/video-kuaishou.ts');
 const publicPages = load('../lib/video-public-pages.ts');
-const engineBase = { './video-options': options, './video-network': network, './video-kuaishou': kuaishou, './video-public-pages': publicPages };
+const hls = load('../lib/video-hls.ts', { './video-options': options });
+const engineBase = { './video-options': options, './video-network': network, './video-kuaishou': kuaishou, './video-public-pages': publicPages, './video-hls': hls, './video-proxy': { openVideoProxy: async () => ({ url: 'http://video:random-test-token@127.0.0.1:12345', close: async () => {} }) }, './video-browser': { inspectBrowserVideo: async () => null, videoBrowserExecutable: async () => '' } };
 const engine = load('../lib/video-engine.ts', engineBase);
 test('好看视频公开状态提供多档画质，直接读取媒体源且不依赖平台程序',async()=>{
   const source='https://haokan.baidu.com/v?pd=wisenatural&vid=6658134627915427060';
@@ -121,7 +122,7 @@ test('抖音图文及源站访问校验分别提示，不把匿名 Cookie 校验
   assert.equal(publicPages.douyinPageVideo('<script>window._ROUTER_DATA=executeDangerousCode()</script>',url).media.length,0);
   const root=await scratch(t);await mkdir(join(root,'vendor/video-engine'),{recursive:true});await writeFile(join(root,'vendor/video-engine',process.platform==='win32'?'yt-dlp.exe':'yt-dlp'),'stub',{mode:0o755});
   let argument='';const configured=load('../lib/video-engine.ts',{...engineBase,'./video-network':{...network,videoUrlAddress:async()=>({}),videoResponse:async()=>({url,response:stream(Buffer.from('<script>window._ROUTER_DATA={"loaderData":{}};</script>'))})},'node:child_process':{execFile(_file,args,_config,callback){argument=args.at(-1);callback(Object.assign(new Error('platform'),{stderr:'Fresh cookies (not necessarily logged in) are needed'}));}}},{process:{...process,cwd:()=>root,env:{}}});
-  await assert.rejects(configured.inspectVideo('https://v.douyin.com/hpy7HCcu6IY/'),error=>/访问校验/.test(error.message)&&/不代表必须登录/.test(error.message));assert.equal(argument,'https://www.douyin.com/video/7421576130160905483');
+  await assert.rejects(configured.inspectVideo('https://v.douyin.com/hpy7HCcu6IY/'),error=>/未返回可读取/.test(error.message)&&/确认作品公开/.test(error.message));assert.equal(argument,'https://www.douyin.com/video/7421576130160905483');
 });
 test('网页源解析支持 HTML5、OG、JSON-LD、相对路径和封面，不执行网页脚本', () => {
   const parsed = engine.htmlVideoSources(`<title>网页标题</title><video poster="/cover.png"><source src="/video.mp4?x=1&amp;y=2"></video><meta property="og:video" content="https://cdn.example.com/v.webm"><script type="application/ld+json">{"@type":"VideoObject","name":"结构化视频","contentUrl":"/third.mov"}</script>`, 'https://example.com/watch');
@@ -131,7 +132,7 @@ test('网页源解析支持 HTML5、OG、JSON-LD、相对路径和封面，不�
   assert.equal(engine.videoPlatform('www.facebook.com'), true); assert.equal(engine.videoPlatform('bilibili.com.evil.example'), false);
   assert.throws(() => engine.videoTaskDirectory('------------------------------------'));
 });
-test('B站音视频分离画质仅在可合并时提供；拒绝 DRM、HLS 与超限文件', () => {
+test('B站音视频分离与 HLS 画质仅在可合并时提供；拒绝 DRM 与超限文件', () => {
   const metadata = { formats: [
     { url: 'https://cdn.example/1080', ext: 'mp4', protocol: 'https', vcodec: 'avc1', acodec: 'none', height:1080, filesize:1000 },
     { url: 'https://cdn.example/audio', ext: 'm4a', protocol: 'https', vcodec: 'none', acodec: 'aac', filesize:100 },
@@ -142,7 +143,7 @@ test('B站音视频分离画质仅在可合并时提供；拒绝 DRM、HLS 与�
   ] };
   assert.equal(engine.engineFormats(metadata, false).length, 1);
   const formats = engine.engineFormats(metadata, true);
-  assert.equal(formats.length, 2); assert.equal(formats[0].height, 1080); assert.equal(formats[0].parts.length, 2); assert.equal(formats[0].size, 1100);
+  assert.equal(formats.length, 3); assert.equal(formats[0].height, 1080); assert.equal(formats[0].parts.length, 2); assert.equal(formats[0].size, 1100); assert.equal(formats.find(item => item.parts[0].playlist === 'hls').extension, 'mp4');
   assert.match(formats[0].label, /含音频合并/);
 });
 test('快手公开分享页独立解析 JSON 状态，只取当前视频且不执行脚本',async()=>{
@@ -173,7 +174,7 @@ test('平台引擎使用独立程序安全参数，B站与 Facebook 返回实际
   for (const url of ['https://www.bilibili.com/video/BV123','https://www.facebook.com/watch/?v=123']) {
     const parsed = await configured.inspectVideo(url); assert.equal(parsed.formats[0].height,720); assert.equal(parsed.title,'实际视频');
   }
-  assert.equal(calls.length,2); assert.ok(calls[0].args.includes('default,-generic')); assert.ok(calls[0].args.includes('--no-remote-components')); assert.ok(calls[0].args.includes('--ignore-config')); assert.equal(calls[0].args.at(-2),'--'); assert.equal(calls[0].config.shell,undefined);
+  assert.equal(calls.length,2); assert.ok(calls[0].args.includes('default')); assert.ok(calls[0].args.includes('--proxy')); assert.ok(calls[0].args.includes('--geo-verification-proxy')); assert.ok(calls[0].args.includes('--no-remote-components')); assert.ok(calls[0].args.includes('--ignore-config')); assert.equal(calls[0].args.at(-2),'--'); assert.equal(calls[0].config.shell,undefined);
 });
 test('B站只有分离画质且缺少合并组件时，准确提示 FFmpeg 而非链接不支持',async t=>{
   const root=await scratch(t);await mkdir(join(root,'vendor/video-engine'),{recursive:true});await writeFile(join(root,'vendor/video-engine',process.platform==='win32'?'yt-dlp.exe':'yt-dlp'),'stub',{mode:0o755});

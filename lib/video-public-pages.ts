@@ -3,6 +3,16 @@ export const isDouyinPage = (host: string) => ['douyin.com', 'iesdouyin.com', 'a
 export const isHaokanPage = (host: string) => host === 'haokan.baidu.com' || host.endsWith('.haokan.baidu.com');
 export function douyinVideoId(raw: string) { const url = new URL(raw); return url.pathname.match(/\/(?:share\/)?video\/(\d{10,25})/)?.[1] || (/^\d{10,25}$/.test(url.searchParams.get('modal_id') || '') ? url.searchParams.get('modal_id')! : ''); }
 export const douyinCanonicalUrl = (raw: string) => { const id = douyinVideoId(raw); return id ? `https://www.douyin.com/video/${id}` : ''; };
+export function douyinRestriction(data: unknown, source: string) {
+  const root = data && typeof data === 'object' ? data as Record<string, unknown> : {};
+  const filter = root.filter_detail && typeof root.filter_detail === 'object' ? root.filter_detail as Record<string, unknown> : {};
+  if (String(filter.aweme_id || '') !== douyinVideoId(source) || !filter.filter_reason) return '';
+  const reason = String(filter.filter_reason);
+  if (reason === 'status_friend_see') return '该抖音作品设置为仅好友可见，无法通过公开链接提取';
+  if (reason === 'status_self_see') return '该抖音作品设置为私密，无法通过公开链接提取';
+  if (reason === 'status_deleted') return '该抖音作品已删除，无法提取';
+  return '该抖音作品当前未公开或访问权限受限，无法通过公开链接提取';
+}
 type Media = { url: string; label: string; height: number; size: number };
 export type PublicVideoPage = { title: string; thumbnail: string; duration: number; media: Media[]; imagePost: boolean };
 const record = (value: unknown): Record<string, unknown> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -37,8 +47,12 @@ export function haokanPageVideo(html: string, source: string): PublicVideoPage {
   return { title: text(meta.title || meta.seo_title).slice(0, 500), thumbnail: address(meta.poster, source), duration: positive(meta.duration || meta.time_length), media: media.slice(0, 8), imagePost: false };
 }
 export function douyinPageVideo(html: string, source: string): PublicVideoPage {
-  const expected = douyinVideoId(source), queue: unknown[] = [assignedJson(html, '_ROUTER_DATA'), assignedJson(html, '__INITIAL_STATE__'), assignedJson(html, 'SIGI_STATE')];
+  const queue: unknown[] = [assignedJson(html, '_ROUTER_DATA'), assignedJson(html, '__INITIAL_STATE__'), assignedJson(html, 'SIGI_STATE')];
   for (const match of html.matchAll(/<script\b[^>]*id=["'](?:RENDER_DATA|SIGI_STATE)["'][^>]*>([\s\S]*?)<\/script>/gi)) { try { queue.push(JSON.parse(match[1].startsWith('%') ? decodeURIComponent(match[1]) : match[1])); } catch { /* 仅解析数据，不执行网页脚本。 */ } }
+  return douyinDataVideo(queue, source);
+}
+export function douyinDataVideo(data: unknown, source: string): PublicVideoPage {
+  const expected = douyinVideoId(source), queue: unknown[] = [data];
   let visited = 0;
   while (queue.length && visited++ < 5000) {
     const value = queue.shift(); if (!value || typeof value !== 'object') continue;
