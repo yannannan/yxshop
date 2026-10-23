@@ -2,15 +2,28 @@ import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 import { initWasm, Resvg } from '@resvg/resvg-wasm';
-import type { StampOptions } from './stamp-options';
+import type { StampFont, StampOptions } from './stamp-options';
 
-let ready: Promise<Uint8Array> | undefined;
-function resources() {
-  return ready ??= (async () => {
-    const [wasm, font] = await Promise.all([readFile(createRequire(import.meta.url).resolve('@resvg/resvg-wasm/index_bg.wasm')), readFile(resolve(process.cwd(), 'assets/fonts/NotoSerifCJKsc-Regular.otf'))]);
-    await initWasm(wasm);
-    return new Uint8Array(font);
-  })().catch(error => { ready = undefined; throw error; });
+const fonts = {
+  serif: { file: 'NotoSerifCJKsc-Regular.otf', family: 'Noto Serif CJK SC' },
+  sans: { file: 'NotoSansCJKsc-Regular.otf', family: 'Noto Sans CJK SC' },
+  kai: { file: 'LXGWWenKai-Regular.ttf', family: 'LXGW WenKai' },
+} satisfies Record<StampFont, { file: string; family: string }>;
+let ready: Promise<void> | undefined;
+const fontBuffers = new Map<StampFont, Promise<Uint8Array>>();
+function loadFont(font: StampFont) {
+  let buffer = fontBuffers.get(font);
+  if (!buffer) {
+    buffer = readFile(resolve(process.cwd(), 'assets/fonts', fonts[font].file)).then(data => new Uint8Array(data)).catch(error => { fontBuffers.delete(font); throw error; });
+    fontBuffers.set(font, buffer);
+  }
+  return buffer;
+}
+async function resources(font: StampFont) {
+  ready ??= readFile(createRequire(import.meta.url).resolve('@resvg/resvg-wasm/index_bg.wasm')).then(wasm => initWasm(wasm)).catch(error => { ready = undefined; throw error; });
+  // 宋体兼作水印及罕用汉字的后备字体；字体只从随项目发布的白名单文件读取。
+  const [, selected, fallback] = await Promise.all([ready, loadFont(font), loadFont('serif')]);
+  return font === 'serif' ? [selected] : [selected, fallback];
 }
 const escape = (text: string) => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
 const n = (value: number) => value.toFixed(2);
@@ -41,7 +54,7 @@ export function stampSvg(options: StampOptions, preview = false) {
     const ry = o.shape === 'ellipse' ? 305 : 410;
     body = `<ellipse cx="500" cy="500" rx="410" ry="${ry}" fill="none" stroke="currentColor" stroke-width="${o.border}" />`;
     if (o.innerRing) body += `<ellipse cx="500" cy="500" rx="382" ry="${ry - 28}" fill="none" stroke="currentColor" stroke-width="${n(o.border * .4)}" />`;
-    body += curved(o.text, 410 - o.fontSize - 12, ry - o.fontSize - 12, o.fontSize, o.arc);
+    body += curved(o.text, 410 - o.fontSize - o.textInset, ry - o.fontSize - o.textInset, o.fontSize, o.arc);
     if (o.symbol === 'star') body += star();
     if (o.symbol === 'dot') body += '<circle cx="500" cy="475" r="35" />';
     body += label(o.subtitle, 500, o.shape === 'ellipse' ? 640 : 670, Math.min(76, 590 / Math.max(1, [...o.subtitle].length)));
@@ -61,13 +74,13 @@ export function stampSvg(options: StampOptions, preview = false) {
     }
   }
   const background = o.background === 'white' ? '<rect width="1000" height="1000" fill="white" />' : '';
-  const watermark = preview ? '<g fill="#718096" opacity=".38" font-size="40" text-anchor="middle" transform="rotate(-28 500 500)"><text x="500" y="310">宇星商城 · 效果预览</text><text x="500" y="540">宇星商城 · 效果预览</text><text x="500" y="770">宇星商城 · 效果预览</text></g>' : '';
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1000" viewBox="0 0 1000 1000"><g font-family="Noto Serif CJK SC">${background}<g color="${o.color}" fill="${o.color}" transform="rotate(${o.rotation} 500 500)">${body}</g>${watermark}</g></svg>`;
+  const watermark = preview ? '<g font-family="Noto Serif CJK SC" fill="#718096" opacity=".38" font-size="40" text-anchor="middle" transform="rotate(-28 500 500)"><text x="500" y="310">宇星商城 · 效果预览</text><text x="500" y="540">宇星商城 · 效果预览</text><text x="500" y="770">宇星商城 · 效果预览</text></g>' : '';
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1000" viewBox="0 0 1000 1000"><g font-family="${fonts[o.font].family}, Noto Serif CJK SC">${background}<g color="${o.color}" fill="${o.color}" transform="rotate(${o.rotation} 500 500)">${body}</g>${watermark}</g></svg>`;
 }
 
 export async function renderStamp(options: StampOptions, preview = false): Promise<Buffer> {
-  const font = await resources();
-  const renderer = new Resvg(stampSvg(options, preview), { font: { fontBuffers: [font], defaultFontFamily: 'Noto Serif CJK SC' }, fitTo: { mode: 'width', value: preview ? 420 : options.size } });
+  const buffers = await resources(options.font);
+  const renderer = new Resvg(stampSvg(options, preview), { font: { fontBuffers: buffers, defaultFontFamily: fonts[options.font].family }, fitTo: { mode: 'width', value: preview ? 420 : options.size } });
   try {
     const result = renderer.render();
     try { return Buffer.from(result.asPng()); }

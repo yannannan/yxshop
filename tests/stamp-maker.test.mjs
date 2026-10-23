@@ -50,6 +50,46 @@ test('真实 WebAssembly 中文渲染：各样式返回 PNG，预览固定 420�
   assert.ok(stampSvg({ ...standard, background: 'white' }).includes('fill="white"'));
 });
 
+test('旧请求自动使用宋体和原间距，未知字体、文件路径及越界间距被拒绝', () => {
+  const { font, textInset, ...legacy } = standard;
+  assert.deepEqual(options.parseStampOptions(legacy), standard);
+  for (const patch of [{ font: null }, { font: 'missing' }, { font: '../../file.ttf' }, { textInset: null }, { textInset: -1 }, { textInset: 101 }, { textInset: Infinity }, { textInset: '12' }]) assert.throws(() => options.parseStampOptions({ ...standard, ...patch }));
+  assert.equal(options.parseStampOptions({ ...standard, textInset: 0 }).textInset, 0);
+  assert.equal(options.parseStampOptions({ ...standard, textInset: 100 }).textInset, 100);
+  assert.equal(font, 'serif'); assert.equal(textInset, 12);
+});
+
+test('圆形与椭圆文字可独立向内移动，不改变边框、字号、弧度或辅助文字', () => {
+  for (const shape of ['circle', 'ellipse']) {
+    const sample = { ...standard, shape, text: '印', subtitle: '设计专用', code: '123', symbol: 'none' };
+    const near = stampSvg({ ...sample, textInset: 0 }), far = stampSvg({ ...sample, textInset: 100 });
+    const mainTextY = svg => Number(svg.match(/<text[^>]*transform="translate\(500\.00 ([\d.]+)\)/)[1]);
+    assert.equal(mainTextY(far) - mainTextY(near), 100, '增大间距应把顶部文字移向圆心');
+    assert.equal(near.match(/<ellipse[^>]*>/)[0], far.match(/<ellipse[^>]*>/)[0]);
+    assert.equal(near.match(/<text[^>]*>设计专用<\/text>/)[0], far.match(/<text[^>]*>设计专用<\/text>/)[0]);
+    assert.ok(near.includes('font-size="80.00"')); assert.ok(far.includes('font-size="80.00"'));
+  }
+});
+
+test('三种真实中文字体在四种样式中均可生成不同的预览与高清像素', async () => {
+  for (const preset of options.stampPresets) {
+    const previews = [], exports = [];
+    for (const { value: font } of options.stampFonts) {
+      const sample = { ...preset.options, font, textInset: 35, size: 1024 };
+      const preview = await renderStamp(sample, true), exported = await renderStamp(sample);
+      assert.equal(preview.readUInt32BE(16), 420); assert.equal(exported.readUInt32BE(16), 1024);
+      assert.equal(cornerAlpha(exported), 0);
+      previews.push(preview.toString('base64')); exports.push(exported.toString('base64'));
+    }
+    assert.equal(new Set(previews).size, 3, `${preset.shape} 预览应实际使用不同字体`);
+    assert.equal(new Set(exports).size, 3, `${preset.shape} 成品应实际使用不同字体`);
+  }
+  for (const shape of ['circle', 'ellipse']) {
+    const sample = { ...standard, shape, symbol: 'none', subtitle: '', code: '', size: 1024 };
+    assert.notDeepEqual(await renderStamp({ ...sample, textInset: 0 }), await renderStamp({ ...sample, textInset: 100 }));
+  }
+});
+
 function cornerAlpha(png) {
   assert.equal(png[24], 8); assert.equal(png[25], 6);
   const data = [];
@@ -95,6 +135,19 @@ test('付费制作先完成渲染，再由服务端当前用户、工具、参�
   assert.deepEqual(setup.calls.map(call => call[0]), ['find', 'render', 'save']);
   const saved = setup.calls.find(call => call[0] === 'save');
   assert.equal(saved[1], 1); assert.equal(saved[2], 40); assert.equal(saved[3], id); assert.match(saved[4], /^[a-f0-9]{64}$/);
+});
+test('预览与成品接收相同字体和间距，更改任一项会生成不同参数指纹', async () => {
+  const hashes = [];
+  for (const patch of [{}, { font: 'sans' }, { textInset: 65 }]) {
+    const setup = api(), selected = { ...standard, ...patch };
+    assert.equal((await setup.preview.POST(new Request('http://localhost', { method: 'POST', body: JSON.stringify(selected) }))).status, 200);
+    assert.equal((await setup.generate({ options: selected })).status, 200);
+    const renders = setup.calls.filter(call => call[0] === 'render');
+    assert.deepEqual(renders[0][1], renders[1][1]);
+    assert.equal(renders[1][1].font, selected.font); assert.equal(renders[1][1].textInset, selected.textInset);
+    hashes.push(setup.calls.find(call => call[0] === 'save')[4]);
+  }
+  assert.equal(new Set(hashes).size, 3);
 });
 test('同一任务网络重试即使次数已耗尽，也返回先前成品，不重新渲染或扣次', async () => {
   const setup = api({ entitled: false, previous: { id, reused: true, image: 'data:image/png;base64,cG5n' } });
@@ -253,10 +306,35 @@ test('印章独立页渲染商城导航、三栏工作台、各会员套餐及�
   const tool = { id: 40, slug: 'stamp-maker', name: '印章在线制作', plans: memberPlans, chargeType: 'paid', detail: '', description: '', seoTitle: '', seoDescription: '', entryConfigured: true };
   const page = load('../app/tools/[slug]/page.tsx', { 'next/link': Link, 'next/image': Image, 'next/navigation': { notFound() { throw new Error('404'); }, permanentRedirect() { throw new Error('redirect'); } }, '@/components/tool-launch': { ToolLaunch: () => null }, '@/components/storefront-header': header, '@/components/stamp-maker': workspace, '@/lib/tool-services': tools, '@/lib/tool-service-data': { getPublishedTool: async () => tool } });
   const html = renderToStaticMarkup(await page.default({ params: Promise.resolve({ slug: 'stamp-maker.html' }) }));
-  for (const text of ['主导航', '印章在线制作', '效果预览', '制作与下载', '基础会员', '专业会员', '单次制作', '制作高清印章']) assert.ok(html.includes(text));
+  for (const text of ['主导航', '印章在线制作', '效果预览', '制作与下载', '基础会员', '专业会员', '单次制作', '制作高清印章', '文字距边框', '印章字体', '宋体', '黑体', '霞鹜文楷']) assert.ok(html.includes(text));
   assert.ok(html.includes('/product/40?plan=basic-month&amp;cycle=month')); assert.ok(html.includes('application/ld+json'));
   const metadata = await page.generateMetadata({ params: Promise.resolve({ slug: 'stamp-maker.html' }) });
   assert.ok(metadata.description.includes('2048'));
+});
+
+test('界面可调整间距和字体，切换样式保留选择，重置恢复原设置', () => {
+  const slots = [];
+  let cursor = 0;
+  const react = { ...React, useState(initial) { const i = cursor++; if (!(i in slots)) slots[i] = typeof initial === 'function' ? initial() : initial; return [slots[i], value => { slots[i] = typeof value === 'function' ? value(slots[i]) : value; }]; }, useRef(initial) { const i = cursor++; return slots[i] ??= { current: initial }; }, useCallback: fn => fn, useEffect() {} };
+  const workspace = load('../components/stamp-maker.tsx', { react, 'next/link': () => null, 'next/image': () => null, '../lib/stamp-options': options, '../lib/tool-services': tools });
+  const tool = { id: 40, name: '印章在线制作', chargeType: 'free', plans: [], detail: '' };
+  const render = () => { cursor = 0; return workspace.StampMaker({ tool }); };
+  const all = node => Array.isArray(node) ? node.flatMap(all) : React.isValidElement(node) ? [node, ...all(node.props.children)] : [];
+  const text = node => Array.isArray(node) ? node.map(text).join('') : React.isValidElement(node) ? text(node.props.children) : typeof node === 'string' ? node : '';
+  const control = (tree, title, type) => all(all(tree).find(node => node.type === 'label' && text(node).startsWith(title))).find(node => node.type === type);
+  control(render(), '文字距边框', 'input').props.onChange({ target: { value: '68' } });
+  control(render(), '印章字体', 'select').props.onChange({ target: { value: 'kai' } });
+  for (const shape of ['简约椭圆', '方形印章', '个人姓名章', '经典圆章']) {
+    all(render()).find(node => node.type === 'button' && text(node).includes(shape)).props.onClick();
+    const tree = render();
+    assert.equal(control(tree, '印章字体', 'select').props.value, 'kai');
+    const inset = control(tree, '文字距边框', 'input');
+    if (['经典圆章', '简约椭圆'].includes(shape)) assert.equal(inset.props.value, 68);
+    else assert.equal(inset, undefined);
+  }
+  all(render()).find(node => node.type === 'button' && text(node) === '重置').props.onClick();
+  assert.equal(control(render(), '文字距边框', 'input').props.value, 12);
+  assert.equal(control(render(), '印章字体', 'select').props.value, 'serif');
 });
 
 test('客户端网络重试保留同一任务编号，即使刷新权益后剩余为零也能恢复成品', async () => {

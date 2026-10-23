@@ -1,15 +1,21 @@
 export const stampShapes = ['circle', 'ellipse', 'square', 'name'] as const;
 export type StampShape = typeof stampShapes[number];
+export const stampFonts = [
+  { value: 'serif', label: '宋体 · 典雅清晰' },
+  { value: 'sans', label: '黑体 · 简洁醒目' },
+  { value: 'kai', label: '霞鹜文楷 · 手写风格' },
+] as const;
+export type StampFont = typeof stampFonts[number]['value'];
 export type StampOptions = {
   shape: StampShape; text: string; subtitle: string; code: string; color: string;
-  border: number; fontSize: number; arc: number; innerRing: boolean;
+  border: number; fontSize: number; arc: number; textInset: number; font: StampFont; innerRing: boolean;
   symbol: 'star' | 'dot' | 'none'; rotation: number; background: 'transparent' | 'white'; size: 1024 | 1600 | 2048;
 };
 export const stampPresets: { shape: StampShape; name: string; note: string; options: StampOptions }[] = [
-  { shape: 'circle', name: '经典圆章', note: '弧形文字 · 居中图案', options: { shape: 'circle', text: '宇星创意工作室', subtitle: '设计专用章', code: '', color: '#c83932', border: 14, fontSize: 80, arc: 220, innerRing: false, symbol: 'star', rotation: 0, background: 'transparent', size: 1600 } },
-  { shape: 'ellipse', name: '简约椭圆', note: '横向舒展 · 清晰留白', options: { shape: 'ellipse', text: '宇星创意工作室', subtitle: '业务专用章', code: '', color: '#c83932', border: 12, fontSize: 80, arc: 210, innerRing: false, symbol: 'star', rotation: 0, background: 'transparent', size: 1600 } },
-  { shape: 'square', name: '方形印章', note: '规整排版 · 简洁大方', options: { shape: 'square', text: '宇星创意工作室', subtitle: '设计专用', code: '', color: '#c83932', border: 14, fontSize: 64, arc: 240, innerRing: false, symbol: 'none', rotation: 0, background: 'transparent', size: 1600 } },
-  { shape: 'name', name: '个人姓名章', note: '纵向字阵 · 二至四字', options: { shape: 'name', text: '宇星之印', subtitle: '', code: '', color: '#c83932', border: 16, fontSize: 64, arc: 240, innerRing: false, symbol: 'none', rotation: 0, background: 'transparent', size: 1600 } },
+  { shape: 'circle', name: '经典圆章', note: '弧形文字 · 居中图案', options: { shape: 'circle', text: '宇星创意工作室', subtitle: '设计专用章', code: '', color: '#c83932', border: 14, fontSize: 80, arc: 220, textInset: 12, font: 'serif', innerRing: false, symbol: 'star', rotation: 0, background: 'transparent', size: 1600 } },
+  { shape: 'ellipse', name: '简约椭圆', note: '横向舒展 · 清晰留白', options: { shape: 'ellipse', text: '宇星创意工作室', subtitle: '业务专用章', code: '', color: '#c83932', border: 12, fontSize: 80, arc: 210, textInset: 12, font: 'serif', innerRing: false, symbol: 'star', rotation: 0, background: 'transparent', size: 1600 } },
+  { shape: 'square', name: '方形印章', note: '规整排版 · 简洁大方', options: { shape: 'square', text: '宇星创意工作室', subtitle: '设计专用', code: '', color: '#c83932', border: 14, fontSize: 64, arc: 240, textInset: 12, font: 'serif', innerRing: false, symbol: 'none', rotation: 0, background: 'transparent', size: 1600 } },
+  { shape: 'name', name: '个人姓名章', note: '纵向字阵 · 二至四字', options: { shape: 'name', text: '宇星之印', subtitle: '', code: '', color: '#c83932', border: 16, fontSize: 64, arc: 240, textInset: 12, font: 'serif', innerRing: false, symbol: 'none', rotation: 0, background: 'transparent', size: 1600 } },
 ];
 export const defaultStampOptions = (): StampOptions => ({ ...stampPresets[0].options });
 
@@ -28,13 +34,15 @@ export function parseStampOptions(value: unknown): StampOptions {
   const subtitle = cleanText('subtitle', 12);
   if (typeof input.code !== 'string' || !/^[A-Za-z0-9-]{0,20}$/.test(input.code)) throw new Error('底部编号仅支持最多 20 位字母、数字或短横线');
   if (typeof input.color !== 'string' || !/^#[0-9a-f]{6}$/i.test(input.color)) throw new Error('印章颜色不正确');
-  const number = (key: string, min: number, max: number) => {
-    const item = input[key];
+  const font = input.font === undefined ? 'serif' : input.font;
+  if (!stampFonts.some(item => item.value === font)) throw new Error('请选择有效的印章字体');
+  const number = (key: string, min: number, max: number, fallback?: number) => {
+    const item = input[key] === undefined ? fallback : input[key];
     if (typeof item !== 'number' || !Number.isFinite(item) || item < min || item > max) throw new Error('印章尺寸或排版参数超出范围');
     return Math.round(item);
   };
   if (typeof input.innerRing !== 'boolean' || !['star', 'dot', 'none'].includes(String(input.symbol)) || !['transparent', 'white'].includes(String(input.background)) || ![1024, 1600, 2048].includes(input.size as number)) throw new Error('印章导出参数不正确');
-  return { shape: input.shape as StampShape, text, subtitle: input.shape === 'name' ? '' : subtitle, code: input.shape === 'name' ? '' : input.code, color: input.color.toLowerCase(), border: number('border', 6, 24), fontSize: number('fontSize', 28, 80), arc: number('arc', 180, 280), innerRing: input.innerRing, symbol: input.symbol as StampOptions['symbol'], rotation: number('rotation', -20, 20), background: input.background as StampOptions['background'], size: input.size as StampOptions['size'] };
+  return { shape: input.shape as StampShape, text, subtitle: input.shape === 'name' ? '' : subtitle, code: input.shape === 'name' ? '' : input.code, color: input.color.toLowerCase(), border: number('border', 6, 24), fontSize: number('fontSize', 28, 80), arc: number('arc', 180, 280), textInset: number('textInset', 0, 100, 12), font: font as StampFont, innerRing: input.innerRing, symbol: input.symbol as StampOptions['symbol'], rotation: number('rotation', -20, 20), background: input.background as StampOptions['background'], size: input.size as StampOptions['size'] };
 }
 
 export type StampAccess = { chargeType: 'free' | 'paid' | 'pending'; signedIn: boolean; canGenerate: boolean; remaining: number; cycle: string | null; membershipName: string | null; expiresAt: string | null; purchaseUrl: string; recent: { id: string; size: number; createdAt: string }[] };
