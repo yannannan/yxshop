@@ -120,6 +120,8 @@ test('公共工具数据不包含实际入口链接', () => {
 
 test('独立 HTML 页面提供服务端正文、标题、描述、canonical 和结构化数据', async () => {
   const page = load('../app/tools/[slug]/page.tsx', {
+    '@/components/storefront-header': { StorefrontHeader: () => null },
+    '@/components/stamp-maker': { StampMaker: () => null },
     '@/lib/tool-service-data': data, '@/lib/tool-services': helpers,
     '@/components/tool-launch': { ToolLaunch: () => React.createElement('button', { disabled: true }, '工具入口待配置') },
     'next/link': ({ href, children, ...props }) => React.createElement('a', { href, ...props }, children),

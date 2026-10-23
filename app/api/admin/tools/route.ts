@@ -1,7 +1,7 @@
 import { env } from '@/db/mysql-runtime';
 import { ensurePaymentQrRecords } from '@/db/setup';
 import { adminDenied, getAdminContext, hasAdminPermission } from '@/lib/admin-auth';
-import { isToolBillingCycle, isToolEntryUrl, isToolSlug, readToolPlans, type ToolPlan } from '@/lib/tool-services';
+import { builtInToolEntry, isToolBillingCycle, isToolEntryUrl, isToolSlug, readToolPlans, type ToolPlan } from '@/lib/tool-services';
 
 export async function GET(request: Request) {
   const admin = await getAdminContext(request);
@@ -48,10 +48,10 @@ export async function POST(request: Request) {
     if (body.action !== 'save') return Response.json({ message: '未知工具操作' }, { status: 400 });
     const name = String(body.name || '').trim().slice(0, 255);
     const slug = String(body.slug || '').trim().toLowerCase();
-    const entryUrl = String(body.entryUrl || '').trim();
+    const entryUrl = builtInToolEntry(slug) || String(body.entryUrl || '').trim();
     const chargeType = String(body.chargeType || 'pending');
     const inputPlans = body.plans ?? [{ cycle: 'once', price: body.price }];
-    if (chargeType === 'paid' && (!Array.isArray(inputPlans) || !inputPlans.length || inputPlans.length > 6 || inputPlans.some(plan => !plan || !isToolBillingCycle(plan.cycle) || !Number.isFinite(Number(plan.price)) || Number(plan.price) <= 0 || Number(plan.price) > 9999999.99 || Math.abs(Number(plan.price) * 100 - Math.round(Number(plan.price) * 100)) > 0.000001) || new Set(inputPlans.map(plan => plan.cycle)).size !== inputPlans.length)) return Response.json({ message: '请至少配置一个收费套餐：周期不能重复，价格须大于 0 且最多两位小数' }, { status: 400 });
+    if (chargeType === 'paid' && (!Array.isArray(inputPlans) || !inputPlans.length || inputPlans.length > 24 || inputPlans.some(plan => !plan || !isToolBillingCycle(plan.cycle) || (plan.name !== undefined && (typeof plan.name !== 'string' || plan.name.trim().length > 40)) || (plan.key !== undefined && (typeof plan.key !== 'string' || !/^[a-z0-9_-]{1,80}$/i.test(plan.key))) || !Number.isFinite(Number(plan.price)) || Number(plan.price) <= 0 || Number(plan.price) > 9999999.99 || Math.abs(Number(plan.price) * 100 - Math.round(Number(plan.price) * 100)) > 0.000001) || new Set(inputPlans.map(plan => `${String(plan.name || '').trim()}:${plan.cycle}`)).size !== inputPlans.length || new Set(inputPlans.map(plan => plan.key || plan.cycle)).size !== inputPlans.length)) return Response.json({ message: '请配置有效套餐：同一会员分类的周期不能重复；每个套餐须有独立标识，价格须大于 0 且最多两位小数。' }, { status: 400 });
     const plans: ToolPlan[] = chargeType === 'paid' ? readToolPlans(inputPlans) : [];
     const primaryPlan = [...plans].sort((a, b) => a.price - b.price)[0];
     const price = primaryPlan?.price || 0;

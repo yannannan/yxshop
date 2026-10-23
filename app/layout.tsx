@@ -8,6 +8,7 @@ import './technician/technician.css';
 import './tools.css';
 import './storefront-banners.css';
 import './storefront-navigation.css';
+import './stamp-maker.css';
 import './homepage-display.css';
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'https://www.yxstar.shop'),

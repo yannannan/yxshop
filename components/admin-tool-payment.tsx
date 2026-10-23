@@ -2,7 +2,7 @@
 
 import Image from 'next/image';
 import { useCallback, useEffect, useState } from 'react';
-import { toolBillingLabels, type ToolPlan } from '../lib/tool-services';
+import { toolPlanLabel, type ToolPlan } from '../lib/tool-services';
 
 type Qr = { id: number; type: string; amount: number; image_url: string | null; status: string };
 type Draft = { image: string; enabled: boolean };
@@ -56,7 +56,7 @@ export function ToolPaymentConfig({ id, plans, disabled }: { id: number; plans: 
     {disabled && <p className="tool-editor-hint">套餐已修改，请先点击“保存并配置收款码”。</p>}
     {message && <p role="status" className="tool-payment-message">{message}</p>}
     {!ready && <button type="button" disabled={busy} onClick={() => void load()}>重新读取收款码</button>}
-    <fieldset disabled={disabled || busy || !ready}>{amounts.map(amount => <section className="tool-payment-group" key={amount}><b>{plans.filter(plan => plan.price === amount).map(plan => toolBillingLabels[plan.cycle]).join(' / ')} · ¥{amount.toFixed(2)}</b><div className="tool-payment-methods">{Object.entries(methods).map(([type, label]) => {
+    <fieldset disabled={disabled || busy || !ready}>{amounts.map(amount => <section className="tool-payment-group" key={amount}><b>{plans.filter(plan => plan.price === amount).map(plan => toolPlanLabel(plan)).join(' / ')} · ¥{amount.toFixed(2)}</b><div className="tool-payment-methods">{Object.entries(methods).map(([type, label]) => {
       const draft = draftFor(amount, type);
       const saved = qrs.find(qr => qr.type === type && Number(qr.amount) === amount);
       const configured = Boolean(saved?.image_url && saved.status === 'active');

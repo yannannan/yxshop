@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@resvg/resvg-wasm':
+        specifier: ^2.6.2
+        version: 2.6.2
       drizzle-orm:
         specifier: 0.45.2
         version: 0.45.2(@cloudflare/workers-types@4.20260515.1)(mysql2@3.24.4(@types/node@22.19.19))
@@ -1171,6 +1174,10 @@ packages:
 
   '@resvg/resvg-wasm@2.4.0':
     resolution: {integrity: sha512-C7c51Nn4yTxXFKvgh2txJFNweaVcfUPQxwEUFw4aWsCmfiBDJsTSwviIF8EcwjQ6k8bPyMWCl1vw4BdxE569Cg==}
+    engines: {node: '>= 10'}
+
+  '@resvg/resvg-wasm@2.6.2':
+    resolution: {integrity: sha512-FqALmHI8D4o6lk/LRWDnhw95z5eO+eAa6ORjVg09YRR7BkcM6oPHU9uyC0gtQG5vpFLvgpeU4+zEAz2H8APHNw==}
     engines: {node: '>= 10'}
 
   '@rolldown/binding-android-arm64@1.0.1':
@@ -4329,6 +4336,8 @@ snapshots:
   '@poppinss/exception@1.2.3': {}
 
   '@resvg/resvg-wasm@2.4.0': {}
+
+  '@resvg/resvg-wasm@2.6.2': {}
 
   '@rolldown/binding-android-arm64@1.0.1':
     optional: true

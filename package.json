@@ -16,6 +16,7 @@
     "uploads:migrate": "node scripts/migrate-r2-images.mjs"
   },
   "dependencies": {
+    "@resvg/resvg-wasm": "^2.6.2",
     "drizzle-orm": "0.45.2",
     "mysql2": "^3.24.4",
     "next": "16.2.6",

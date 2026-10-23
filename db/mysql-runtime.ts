@@ -21,10 +21,10 @@ function getPool() {
 }
 
 class Statement {
-  constructor(private readonly statement: string, private readonly values: unknown[] = [], private readonly expectedChanges?: number) {}
-  bind(...values: unknown[]) { return new Statement(this.statement, values, this.expectedChanges); }
-  expectChanges(count: number) { return new Statement(this.statement, this.values, count); }
-  private async execute(connection: Pool | PoolConnection = getPool()) {
+  constructor(private readonly statement: string, private readonly values: unknown[] = [], private readonly expectedChanges?: number, private readonly connection?: PoolConnection) {}
+  bind(...values: unknown[]) { return new Statement(this.statement, values, this.expectedChanges, this.connection); }
+  expectChanges(count: number) { return new Statement(this.statement, this.values, count, this.connection); }
+  private async execute(connection: Pool | PoolConnection = this.connection ?? getPool()) {
     const statement = this.statement
       .replace(/^INSERT OR IGNORE/i, 'INSERT IGNORE')
       .replace(/ON CONFLICT\s*\([^)]*\)\s*DO UPDATE SET/ig, 'ON DUPLICATE KEY UPDATE')
@@ -36,6 +36,7 @@ class Statement {
   async run() {
     const [result] = await this.execute();
     const value = result as { insertId?: number; affectedRows?: number };
+    if (this.expectedChanges !== undefined && value.affectedRows !== this.expectedChanges) throw new Error('记录状态已变化，未执行本次操作');
     return { meta: { last_row_id: value.insertId ?? 0, changes: value.affectedRows ?? 0 } };
   }
   async runWith(connection: PoolConnection) {
@@ -49,6 +50,16 @@ class Statement {
 export const mysqlEnv = {
   DB: {
     prepare(statement: string) { return new Statement(statement); },
+    async transaction<T>(work: (db: { prepare: (sql: string) => Statement }) => Promise<T>): Promise<T> {
+      const connection = await getPool().getConnection();
+      try {
+        await connection.beginTransaction();
+        const result = await work({ prepare: sql => new Statement(sql, [], undefined, connection) });
+        await connection.commit();
+        return result;
+      } catch (error) { await connection.rollback(); throw error; }
+      finally { connection.release(); }
+    },
     async batch(statements: Statement[]) {
       const connection = await getPool().getConnection();
       try { await connection.beginTransaction(); const results = []; for (const statement of statements) results.push(await statement.runWith(connection)); await connection.commit(); return results; }

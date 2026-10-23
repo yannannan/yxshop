@@ -1,5 +1,9 @@
 import { integer, real, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
+export const toolGenerationResults = sqliteTable('tool_generation_results', {
+  id: text('id').primaryKey(), userId: integer('user_id').notNull(), productId: integer('product_id').notNull(), orderId: text('order_id').notNull(), requestHash: text('request_hash').notNull(), imageBase64: text('image_base64').notNull(), imageSize: integer('image_size').notNull(), charged: integer('charged').notNull().default(0), createdAt: text('created_at').notNull(),
+});
+
 export const users = sqliteTable('users', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   phone: text('phone').notNull().unique(),
@@ -41,6 +45,8 @@ export const orders = sqliteTable('orders', {
   rechargeJson: text('recharge_json').notNull().default(''),
   createdAt: text('created_at').notNull(),
   deliveredAt: text('delivered_at'),
+  toolPlanKey: text('tool_plan_key').notNull().default(''),
+  toolPlanName: text('tool_plan_name').notNull().default(''),
   toolBillingCycle: text('tool_billing_cycle').notNull().default(''),
   toolPaidAt: text('tool_paid_at'),
   toolUsesRemaining: integer('tool_uses_remaining').notNull().default(0),

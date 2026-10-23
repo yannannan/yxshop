@@ -398,7 +398,7 @@ export default function StorePage() {
     window.localStorage.setItem("mall_phone", phone);
     setLoggedIn(true);
     setAuthOpen(false);
-    if (pendingProduct) { const cycle = new URLSearchParams(window.location.search).get("cycle"); window.location.href = `/product/${pendingProduct}${cycle ? `?cycle=${encodeURIComponent(cycle)}` : ""}`; }
+    if (pendingProduct) { const params = new URLSearchParams(window.location.search); const selected = new URLSearchParams(); for (const key of ["cycle", "plan"]) { const value = params.get(key); if (value) selected.set(key, value); } window.location.href = `/product/${pendingProduct}${selected.size ? `?${selected}` : ""}`; }
   }
 
   async function signOut() {

@@ -1,6 +1,6 @@
 import { env } from '@/db/mysql-runtime';
 import { getVerifiedSessionPhone } from '@/db/setup';
-import { isToolEntryUrl, isToolSlug } from '@/lib/tool-services';
+import { builtInToolEntry, isToolEntryUrl, isToolSlug } from '@/lib/tool-services';
 import { getToolEntitlement } from '@/lib/tool-entitlements';
 
 export async function GET(request: Request) {
@@ -18,7 +18,8 @@ async function resolveAccess(request: Request) {
   const tool = await env.DB.prepare("SELECT id,tool_url,tool_charge_type,price FROM products WHERE product_type='tool' AND status='active' AND tool_slug=?")
     .bind(slug).first<{ id: number; tool_url: string; tool_charge_type: string; price: number }>();
   if (!tool) return Response.json({ message: '工具不存在或已停用' }, { status: 404, headers });
-  if (!tool.tool_url || !isToolEntryUrl(tool.tool_url)) return Response.json({ message: '工具入口尚未配置' }, { status: 409, headers });
+  const entryUrl = builtInToolEntry(slug) || tool.tool_url;
+  if (!entryUrl || !isToolEntryUrl(entryUrl)) return Response.json({ message: '工具入口尚未配置' }, { status: 409, headers });
   if (tool.tool_charge_type === 'pending') return Response.json({ message: '该工具的收费方式尚未确认' }, { status: 409, headers });
   if (tool.tool_charge_type === 'paid') {
     const phone = getVerifiedSessionPhone(request);
@@ -30,5 +31,5 @@ async function resolveAccess(request: Request) {
   } else if (tool.tool_charge_type !== 'free') {
     return Response.json({ message: '工具收费配置异常' }, { status: 409, headers });
   }
-  return Response.json({ entryUrl: tool.tool_url }, { headers });
+  return Response.json({ entryUrl }, { headers });
 }

@@ -1,0 +1,41 @@
+export const stampShapes = ['circle', 'ellipse', 'square', 'name'] as const;
+export type StampShape = typeof stampShapes[number];
+export type StampOptions = {
+  shape: StampShape; text: string; subtitle: string; code: string; color: string;
+  border: number; fontSize: number; arc: number; innerRing: boolean;
+  symbol: 'star' | 'dot' | 'none'; rotation: number; background: 'transparent' | 'white'; size: 1024 | 1600 | 2048;
+};
+export const stampPresets: { shape: StampShape; name: string; note: string; options: StampOptions }[] = [
+  { shape: 'circle', name: '经典圆章', note: '弧形文字 · 居中图案', options: { shape: 'circle', text: '宇星创意工作室', subtitle: '设计专用章', code: '', color: '#c83932', border: 14, fontSize: 80, arc: 220, innerRing: false, symbol: 'star', rotation: 0, background: 'transparent', size: 1600 } },
+  { shape: 'ellipse', name: '简约椭圆', note: '横向舒展 · 清晰留白', options: { shape: 'ellipse', text: '宇星创意工作室', subtitle: '业务专用章', code: '', color: '#c83932', border: 12, fontSize: 80, arc: 210, innerRing: false, symbol: 'star', rotation: 0, background: 'transparent', size: 1600 } },
+  { shape: 'square', name: '方形印章', note: '规整排版 · 简洁大方', options: { shape: 'square', text: '宇星创意工作室', subtitle: '设计专用', code: '', color: '#c83932', border: 14, fontSize: 64, arc: 240, innerRing: false, symbol: 'none', rotation: 0, background: 'transparent', size: 1600 } },
+  { shape: 'name', name: '个人姓名章', note: '纵向字阵 · 二至四字', options: { shape: 'name', text: '宇星之印', subtitle: '', code: '', color: '#c83932', border: 16, fontSize: 64, arc: 240, innerRing: false, symbol: 'none', rotation: 0, background: 'transparent', size: 1600 } },
+];
+export const defaultStampOptions = (): StampOptions => ({ ...stampPresets[0].options });
+
+export function parseStampOptions(value: unknown): StampOptions {
+  if (!value || typeof value !== 'object') throw new Error('请填写印章参数');
+  const input = value as Record<string, unknown>;
+  if (!stampShapes.includes(input.shape as StampShape)) throw new Error('请选择有效的印章样式');
+  const cleanText = (key: string, max: number) => {
+    if (typeof input[key] !== 'string') throw new Error('印章文字格式不正确');
+    const text = (input[key] as string).trim();
+    if ([...text].length > max || /[^\u3400-\u9fffA-Za-z0-9 \u3000·（）()&.,，。\-]/u.test(text)) throw new Error(`${key === 'text' ? '印章名称' : '辅助文字'}过长或含有不支持的字符`);
+    return text;
+  };
+  const text = cleanText('text', input.shape === 'name' ? 4 : input.shape === 'square' ? 12 : 32);
+  if (!text || (input.shape === 'name' && [...text].length < 2)) throw new Error(input.shape === 'name' ? '姓名章请填写二至四个字' : '请填写印章名称');
+  const subtitle = cleanText('subtitle', 12);
+  if (typeof input.code !== 'string' || !/^[A-Za-z0-9-]{0,20}$/.test(input.code)) throw new Error('底部编号仅支持最多 20 位字母、数字或短横线');
+  if (typeof input.color !== 'string' || !/^#[0-9a-f]{6}$/i.test(input.color)) throw new Error('印章颜色不正确');
+  const number = (key: string, min: number, max: number) => {
+    const item = input[key];
+    if (typeof item !== 'number' || !Number.isFinite(item) || item < min || item > max) throw new Error('印章尺寸或排版参数超出范围');
+    return Math.round(item);
+  };
+  if (typeof input.innerRing !== 'boolean' || !['star', 'dot', 'none'].includes(String(input.symbol)) || !['transparent', 'white'].includes(String(input.background)) || ![1024, 1600, 2048].includes(input.size as number)) throw new Error('印章导出参数不正确');
+  return { shape: input.shape as StampShape, text, subtitle: input.shape === 'name' ? '' : subtitle, code: input.shape === 'name' ? '' : input.code, color: input.color.toLowerCase(), border: number('border', 6, 24), fontSize: number('fontSize', 28, 80), arc: number('arc', 180, 280), innerRing: input.innerRing, symbol: input.symbol as StampOptions['symbol'], rotation: number('rotation', -20, 20), background: input.background as StampOptions['background'], size: input.size as StampOptions['size'] };
+}
+
+export type StampAccess = { chargeType: 'free' | 'paid' | 'pending'; signedIn: boolean; canGenerate: boolean; remaining: number; cycle: string | null; membershipName: string | null; expiresAt: string | null; purchaseUrl: string; recent: { id: string; size: number; createdAt: string }[] };
+export type StampResult = { id: string; image: string; size: number; createdAt: string; charged: boolean; reused: boolean };

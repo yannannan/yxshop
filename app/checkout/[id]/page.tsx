@@ -12,6 +12,7 @@ type Order = {
   product_type?: string;
   tool_slug?: string;
   tool_billing_cycle?: string;
+  tool_plan_name?: string;
   amount: number;
   status: string;
   product_name: string;
@@ -345,7 +346,7 @@ export default function CheckoutPage() {
                 <span className="checkout-product-icon">Q</span>
                 <div>
                   <small>正在购买</small>
-                  <b>{order?.product_name || "正在读取订单…"}</b>{order?.tool_billing_cycle && isToolBillingCycle(order.tool_billing_cycle) && <small>所选套餐：{toolBillingLabels[order.tool_billing_cycle]}</small>}
+                  <b>{order?.product_name || "正在读取订单…"}</b>{order?.tool_billing_cycle && isToolBillingCycle(order.tool_billing_cycle) && <small>所选套餐：{[order.tool_plan_name, toolBillingLabels[order.tool_billing_cycle]].filter(Boolean).join(' · ')}</small>}
                 </div>
                 <strong>
                   <em>¥</em>

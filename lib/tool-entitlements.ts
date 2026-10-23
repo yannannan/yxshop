@@ -1,7 +1,7 @@
 import { env } from '@/db/mysql-runtime';
 import { isToolBillingCycle, toolAccessExpiresAt } from './tool-services';
 
-export type ToolOrderAccess = { id: string; tool_billing_cycle: string; tool_paid_at: string | null; tool_uses_remaining: number };
+export type ToolOrderAccess = { id: string; tool_billing_cycle: string; tool_paid_at: string | null; tool_uses_remaining: number; tool_plan_name?: string };
 
 export function usableToolOrder(order: ToolOrderAccess, now = Date.now()) {
   const cycle = order.tool_billing_cycle || 'once';
