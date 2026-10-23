@@ -51,11 +51,11 @@ export default function CheckoutPage() {
       .catch(() => null);
   }, [params.id]);
   useEffect(() => {
-    if (order?.status === "pending_delivery") {
+    if (order?.status === "pending_delivery" || (order?.product_type === 'tool' && ['paid', 'delivered'].includes(order.status))) {
       setPaid(true);
       setPaymentVerifying(false);
     }
-  }, [order?.status]);
+  }, [order?.status, order?.product_type]);
   useEffect(() => {
     if (!paymentVerifying) return;
     let disposed = false;
@@ -170,9 +170,9 @@ export default function CheckoutPage() {
   }
 
   useEffect(() => {
-    if (!paymentVerifying || order?.status !== "paid" || payConfirmChecking) return;
+    if (!paymentVerifying || order?.status !== "paid" || order.product_type === 'tool' || payConfirmChecking) return;
     void confirmPaymentFinished();
-  }, [order?.status, payConfirmChecking, paymentVerifying]);
+  }, [order?.status, order?.product_type, payConfirmChecking, paymentVerifying]);
 
   return (
     <main className="checkout-page refined-checkout">

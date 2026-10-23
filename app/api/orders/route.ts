@@ -11,8 +11,10 @@ export async function POST(request: Request) {
   const user = await env.DB.prepare("SELECT id FROM users WHERE phone=? AND status='active'").bind(phone).first<{ id: number }>();
   if (!user) return Response.json({ message: '用户不可用' }, { status: 401 });
   if (action === 'payment-finished') {
-    const order = await env.DB.prepare("SELECT o.id,o.amount,o.status,o.created_at,p.name AS product_name,p.category,p.subcategory,u.phone,u.email FROM orders o JOIN products p ON p.id=o.product_id JOIN users u ON u.id=o.user_id WHERE o.id=? AND o.user_id=? AND o.status='paid'").bind(orderId, user.id).first<{ id: string; amount: number; status: string; created_at: string; product_name: string; category: string; subcategory: string; phone: string; email: string }>();
-    if (!order) return Response.json({ message: '请扫码支付后再点击已完成支付' }, { status: 400 });
+    const order = await env.DB.prepare("SELECT o.id,o.amount,o.status,o.created_at,p.name AS product_name,p.category,p.subcategory,p.product_type,u.phone,u.email FROM orders o JOIN products p ON p.id=o.product_id JOIN users u ON u.id=o.user_id WHERE o.id=? AND o.user_id=?").bind(orderId, user.id).first<{ id: string; amount: number; status: string; created_at: string; product_name: string; category: string; subcategory: string; product_type: string; phone: string; email: string }>();
+    if (!order) return Response.json({ message: '订单不存在或不属于当前账号' }, { status: 404 });
+    if (order.product_type === 'tool' && ['paid', 'pending_delivery', 'delivered'].includes(order.status)) return Response.json({ ok: true, status: order.status, nextStep: 'tool' });
+    if (order.status !== 'paid') return Response.json({ message: order.status === 'closed' ? '订单已关闭，无法确认支付' : '请扫码支付后再点击已完成支付' }, { status: 400 });
     if (order.category === '会员充值服务' && order.subcategory === 'ChatGPT会员充值') return Response.json({ ok: true, status: 'paid', nextStep: 'recharge' });
     await env.DB.prepare("UPDATE orders SET status='pending_delivery',updated_at=? WHERE id=? AND user_id=?").bind(new Date().toISOString(), orderId, user.id).run();
     return Response.json({ ok: true, status: 'pending_delivery' });
