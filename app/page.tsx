@@ -184,6 +184,9 @@ export default function StorePage() {
     category === "全部商品" &&
     subcategory === "全部" &&
     thirdCategory === "全部";
+  const showToolsInAll = showGroupedCatalog && (toolsLoading || Boolean(toolsError) || visibleTools.length > 0);
+  const showCatalogEmpty = !isToolsCategory && visible.length === 0 &&
+    (!showGroupedCatalog || (!toolsLoading && !toolsError && visibleTools.length === 0));
   const groupedVisibleProducts = useMemo(() => {
     const groups = new Map<string, CatalogProduct[]>();
     for (const product of visible) {
@@ -618,18 +621,18 @@ export default function StorePage() {
               <label className="search catalog-search">
                 <span aria-hidden="true">⌕</span>
                 <input
-                  aria-label={isToolsCategory ? '搜索工具' : '搜索商品'}
+                  aria-label={isToolsCategory ? '搜索工具' : showGroupedCatalog ? '搜索商品或工具' : '搜索商品'}
                   value={query}
                   onChange={(event) => {
                     setQuery(event.target.value);
                     setPage(1);
                   }}
-                  placeholder={isToolsCategory ? '搜索需要的工具' : '搜索商品、品牌或服务'}
+                  placeholder={isToolsCategory ? '搜索需要的工具' : showGroupedCatalog ? '搜索商品、工具或服务' : '搜索商品、品牌或服务'}
                 />
                 <button type="button">搜索</button>
               </label>
               <div className="product-tools product-tools-row">
-                <span>{isToolsCategory ? `共 ${visibleTools.length} 个工具` : `共 ${visible.length} 件`}</span>
+                <span>{isToolsCategory ? `共 ${visibleTools.length} 个工具` : showGroupedCatalog ? `共 ${visibleTools.length} 个工具 · ${visible.length} 件商品` : `共 ${visible.length} 件`}</span>
                 {!isToolsCategory && !showGroupedCatalog && visible.length > pageSize && (
                   <nav
                     className="pagination pagination-inline"
@@ -700,6 +703,8 @@ export default function StorePage() {
           </div>
 
           {isToolsCategory ? <ToolDirectory tools={visibleTools} loading={toolsLoading} error={toolsError} /> : showGroupedCatalog ? (
+            <>
+            {showToolsInAll && <ToolDirectory title="工具服务" tools={visibleTools} loading={toolsLoading} error={toolsError} />}
             <div className="product-category-groups">
               {groupedVisibleProducts.map((group) => (
                 <section className="product-category-section" key={group.name}>
@@ -713,15 +718,16 @@ export default function StorePage() {
                 </section>
               ))}
             </div>
+            </>
           ) : (
             <div className="product-grid refined-grid">
               {pagedProducts.map(renderProductCard)}
             </div>
           )}
-          {!isToolsCategory && visible.length === 0 && (
+          {showCatalogEmpty && (
             <div className="empty refined-empty">
               <span>⌕</span>
-              <h3>没有找到相关商品</h3>
+              <h3>{showGroupedCatalog ? '没有找到相关商品或工具' : '没有找到相关商品'}</h3>
               <p>试试更短的关键词，或返回查看全部商品。</p>
               <button
                 onClick={() => {
