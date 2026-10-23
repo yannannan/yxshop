@@ -13,13 +13,51 @@ export function publicVideoAddress(address: string) {
   const value = address.toLowerCase();
   return /^[23][0-9a-f]{3}:/.test(value) && !/^2001:(?:0{0,4}:|0?db8:)/.test(value) && !value.startsWith('2002:');
 }
+type VideoAddress = { address: string; family: number };
+const publicDnsCache = new Map<string, { addresses: VideoAddress[]; expiresAt: number }>();
+const publicDnsPending = new Map<string, Promise<VideoAddress[]>>();
+const dnsName = (value: unknown) => typeof value === 'string' ? value.toLowerCase().replace(/\.$/, '') : '';
+async function publicDnsAddresses(host: string): Promise<VideoAddress[]> {
+  const cached = publicDnsCache.get(host);
+  if (cached && cached.expiresAt > Date.now()) return cached.addresses;
+  if (publicDnsPending.has(host)) return publicDnsPending.get(host)!;
+  const pending = (async () => {
+    // 仅向固定 HTTPS 解析服务查询域名，不请求用户指定的解析端点；禁止重定向。
+    for (const endpoint of ['https://dns.alidns.com/resolve', 'https://cloudflare-dns.com/dns-query']) {
+      try {
+        const query = new URL(endpoint); query.searchParams.set('name', host); query.searchParams.set('type', 'A');
+        const response = await fetch(query, { headers: { Accept: 'application/dns-json' }, redirect: 'error', credentials: 'omit', signal: AbortSignal.timeout(5000) });
+        if (!response.ok || !response.body) { await response.body?.cancel(); continue; }
+        const reader = response.body.getReader(), chunks: Uint8Array[] = []; let length = 0;
+        try {
+          for (;;) { const { done, value } = await reader.read(); if (done) break; length += value.byteLength; if (length > 65536) { await reader.cancel(); throw new Error('DNS response too large'); } chunks.push(value); }
+        } finally { reader.releaseLock(); }
+        const data = JSON.parse(Buffer.concat(chunks).toString('utf8')) as { Status?: number; Question?: { name?: string } | { name?: string }[]; Answer?: { name?: string; type?: number; data?: string; TTL?: number }[] };
+        const question = Array.isArray(data.Question) ? data.Question[0] : data.Question;
+        if (data.Status !== 0 || dnsName(question?.name) !== host || !Array.isArray(data.Answer)) continue;
+        const names = new Set([host]);
+        for (let depth = 0; depth < 8; depth++) for (const row of data.Answer) if (row.type === 5 && names.has(dnsName(row.name))) names.add(dnsName(row.data));
+        const records = data.Answer.filter(row => row.type === 1 && names.has(dnsName(row.name)));
+        if (!records.length || records.some(row => !row.data || isIP(row.data) !== 4 || !publicVideoAddress(row.data))) continue;
+        const addresses = [...new Set(records.map(row => row.data!))].slice(0, 16).map(address => ({ address, family: 4 }));
+        const ttl = Math.max(1, Math.min(60, ...records.map(row => Number(row.TTL) || 1)));
+        for (const [key, value] of publicDnsCache) if (value.expiresAt <= Date.now() || publicDnsCache.size >= 512) publicDnsCache.delete(key);
+        publicDnsCache.set(host, { addresses, expiresAt: Date.now() + ttl * 1000 });
+        return addresses;
+      } catch { /* 某个固定解析服务不可用时尝试备用服务，不放行系统返回的私网 IP。 */ }
+    }
+    return [];
+  })().finally(() => { publicDnsPending.delete(host); });
+  publicDnsPending.set(host, pending);
+  return pending;
+}
 export async function videoUrlAddress(raw: string) {
   let url;
   try { url = new URL(raw); } catch { throw new VideoError('视频资源地址不正确'); }
   if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || (url.port && !['80', '443'].includes(url.port))) throw new VideoError('该视频资源地址不受支持');
-  const host = url.hostname.replace(/^\[|\]$/g, '').toLowerCase();
+  const host = url.hostname.replace(/^\[|\]$/g, '').toLowerCase().replace(/\.$/, '');
   if (!host || host === 'localhost' || !host.includes('.') && !isIP(host) || /\.(?:localhost|local|internal|lan|test|invalid)$/.test(host)) throw new VideoError('不支持本地或内网地址');
-  let addresses;
+  let addresses: VideoAddress[] = [];
   try {
     if (isIP(host)) addresses = [{ address: host, family: isIP(host) }];
     else {
@@ -28,8 +66,13 @@ export async function videoUrlAddress(raw: string) {
       finally { clearTimeout(timer); }
     }
   }
-  catch { throw new VideoError('无法解析视频站点地址，请检查链接', 422); }
-  if (!addresses.length || addresses.some(item => !publicVideoAddress(item.address))) throw new VideoError('不支持本地、内网或保留网络地址');
+  catch { /* 系统 DNS 不可用时仍可向固定公网解析服务复核。 */ }
+  if (!addresses.length || addresses.some(item => !publicVideoAddress(item.address))) {
+    if (isIP(host)) throw new VideoError('不支持本地、内网或保留网络地址');
+    const publicAddresses = await publicDnsAddresses(host);
+    if (!publicAddresses.length) throw new VideoError(`视频域名 ${host} 的 DNS 解析异常或指向内网/代理地址，无法确认公网地址，请检查 DNS 或代理设置`, 422);
+    addresses = publicAddresses;
+  }
   return { url, address: addresses[0] };
 }
 export function videoRequestHeaders(headers: unknown): Record<string, string> {

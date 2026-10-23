@@ -1,4 +1,4 @@
-// 仅安装官方 yt-dlp 独立二进制到项目目录，不改系统 Python、Git 或包管理器。
+// 引擎只安装到项目目录；--ffmpeg 使用 FFmpeg 官网链接的 Gyan Windows 构建。
 import { createHash } from 'node:crypto';
 import { mkdir, realpath, writeFile, rename, chmod, unlink } from 'node:fs/promises';
 import { resolve, dirname, join } from 'node:path';
@@ -26,6 +26,29 @@ try {
       try { const { stdout } = await execute(path, args, { timeout: 10000, maxBuffer: 100000, windowsHide: true }); console.log(`${name}：${stdout.split(/\r?\n/)[0]}`); }
       catch { console.error(`${name} 未就绪，请按 docs/链接视频提取与部署.md 配置。`); process.exitCode = 1; }
     }
+  } else if (process.argv.includes('--ffmpeg')) {
+    if (process.platform !== 'win32' || process.arch !== 'x64') throw new Error('--ffmpeg 当前支持 Windows x64；其他系统请配置兼容系统的 FFmpeg 路径。');
+    await mkdir(directory, { recursive: true });
+    if (await realpath(directory) !== directory) throw new Error('安装目标不是项目内的实际目录');
+    const url = 'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip';
+    console.log('下载 FFmpeg 官网链接的 Gyan Windows 构建并验证 SHA256…');
+    const expected = (await fetchBytes(`${url}.sha256`, 4096)).toString().match(/\b[a-f0-9]{64}\b/i)?.[0]?.toLowerCase();
+    if (!expected) throw new Error('FFmpeg SHA256 校验记录缺失');
+    const version = (await fetchBytes(`${url}.ver`, 4096)).toString().trim();
+    if (!/^\d+\.\d+(?:\.\d+)?$/.test(version)) throw new Error('FFmpeg 发布版本不正确');
+    const mirror = `https://github.com/GyanD/codexffmpeg/releases/download/${version}/ffmpeg-${version}-essentials_build.zip`;
+    const bytes = await fetchBytes(mirror, 180 * 1024 ** 2);
+    if (createHash('sha256').update(bytes).digest('hex') !== expected) throw new Error('FFmpeg SHA256 校验失败，未安装');
+    const archive = join(directory, `ffmpeg-${process.pid}.zip`), temporary = join(directory, `ffmpeg-${process.pid}.exe.tmp`);
+    const psString = value => `'${value.replace(/'/g, "''")}'`;
+    // 只把确定的 ffmpeg.exe 条目复制到固定临时文件，不展开压缩包内的路径。
+    const command = `$ErrorActionPreference='Stop'; Add-Type -AssemblyName System.IO.Compression.FileSystem; $zip=[System.IO.Compression.ZipFile]::OpenRead(${psString(archive)}); try { $entry=@($zip.Entries | Where-Object { $_.FullName -match '^[^/]+/bin/ffmpeg\\.exe$' }); if ($entry.Count -ne 1 -or $entry[0].Length -gt 300MB) { throw 'FFmpeg archive entry invalid' }; [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry[0],${psString(temporary)},$false) } finally { $zip.Dispose() }`;
+    try {
+      await writeFile(archive, bytes, { flag: 'wx' });
+      await execute('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', command], { timeout: 60000, maxBuffer: 100000, windowsHide: true });
+      await rename(temporary, join(directory, 'ffmpeg.exe'));
+    } finally { await unlink(archive).catch(() => {}); await unlink(temporary).catch(() => {}); }
+    console.log('FFmpeg 已安装到项目目录，未修改系统 PATH。');
   } else {
     const assetName = binaries[`${process.platform}:${process.arch}`];
     if (!assetName) throw new Error('当前系统架构请手动从 yt-dlp 官方发行页安装。');

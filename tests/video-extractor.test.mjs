@@ -42,6 +42,43 @@ test('公网地址规则拦截 IPv4/IPv6 私网、映射、保留与文档网络
   await assert.rejects(mixed.videoUrlAddress('https://example.com/x'), /内网/);
   for (const url of ['http://localhost/x','http://metadata.internal','http://2130706433','http://[::ffff:127.0.0.1]','https://u:p@8.8.8.8/x','file:///tmp/x']) await assert.rejects(network.videoUrlAddress(url));
 });
+test('B站域名被本地代理映射到私网时，通过公网 DNS 复核并固定真正公网 IP', async () => {
+  const queries=[],connections=[];
+  const lookup=async()=>[{address:'172.29.0.61',family:4}];
+  const safe=load('../lib/video-network.ts',{'./video-options':options,'node:dns/promises':{lookup},'node:https':{request(url,config,callback){
+    const req=new EventEmitter();req.setTimeout=()=>req;req.destroy=error=>req.emit('error',error);req.end=()=>queueMicrotask(()=>callback(stream(media)));
+    config.lookup(url.hostname,{all:true},(error,addresses)=>{assert.equal(error,null);connections.push(addresses[0].address);});return req;
+  }}},{fetch:async(url,config)=>{queries.push({url:String(url),config});return Response.json({Status:0,Question:{name:'www.bilibili.com.'},Answer:[{name:'www.bilibili.com.',type:5,data:'video.cdn.example.'},{name:'video.cdn.example.',type:1,data:'183.131.147.30',TTL:60}]});}});
+  const {response}=await safe.videoResponse('https://www.bilibili.com/video/BV1AMDvBaEY6/');response.destroy();
+  assert.deepEqual(connections,['183.131.147.30']);assert.equal(queries.length,1);assert.equal(queries[0].config.redirect,'error');assert.equal(queries[0].config.credentials,'omit');assert.match(queries[0].url,/^https:\/\/dns\.alidns\.com\/resolve\?/);
+  assert.equal((await safe.videoUrlAddress('https://www.bilibili.com/other')).address.address,'183.131.147.30');assert.equal(queries.length,1,'同域名短缓存避免每个视频画质重复查询');
+});
+test('正常系统公网 DNS 无需额外查询；内网字面地址与本地域名始终禁止',async()=>{
+  let queries=0;const safe=load('../lib/video-network.ts',{'./video-options':options,'node:dns/promises':{lookup:async()=>[{address:'8.8.8.8',family:4}]}},{fetch:async()=>{queries++;throw Error('not expected');}});
+  assert.equal((await safe.videoUrlAddress('https://public.example/video')).address.address,'8.8.8.8');
+  for(const url of ['http://127.0.0.1','http://172.29.0.61','http://198.18.0.1','http://[::ffff:127.0.0.1]','http://localhost.','http://x.internal'])await assert.rejects(safe.videoUrlAddress(url));
+  assert.equal(queries,0);
+});
+test('公网 DNS 响应须匹配问题域名与 CNAME 链，拒绝混入私网、无关地址和超限响应',async()=>{
+  for(const data of [
+    {Status:0,Question:[{name:'other.example'}],Answer:[{name:'other.example',type:1,data:'8.8.8.8'}]},
+    {Status:0,Question:[{name:'public.example'}],Answer:[{name:'public.example',type:1,data:'8.8.8.8'},{name:'public.example',type:1,data:'127.0.0.1'}]},
+    {Status:0,Question:[{name:'public.example'}],Answer:[{name:'unrelated.example',type:1,data:'8.8.8.8'}]},
+    {Status:0,Question:[{name:'public.example'}],Answer:[{name:'public.example',type:1,data:'198.18.0.1'}]},
+    {Status:3,Question:[{name:'public.example'}],Answer:[]},
+    'x'.repeat(66000),
+  ]){
+    let queries=0;const safe=load('../lib/video-network.ts',{'./video-options':options,'node:dns/promises':{lookup:async()=>[{address:'172.29.0.61',family:4}]}},{fetch:async()=>{queries++;return typeof data==='string'?new Response(data):Response.json(data);}});
+    await assert.rejects(safe.videoUrlAddress('https://public.example/video'),/DNS 解析异常/);assert.equal(queries,2);
+  }
+});
+test('系统 DNS 失败时使用备用 HTTPS DNS，同一域名的并发复核共享一次查询',async()=>{
+  let queries=0;const safe=load('../lib/video-network.ts',{'./video-options':options,'node:dns/promises':{lookup:async()=>{throw Error('DNS failed');}}},{fetch:async(url)=>{
+    queries++;if(new URL(url).hostname==='dns.alidns.com')return new Response(null,{status:503});
+    return Response.json({Status:0,Question:[{name:'public.example'}],Answer:[{name:'public.example',type:1,data:'1.1.1.1',TTL:60}]});
+  }});
+  const addresses=await Promise.all([safe.videoUrlAddress('https://public.example/a'),safe.videoUrlAddress('https://public.example/b')]);assert.ok(addresses.every(item=>item.address.address==='1.1.1.1'));assert.equal(queries,2);
+});
 test('连接固定已校验 IP，重定向重新检查；认证和 Cookie 不转发', async () => {
   const calls = []; let lookups = 0;
   const request = (url, config, callback) => {
@@ -113,6 +150,11 @@ test('平台引擎使用独立程序安全参数，B站与 Facebook 返回实际
   }
   assert.equal(calls.length,2); assert.ok(calls[0].args.includes('default,-generic')); assert.ok(calls[0].args.includes('--no-remote-components')); assert.ok(calls[0].args.includes('--ignore-config')); assert.equal(calls[0].args.at(-2),'--'); assert.equal(calls[0].config.shell,undefined);
 });
+test('B站只有分离画质且缺少合并组件时，准确提示 FFmpeg 而非链接不支持',async t=>{
+  const root=await scratch(t);await mkdir(join(root,'vendor/video-engine'),{recursive:true});await writeFile(join(root,'vendor/video-engine',process.platform==='win32'?'yt-dlp.exe':'yt-dlp'),'stub',{mode:0o755});
+  const configured=load('../lib/video-engine.ts',{...engineBase,'./video-network':{...network,videoUrlAddress:async()=>({})},'node:child_process':{execFile(_file,_args,_config,callback){callback(null,{stdout:JSON.stringify({title:'B站视频',formats:[{url:'https://cdn.example/video',ext:'mp4',protocol:'https',vcodec:'avc1',acodec:'none',height:1080},{url:'https://cdn.example/audio',ext:'m4a',protocol:'https',vcodec:'none',acodec:'aac'}]})});}}},{process:{...process,cwd:()=>root,env:{}}});
+  await assert.rejects(configured.inspectVideo('https://www.bilibili.com/video/BV1AMDvBaEY6/'),error=>error.status===503&&/FFmpeg/.test(error.message));
+});
 test('公开网页视频实际下载成文件；无效内容和大小超限不留下结果', async t => {
   const root = await scratch(t); let invalid = false;
   const local = load('../lib/video-engine.ts', { ...engineBase, './video-network': { ...network, videoUrlAddress:async()=>({}), videoResponse:async url => ({ url, response:stream(invalid ? Buffer.from('<html>denied</html>') : media, {'content-length':String(invalid?19:media.length)}) }) } }, {process:{...process, cwd:()=>root,env:{}}});
@@ -127,6 +169,19 @@ test('分离音视频从本地文件合并，FFmpeg 失败不返回成品', asyn
   const format={id:'f',extension:'mp4',size:0,parts:[{url:'https://cdn.example/v',headers:{},extension:'mp4'},{url:'https://cdn.example/a',headers:{},extension:'m4a'}]};
   assert.equal((await local.materializeVideo(id,format,()=>{})).size,media.length); assert.ok(calls[0].includes('file,pipe')); assert.equal(calls[0].filter(v=>v==='-i').length,2);
   fail=true; await assert.rejects(local.materializeVideo(id2,format,()=>{}),/合并失败/); assert.equal((await readdir(join(root,'uploads/video-extractions',id2))).length,0);
+});
+test('项目内 FFmpeg 可用时，真实合成测试音视频并通过应用合并为可解码成品',async t=>{
+  const binary=join(process.cwd(),'vendor/video-engine',process.platform==='win32'?'ffmpeg.exe':'ffmpeg');
+  if(!(await stat(binary).catch(()=>null))?.isFile()){t.skip('未安装项目内 FFmpeg，其他合并事务检查仍执行');return;}
+  const root=await scratch(t),execute=require('node:util').promisify(require('node:child_process').execFile);
+  const run=args=>execute(binary,['-nostdin','-hide_banner','-loglevel','error',...args],{timeout:15000,maxBuffer:100000,windowsHide:true});
+  const video=join(root,'video.mp4'),audio=join(root,'audio.m4a');
+  await run(['-f','lavfi','-i','color=c=blue:s=128x72:r=10:d=0.2','-an','-c:v','libx264','-t','0.2',video]);
+  await run(['-f','lavfi','-i','anullsrc=r=44100:cl=mono','-vn','-c:a','aac','-t','0.2',audio]);
+  const bytes=[await readFile(video),await readFile(audio)];
+  const local=load('../lib/video-engine.ts',{...engineBase,'./video-network':{...network,videoResponse:async url=>({url,response:stream(bytes[url.endsWith('/audio')?1:0])})}},{process:{...process,cwd:()=>root,env:{VIDEO_FFMPEG_PATH:binary}}});
+  const result=await local.materializeVideo(id,{id:'f',extension:'mp4',size:bytes[0].length+bytes[1].length,parts:[{url:'https://cdn.example/video',headers:{},extension:'mp4'},{url:'https://cdn.example/audio',headers:{},extension:'m4a'}]},()=>{});
+  assert.ok(result.size>0);await run(['-i',result.path,'-map','0:v:0','-map','0:a:0','-frames:v','1','-f','null','-']);
 });
 
 const entitlement = load('../lib/tool-entitlements.ts', { './tool-services':tools, '@/db/mysql-runtime':{env:{}} });

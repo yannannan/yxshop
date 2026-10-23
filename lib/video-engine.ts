@@ -112,7 +112,10 @@ export async function inspectVideo(sourceUrl: string, embedded = false): Promise
     } catch { throw new VideoError('当前链接未能解析，可能需要站点登录、验证或暂不支持，请换一个公开链接重试', 422); }
     if (metadata.is_live || metadata.live_status === 'is_live' || number(metadata.duration) > 3600 || metadata._type === 'playlist') throw new VideoError('暂不支持直播、合集或超过 60 分钟的视频', 422);
     const formats = engineFormats(metadata, health.mergeReady);
-    if (!formats.length) throw new VideoError('没有找到可提取的公开视频文件，请换一个链接或稍后重试', 422);
+    if (!formats.length) {
+      if (!health.mergeReady && engineFormats(metadata, true).length) throw new VideoError('此视频的音频和画面需要合并，服务器尚未配置 FFmpeg，请管理员先安装合并组件', 503);
+      throw new VideoError('没有找到可提取的公开视频文件，请换一个链接或稍后重试', 422);
+    }
     for (const format of formats) for (const part of format.parts) await videoUrlAddress(part.url);
     return { title: clean(metadata.title) || '链接视频', source: new URL(sourceUrl).hostname, sourceUrl, duration: number(metadata.duration), thumbnail: clean(metadata.thumbnail, 4096), formats };
   }
