@@ -1,4 +1,4 @@
-export type ToolChargeType = 'free' | 'paid' | 'pending';
+export type ToolChargeType = 'free' | 'paid' | 'pending' | 'points';
 export const toolBillingLabels = { times: '按次', day: '包天', week: '包周', month: '包月', year: '包年', once: '一次性（长期）' } as const;
 export type ToolBillingCycle = keyof typeof toolBillingLabels;
 export type ToolPlan = { cycle: ToolBillingCycle; price: number; key?: string; name?: string };
@@ -51,11 +51,11 @@ export function toolAccessExpiresAt(cycle: string, paidAt: string): string | nul
 
 export type ToolService = {
   id: number; name: string; description: string; detail: string; logo: string; slug: string;
-  chargeType: ToolChargeType; price: number; plans: ToolPlan[]; entryConfigured: boolean;
+  chargeType: ToolChargeType; price: number; plans: ToolPlan[]; entryConfigured: boolean; pointsCost?: number;
   seoTitle: string; seoDescription: string; updatedAt: string;
 };
 
-export const toolChargeLabels: Record<ToolChargeType, string> = { free: '免费使用', paid: '付费使用', pending: '收费待确认' };
+export const toolChargeLabels: Record<ToolChargeType, string> = { free: '免费使用', paid: '付费使用', pending: '收费待确认', points: '通用积分' };
 export const toolPagePath = (slug: string) => `/tools/${encodeURIComponent(slug)}.html`;
 export const builtInToolEntry = (slug: string | undefined) => slug === 'stamp-maker' ? '/tools/stamp-maker.html' : '';
 export const siteOrigin = () => (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.yxstar.shop').replace(/\/$/, '');
@@ -72,7 +72,8 @@ export function mapTool(row: Record<string, unknown>): ToolService {
   return {
     id: Number(row.id), name: String(row.name || ''), description: String(row.description || ''),
     detail: String(row.detail || ''), logo: String(row.cover_image || ''), slug: String(row.tool_slug || ''),
-    chargeType: row.tool_charge_type === 'paid' ? 'paid' : row.tool_charge_type === 'free' ? 'free' : 'pending',
+    chargeType: row.tool_charge_type === 'points' ? 'points' : row.tool_charge_type === 'paid' ? 'paid' : row.tool_charge_type === 'free' ? 'free' : 'pending',
+    pointsCost: Number(row.tool_points_cost || 0),
     price: Number(row.price || 0), entryConfigured: Boolean(Number(row.entry_configured) || builtInToolEntry(String(row.tool_slug || ''))),
     plans: row.tool_charge_type === 'paid' ? readToolPlans(row.tool_plans_json, Number(row.price || 0), String(row.billing_cycle || 'once')) : [],
     seoTitle: String(row.seo_title || ''), seoDescription: String(row.seo_description || ''), updatedAt: String(row.updated_at || ''),

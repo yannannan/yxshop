@@ -10,6 +10,7 @@ type Order = {
   id: string;
   product_id: number;
   product_type?: string;
+  points_amount?: number;
   tool_slug?: string;
   tool_billing_cycle?: string;
   tool_plan_name?: string;
@@ -51,7 +52,7 @@ export default function CheckoutPage() {
       .catch(() => null);
   }, [params.id]);
   useEffect(() => {
-    if (order?.status === "pending_delivery" || (order?.product_type === 'tool' && ['paid', 'delivered'].includes(order.status))) {
+    if (order?.status === "pending_delivery" || (order?.product_type === 'tool' && ['paid', 'delivered'].includes(order.status)) || (order?.product_type === 'points' && ['paid', 'delivered'].includes(order.status))) {
       setPaid(true);
       setPaymentVerifying(false);
     }
@@ -170,7 +171,7 @@ export default function CheckoutPage() {
   }
 
   useEffect(() => {
-    if (!paymentVerifying || order?.status !== "paid" || order.product_type === 'tool' || payConfirmChecking) return;
+    if (!paymentVerifying || order?.status !== "paid" || ['tool', 'points'].includes(order.product_type || '') || payConfirmChecking) return;
     void confirmPaymentFinished();
   }, [order?.status, order?.product_type, payConfirmChecking, paymentVerifying]);
 
@@ -320,17 +321,17 @@ export default function CheckoutPage() {
             ) : (
               <div className="paid-state">
                 <span>✓</span>
-                <h1>{order?.product_type === 'tool' ? '工具购买已确认' : '支付确认已提交'}</h1>
+                <h1>{order?.product_type === 'points' ? '积分充值已到账' : order?.product_type === 'tool' ? '工具购买已确认' : '支付确认已提交'}</h1>
                 <p>
-                  {order?.product_type === 'tool' ? '支付已通过核验，可返回工具页面使用' : '我们正在核验支付结果'}
+                  {order?.product_type === 'points' ? `${order.points_amount} 积分已充值至您的账户` : order?.product_type === 'tool' ? '支付已通过核验，可返回工具页面使用' : '我们正在核验支付结果'}
                   <br />
-                  {order?.product_type === 'tool' ? '点击下方按钮进入对应工具页面。' : <>商品信息将发送至 {order?.email || "您的订单邮箱"}</>}
+                  {order?.product_type === 'points' ? '支持积分的工具共用余额，成功处理后扣分。' : order?.product_type === 'tool' ? '点击下方按钮进入对应工具页面。' : <>商品信息将发送至 {order?.email || "您的订单邮箱"}</>}
                 </p>
                 <div className="paid-order">
                   <span>订单编号</span>
                   <b>{order?.id || params.id}</b>
                 </div>
-                {order?.product_type === 'tool' && order.tool_slug ? <Link href={toolPagePath(order.tool_slug)}>返回工具页面并使用</Link> : <Link href="/">继续选购</Link>}
+                {order?.product_type === 'points' ? <Link href="/points">查看积分余额与明细</Link> : order?.product_type === 'tool' && order.tool_slug ? <Link href={toolPagePath(order.tool_slug)}>返回工具页面并使用</Link> : <Link href="/">继续选购</Link>}
               </div>
             )
           ) : (
@@ -346,7 +347,7 @@ export default function CheckoutPage() {
                 <span className="checkout-product-icon">Q</span>
                 <div>
                   <small>正在购买</small>
-                  <b>{order?.product_name || "正在读取订单…"}</b>{order?.tool_billing_cycle && isToolBillingCycle(order.tool_billing_cycle) && <small>所选套餐：{[order.tool_plan_name, toolBillingLabels[order.tool_billing_cycle]].filter(Boolean).join(' · ')}</small>}
+                  <b>{order?.product_name || "正在读取订单…"}</b>{order?.product_type === 'points' && <small>充值到账 {order.points_amount} 积分</small>}{order?.tool_billing_cycle && isToolBillingCycle(order.tool_billing_cycle) && <small>所选套餐：{[order.tool_plan_name, toolBillingLabels[order.tool_billing_cycle]].filter(Boolean).join(' · ')}</small>}
                 </div>
                 <strong>
                   <em>¥</em>

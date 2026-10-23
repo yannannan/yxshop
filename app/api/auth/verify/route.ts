@@ -1,6 +1,7 @@
 import { env } from '@/db/mysql-runtime';
 import { createMallSession, ensureDatabase } from '../../../../db/setup';
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import { pointsBalance } from '../../../../lib/points-service';
 
 function hashCode(phone: string, code: string) {
   const secret = process.env.AUTH_CODE_SECRET || process.env.MYSQL_PASSWORD || '';
@@ -24,6 +25,11 @@ export async function POST(request: Request) {
     if (!email || !/^\S+@\S+\.\S+$/.test(email)) return Response.json({ message: '首次注册请填写正确的订单邮箱' }, { status: 400 });
     await env.DB.prepare('INSERT INTO users (phone,email,status,permission_type,permission_type_name,created_at) VALUES (?,?,?,?,?,?)').bind(phone, email, 'active', '10001', '普通用户', new Date().toISOString()).run();
   }
+  // 赠送与钱包初始化可重试，重复登录不会再赠送；积分库未升级时不阻断登录。
+  try {
+    const user = existing || await env.DB.prepare('SELECT id FROM users WHERE phone=?').bind(phone).first<{ id: number }>();
+    if (user) await pointsBalance(Number(user.id));
+  } catch (error) { console.error('登录积分初始化失败，将在首次使用积分时重试', error); }
   return new Response(JSON.stringify({ ok: true, phone, email: existing?.email || email, permissionType: existing?.permission_type || '10001', permissionTypeName: existing?.permission_type_name || '普通用户' }), {
     headers: { 'content-type': 'application/json', 'set-cookie': `mall_session=${encodeURIComponent(createMallSession(phone))}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000` },
   });

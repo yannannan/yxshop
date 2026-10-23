@@ -32,6 +32,6 @@ export function StorefrontHeader({ channel = 'mall', onNavigate, isAdmin = false
     </nav>
     {isAdmin && <Link className="admin-entry" href="/admin" target="_blank" rel="noopener noreferrer">进入管理后台</Link>}
     {isTechnician && <Link className="admin-entry" href="/technician">进入技术人员工作台</Link>}
-    {children ?? <div className="account-actions"><Link className="orders-link" href="/orders">我的订单</Link><Link className="catalog-home-link" href="/">返回首页</Link></div>}
+    {children ?? <div className="account-actions"><Link className="orders-link" href="/points">我的积分</Link><Link className="orders-link" href="/orders">我的订单</Link><Link className="catalog-home-link" href="/">返回首页</Link></div>}
   </header>;
 }

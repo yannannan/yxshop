@@ -8,7 +8,7 @@ type Qr = { id: number; type: string; amount: number; image_url: string | null; 
 type Draft = { image: string; enabled: boolean };
 const methods = { wechat: '微信支付', alipay: '支付宝' } as const;
 
-export function ToolPaymentConfig({ id, plans, disabled }: { id: number; plans: ToolPlan[]; disabled: boolean }) {
+export function ToolPaymentConfig({ id, plans, disabled, endpoint = '/api/admin/tools' }: { id: number; plans: ToolPlan[]; disabled: boolean; endpoint?: string }) {
   const [qrs, setQrs] = useState<Qr[]>([]);
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
   const [busy, setBusy] = useState(false);
@@ -17,12 +17,12 @@ export function ToolPaymentConfig({ id, plans, disabled }: { id: number; plans: 
   const load = useCallback(async () => {
     setReady(false);
     try {
-      const response = await fetch(`/api/admin/tools?resource=payment-qrs&id=${id}`, { cache: 'no-store' });
+      const response = await fetch(`${endpoint}?resource=payment-qrs&id=${id}`, { cache: 'no-store' });
       const result = await response.json() as { qrs?: Qr[]; message?: string };
       if (!response.ok) { setMessage(result.message || '收款码读取失败'); return; }
       setQrs(result.qrs || []); setDrafts({}); setReady(true);
     } catch { setMessage('收款码读取失败，请重试'); }
-  }, [id]);
+  }, [id, endpoint]);
   useEffect(() => { const timer = window.setTimeout(() => void load(), 0); return () => window.clearTimeout(timer); }, [load]);
   function draftFor(amount: number, type: string): Draft {
     const qr = qrs.find(qr => qr.type === type && Number(qr.amount) === amount);
@@ -42,7 +42,7 @@ export function ToolPaymentConfig({ id, plans, disabled }: { id: number; plans: 
     setBusy(true); setMessage('');
     try {
       const draft = draftFor(amount, type);
-      const response = await fetch('/api/admin/tools', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'qr-save', id, amount, type, imageUrl: draft.image, enabled: draft.enabled }) });
+      const response = await fetch(endpoint, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'qr-save', id, amount, type, imageUrl: draft.image, enabled: draft.enabled }) });
       const result = await response.json() as { message?: string };
       if (!response.ok) { setMessage(result.message || '收款码保存失败'); return; }
       setQrs(current => [{ id: 0, type, amount, image_url: draft.image || null, status: draft.enabled ? 'active' : 'inactive' }, ...current.filter(qr => qr.type !== type || Number(qr.amount) !== amount)]);

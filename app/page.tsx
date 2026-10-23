@@ -85,6 +85,7 @@ export default function StorePage() {
       setChannel("technical");
     }
     if (searchParams.get("allServices") === "1") setShowAllTechnical(true);
+    if (searchParams.get("returnTo") === "/points") setAuthOpen(true);
     const requested = Number(searchParams.get("product"));
     if (requested) {
       setPendingProduct(requested);
@@ -398,6 +399,7 @@ export default function StorePage() {
     window.localStorage.setItem("mall_phone", phone);
     setLoggedIn(true);
     setAuthOpen(false);
+    if (new URLSearchParams(window.location.search).get("returnTo") === "/points") { window.location.assign("/points"); return; }
     if (pendingProduct) { const params = new URLSearchParams(window.location.search); const selected = new URLSearchParams(); for (const key of ["cycle", "plan"]) { const value = params.get(key); if (value) selected.set(key, value); } window.location.href = `/product/${pendingProduct}${selected.size ? `?${selected}` : ""}`; }
   }
 
@@ -419,6 +421,7 @@ export default function StorePage() {
         <div className="account-actions">
           {loggedIn ? (
             <>
+              <a className="orders-link" href="/points">我的积分 / 充值</a>
               <a className="orders-link" href="/orders">
                 我的订单
               </a>

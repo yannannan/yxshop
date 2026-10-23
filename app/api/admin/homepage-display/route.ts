@@ -3,7 +3,7 @@ import { adminDenied, getAdminContext, hasAdminPermission } from '@/lib/admin-au
 import { readHomepageDisplay, validateHomepageDisplay, type HomepageItem } from '@/lib/homepage-display';
 
 async function items() {
-  return (await env.DB.prepare("SELECT id,name,category,product_type,status FROM products WHERE status<>'closed' ORDER BY sort_order,id").all<HomepageItem>()).results;
+  return (await env.DB.prepare("SELECT id,name,category,product_type,status FROM products WHERE status<>'closed' AND product_type<>'points' ORDER BY sort_order,id").all<HomepageItem>()).results;
 }
 
 export async function GET(request: Request) {

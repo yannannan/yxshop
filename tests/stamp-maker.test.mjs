@@ -12,13 +12,14 @@ import jpeg from 'jpeg-js';
 import { Resvg } from '@resvg/resvg-wasm';
 import * as options from '../lib/stamp-options.ts';
 import * as tools from '../lib/tool-services.ts';
+import * as points from '../lib/points.ts';
 import { renderStamp, stampSvg } from '../lib/stamp-renderer.ts';
 
 const require = createRequire(import.meta.url);
 function load(file, mocks = {}, globals = {}) {
   const exports = {};
   const code = ts.transpileModule(readFileSync(new URL(file, import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText;
-  vm.runInNewContext(code, { exports, Response, Request, URL, Buffer, crypto: webcrypto, console: { error() {} }, ...globals, require(name) { if (name in mocks) return mocks[name]; if (['react', 'react/jsx-runtime', 'node:crypto'].includes(name)) return require(name); throw new Error(`Unexpected module: ${name}`); } });
+  vm.runInNewContext(code, { exports, Response, Request, URL, Buffer, crypto: webcrypto, console: { error() {} }, ...globals, require(name) { if (name in mocks) return mocks[name]; if (name === '@/lib/points') return points; if (['@/lib/points-service', './points-service'].includes(name)) return { PointsError: class extends Error {} }; if (name === '@/lib/tool-points-usage') return {};  if (['react', 'react/jsx-runtime', 'node:crypto'].includes(name)) return require(name); throw new Error(`Unexpected module: ${name}`); } });
   return exports;
 }
 const pureEntitlements = load('../lib/tool-entitlements.ts', { '@/db/mysql-runtime': { env: {} }, './tool-services': tools });
@@ -388,7 +389,7 @@ test('购买时按套餐标识采用对应分类服务端价格并保存快照�
     const writes = [];
     const route = load('../app/api/orders/route.ts', {
       '@/db/mysql-runtime': { env: { DB: { prepare(sql) { let args; return { bind(...values) { args = values; return this; }, async first() { if (sql.includes('FROM users WHERE phone')) return { id: 1 }; if (sql.includes('FROM products WHERE id')) return { id: 40, product_type: 'tool', tool_slug: 'stamp-maker', tool_url: '', tool_charge_type: 'paid', tool_plans_json: JSON.stringify(memberPlans) }; return null; }, async run() { writes.push(args); return { meta: {} }; } }; } } } },
-      '../../../db/setup': { ensureDatabase: async () => {}, getSessionPhone: () => '13800000000' }, '../../../lib/tool-services': tools, '../../../lib/order-notifications': { sendOrderNotification: async () => {} },
+      '../../../db/setup': { ensureDatabase: async () => {}, getVerifiedSessionPhone: () => '13800000000' }, '../../../lib/tool-services': tools, '../../../lib/order-notifications': { sendOrderNotification: async () => {} },
     });
     const response = await route.POST(new Request('http://localhost', { method: 'POST', body: JSON.stringify({ productId: 40, toolPlan: key, toolCycle: cycle, price: .01, membershipName: '伪造会员' }) }));
     assert.equal(response.status, expected);

@@ -8,13 +8,14 @@ import ts from 'typescript';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import * as helpers from '../lib/tool-services.ts';
+import * as points from '../lib/points.ts';
 import * as homepageHelpers from '../lib/homepage-display.ts';
 
 const require = createRequire(import.meta.url);
 function load(file, mocks, globals = {}) {
   const code = ts.transpileModule(readFileSync(new URL(file, import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText;
   const exports = {};
-  vm.runInNewContext(code, { exports, Response, URL, crypto: webcrypto, console: { error() {} }, ...globals, require(name) { if (name in mocks) return mocks[name]; if (['react', 'react/jsx-runtime'].includes(name)) return require(name); throw new Error(`Unexpected module: ${name}`); } });
+  vm.runInNewContext(code, { exports, Response, URL, crypto: webcrypto, console: { error() {} }, ...globals, require(name) { if (name in mocks) return mocks[name]; if (name === '@/lib/points') return points; if (['@/lib/points-service', './points-service'].includes(name)) return { PointsError: class extends Error {} }; if (name === '@/lib/tool-points-usage') return {};  if (['react', 'react/jsx-runtime'].includes(name)) return require(name); throw new Error(`Unexpected module: ${name}`); } });
   return exports;
 }
 
@@ -85,6 +86,15 @@ test('已有工具可以修改收费价格和入口，固定页面地址不变',
   assert.match(route.writes[0].sql, /^UPDATE products/);
   assert.equal(route.writes[0].values[6], 'https://example.com/tool');
   assert.deepEqual(route.payments, [[1, 9.9]]);
+});
+test('按积分工具将消耗值与收费方式一次保存，拒绝非正整数；不创建工具专属收款码', async () => {
+  for (const pointsCost of [0, -1, 1.1, 'bad', 1000001]) {
+    const route = admin(); assert.equal((await route.save({ chargeType: 'points', pointsCost })).status, 400); assert.equal(route.writes.length, 0);
+  }
+  const route = admin(); assert.equal((await route.save({ chargeType: 'points', pointsCost: 15 })).status, 200);
+  assert.equal(route.writes[0].values[7], 'points'); assert.equal(route.writes[0].values[14], 15); assert.equal(route.writes.length, 1); assert.equal(route.payments.length, 0);
+  const mapped = helpers.mapTool({ tool_charge_type: 'points', tool_points_cost: 15, tool_url: 'private-url', tool_plans_json: '[]' });
+  assert.equal(mapped.pointsCost, 15); assert.equal(mapped.chargeType, 'points'); assert.equal('tool_url' in mapped, false);
 });
 
 function access({ type = 'free', url = 'https://example.com/tool', phone = null, paid = false, exists = true } = {}) {
@@ -172,7 +182,7 @@ test('商城订单仅允许购买已配置入口的收费工具，金额以服�
         },
         async run() { writes.push(values); return { meta: { last_row_id: 1 } }; },
       }; } } } },
-      '../../../db/setup': { ensureDatabase: async () => {}, getSessionPhone: () => '13800000000' },
+      '../../../db/setup': { ensureDatabase: async () => {}, getVerifiedSessionPhone: () => '13800000000' },
       '../../../lib/order-notifications': { sendOrderNotification: async () => {} },
       '../../../lib/tool-services': helpers,
     });
@@ -230,7 +240,7 @@ test('用户所选套餐决定真实下单价格和订单周期，拒绝缺省�
         },
         async run() { assert.equal((sql.match(/\?/g) || []).length, args.length); writes.push(args); },
       }; } } } },
-      '../../../db/setup': { ensureDatabase: async () => {}, getSessionPhone: () => '13800000000' },
+      '../../../db/setup': { ensureDatabase: async () => {}, getVerifiedSessionPhone: () => '13800000000' },
       '../../../lib/order-notifications': { sendOrderNotification: async () => {} }, '../../../lib/tool-services': helpers,
     });
     const response = await route.POST(new Request('http://localhost/api/orders', { method: 'POST', body: JSON.stringify({ productId: 101, toolCycle: cycle, price: 0.01 }) }));

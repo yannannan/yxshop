@@ -15,7 +15,7 @@ export function ToolDirectory({ tools, loading = false, error = '', title = '让
     {loading ? <p className="tool-directory-empty" role="status">正在读取工具…</p> : error ? <p className="tool-directory-empty" role="alert">{error}</p> : tools.length ? <div className="tool-entry-grid">{result.items.map(tool => <Link className="tool-entry-card" href={toolPagePath(tool.slug)} key={tool.id}>
       <div className="tool-entry-logo">{tool.logo ? <Image unoptimized src={tool.logo} alt="" width={72} height={72} /> : <span className="tool-logo-fallback" aria-hidden="true">{tool.name.slice(0, 1)}</span>}</div>
       <h3>{tool.name}</h3><p>{tool.description || '查看工具介绍与使用方式。'}</p>
-      <span className={`tool-charge-badge ${tool.chargeType}`}>{toolChargeLabels[tool.chargeType]}{tool.chargeType === 'paid' ? ` · ${toolPriceSummary(tool)}` : ''}</span>
+      <span className={`tool-charge-badge ${tool.chargeType}`}>{toolChargeLabels[tool.chargeType]}{tool.chargeType === 'points' ? ` · ${tool.pointsCost} 积分/次` : ''}{tool.chargeType === 'paid' ? ` · ${toolPriceSummary(tool)}` : ''}</span>
       <div className="tool-entry-bottom"><span>{tool.entryConfigured ? '查看并使用' : '查看工具介绍 · 入口待配置'}</span><b aria-hidden="true">↗</b></div>
     </Link>)}</div> : <p className="tool-directory-empty">暂无已启用的工具。</p>}
     {!loading && !error && <CatalogPagination page={result.page} totalPages={result.totalPages} onChange={page === undefined ? setLocalPage : undefined} href={page === undefined ? undefined : '/tools'} label="工具分页" />}

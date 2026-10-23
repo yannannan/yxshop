@@ -52,6 +52,7 @@ function adminRoute({ category, parent, linkedProducts = 0, children = 0, nextSo
     },
   };
   const modules = {
+    '../../../lib/points-service': { changePointsOrderStatus: async () => false, PointsError: class extends Error {} },
     '@/db/mysql-runtime': { env: { DB } },
     '../../../db/setup': { ensureDatabase: async () => {}, ensurePaymentQrRecords: async (...args) => { paymentRecords.push(args); } },
     '../../../lib/order-notifications': {},

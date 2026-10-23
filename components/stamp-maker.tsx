@@ -13,6 +13,7 @@ function entitlementText(access: StampAccess | null) {
   if (!access) return '正在读取使用权益';
   if (access.chargeType === 'free') return '免费制作';
   if (access.chargeType === 'pending') return '收费方式待确认';
+  if (access.chargeType === 'points' && !access.cycle) return access.signedIn ? `余额 ${access.pointsBalance || 0} 积分 · 每次 ${access.pointsCost || 0} 积分` : '登录领取 100 积分';
   if (!access.canGenerate) return access.signedIn ? '暂无可用套餐' : '登录后使用套餐';
   if (access.cycle === 'times') return `剩余 ${access.remaining} 次`;
   return `${access.membershipName || toolBillingLabels[(access.cycle || 'once') as keyof typeof toolBillingLabels]}权益生效中`;
@@ -87,7 +88,7 @@ export function StampMaker({ tool }: { tool: ToolService }) {
       setResult({ ...data.result, signature });
       setRetryPending(false);
       setMessageSuccess(true);
-      setMessage(data.result.reused ? '已恢复这次制作的成品，没有重复扣次。' : data.result.charged ? '制作成功，已使用 1 次权益。可以重复下载此成品。' : '制作成功，可以下载高清印章。');
+      setMessage(data.result.reused ? '已恢复这次制作的成品，没有重复扣次。' : data.result.pointsSpent ? `制作成功，已消耗 ${data.result.pointsSpent} 积分，剩余 ${data.result.pointsBalance} 积分。` : data.result.charged ? '制作成功，已使用 1 次权益。可以重复下载此成品。' : '制作成功，可以下载高清印章。');
     } catch { setRetryPending(true); setMessage('网络中断，可以重试本次制作。相同任务不会重复扣次。'); }
     finally { working.current = false; setBusy(false); void refresh(); }
   }
@@ -104,7 +105,7 @@ export function StampMaker({ tool }: { tool: ToolService }) {
   }
   const maxText = options.shape === 'name' ? 4 : options.shape === 'square' ? 12 : 32;
   const chosenPlan = tool.plans.find(plan => toolPlanKey(plan) === selectedPlan) || tool.plans[0];
-  const buyHref = `/product/${tool.id}${chosenPlan ? `?${toolPlanQuery(chosenPlan)}` : ''}`;
+  const buyHref = tool.chargeType === 'points' ? access?.signedIn ? '/points' : '/?returnTo=/points' : `/product/${tool.id}${chosenPlan ? `?${toolPlanQuery(chosenPlan)}` : ''}`;
   const resultFormat = stampFormats[result?.format || 'png'];
 
   const layoutPanel = <section className="stamp-panel stamp-layout-panel" aria-labelledby="stamp-layout-title">
@@ -128,9 +129,9 @@ export function StampMaker({ tool }: { tool: ToolService }) {
         <label>导出格式<select value={options.format} onChange={event => update({ format: event.target.value as StampOptions['format'] })}>{Object.entries(stampFormats).map(([format, info]) => <option key={format} value={format}>{info.label}{format === 'svg' ? ' · 矢量' : format === 'jpeg' ? ' · 白底' : ''}</option>)}</select></label>
         <label>图片背景<select value={options.background} disabled={options.format === 'jpeg'} onChange={event => update({ background: event.target.value as StampOptions['background'] })}><option value="transparent">透明背景</option><option value="white">白色背景</option></select></label>
       </fieldset>
-      <div className="stamp-export-action">{access?.chargeType === 'paid' && !access.canGenerate && !retryPending ? <Link className="stamp-create-button" href={buyHref}>{access.signedIn ? '购买 / 续购套餐' : '登录并购买套餐'} <span>↗</span></Link> : <button className="stamp-create-button" type="button" disabled={busy || checking || (!access?.canGenerate && !retryPending) || Boolean(validationError) || sameResult} onClick={() => void generate()}>{busy ? '正在处理…' : sameResult ? '制作完成，请下载' : retryPending ? '重试本次制作' : '制作高清印章'}<span>{busy ? '…' : '→'}</span></button>}</div>
+      <div className="stamp-export-action">{access && ['paid', 'points'].includes(access.chargeType) && !access.canGenerate && !retryPending ? <Link className="stamp-create-button" href={buyHref}>{access.chargeType === 'points' ? access.signedIn ? '充值积分' : '登录领取积分' : access.signedIn ? '购买 / 续购套餐' : '登录并购买套餐'} <span>↗</span></Link> : <button className="stamp-create-button" type="button" disabled={busy || checking || (!access?.canGenerate && !retryPending) || Boolean(validationError) || sameResult} onClick={() => void generate()}>{busy ? '正在处理…' : sameResult ? '制作完成，请下载' : retryPending ? '重试本次制作' : '制作高清印章'}<span>{busy ? '…' : '→'}</span></button>}</div>
     </div>
-    <p className="stamp-charge-note">{options.format === 'jpeg' ? 'JPG 使用白色背景。' : ''}失败不扣次；重复下载不扣次。按次、包月、包年等规则以所购套餐为准。</p>
+    <p className="stamp-charge-note">{options.format === 'jpeg' ? 'JPG 使用白色背景。' : ''}失败和重复下载不消耗积分或次数。有效会员 / 次数优先使用，之后按工具积分价格扣分。</p>
     {accessError && <p className="stamp-inline-error" role="alert">{accessError}</p>}
     {message && <p className={`stamp-operation-message${messageSuccess ? ' success' : ''}`} role={messageSuccess ? 'status' : 'alert'}>{message}</p>}
   </section>;
@@ -159,11 +160,12 @@ export function StampMaker({ tool }: { tool: ToolService }) {
 
       <aside className="stamp-sidebar" aria-labelledby="stamp-layout-title">
         {layoutPanel}
+        {tool.chargeType === 'points' && <section className="stamp-panel stamp-plan-panel"><h2>全工具通用积分</h2><p>本工具每次成功制作消耗 {access?.pointsCost ?? tool.pointsCost} 积分；预览和重复下载免费。</p><p>当前余额：{access?.signedIn ? `${access.pointsBalance} 积分` : '登录后领取 100 积分'}</p>{access?.cycle && <p>优先使用已有本工具会员 / 次数权益。</p>}<Link href={buyHref}>我的积分与充值 →</Link></section>}
         {tool.chargeType === 'paid' && <section className="stamp-panel stamp-plan-panel"><h2>选择工具套餐</h2><p>支付核验后，回到本页刷新权益。</p><div className="stamp-plan-options">{tool.plans.map(plan => <label key={toolPlanKey(plan)} className={selectedPlan === toolPlanKey(plan) ? 'selected' : ''}><input type="radio" name="stamp-plan" checked={selectedPlan === toolPlanKey(plan)} onChange={() => setSelectedPlan(toolPlanKey(plan))} /><span>{toolPlanLabel(plan)}</span><b>{toolPlanPrice(plan)}</b></label>)}</div><Link href={buyHref}>查看套餐与支付方式 →</Link></section>}
         {Boolean(access?.recent.length) && <section className="stamp-panel stamp-recent"><h2>最近制作</h2><p>已生成的成品可以再次下载。</p>{access?.recent.map(item => <button type="button" disabled={busy} key={item.id} onClick={() => void restore(item.id)}><span><b>{item.size} px 印章</b><small>{time(item.createdAt)}</small></span><span>打开 ↗</span></button>)}</section>}
         <Link className="stamp-back-tools" href="/tools">← 发现更多实用工具</Link>
       </aside>
     </div>
-    <section className="stamp-about"><h2>关于印章在线制作</h2><p>在浏览器中设计印章图片，支持圆形、椭圆形、方形和个人姓名章。调整名称、辅助文字、边框与颜色，导出 PNG、JPG 图片或文字已转为轮廓的 SVG 矢量文件。</p>{tool.detail && !tool.detail.includes('实际工具入口') && <p>{tool.detail}</p>}<div><article><h3>预览会消耗次数吗？</h3><p>不会。修改文字、颜色和样式都可以预览；点击制作且成功生成成品后，按次套餐才会扣除一次。</p></article><article><h3>包月、包年如何使用？</h3><p>沿用本工具后台配置的套餐及价格，在有效期内使用；有效时长权益优先于按次权益。</p></article><article><h3>下载失败怎么办？</h3><p>付费制作的成品会保留在最近制作中，同一成品可以重新打开和下载，不会重复扣次。</p></article></div></section>
+    <section className="stamp-about"><h2>关于印章在线制作</h2><p>在浏览器中设计印章图片，支持圆形、椭圆形、方形和个人姓名章。调整名称、辅助文字、边框与颜色，导出 PNG、JPG 图片或文字已转为轮廓的 SVG 矢量文件。</p>{tool.detail && !tool.detail.includes('实际工具入口') && <p>{tool.detail}</p>}<div><article><h3>预览会消耗积分吗？</h3><p>不会。修改文字、颜色和样式可以免费预览；成功生成成品后才消耗积分或按次权益。</p></article><article><h3>包月、包年如何使用？</h3><p>沿用本工具后台配置的套餐及价格，在有效期内使用；有效时长权益优先于按次权益。</p></article><article><h3>下载失败怎么办？</h3><p>付费制作的成品会保留在最近制作中，同一成品可以重新打开和下载，不会重复扣次。</p></article></div></section>
   </main>;
 }

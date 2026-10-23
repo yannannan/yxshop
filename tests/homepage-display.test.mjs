@@ -222,7 +222,7 @@ test('商品目录只读取上架普通商品；分类树包含仅一级或二�
     '@/db/mysql-runtime': { env: { DB: { prepare(sql) { reads.push(sql); return { async all() { return { results: sql.includes('FROM products') ? products : [{ id: 1, parent_id: null, name: '一级' }, { id: 2, parent_id: 1, name: '二级' }, { id: 3, parent_id: null, name: '仅一级' }] }; } }; } } } },
   });
   assert.equal((await data.getPublishedProducts()).length, 30);
-  assert.match(reads[0], /status='active' AND product_type<>'tool'/);
+  assert.match(reads[0], /status='active' AND product_type NOT IN \('tool','points'\)/);
   assert.match(reads[0], /ORDER BY sort_order,id/);
   assert.deepEqual(JSON.parse(JSON.stringify(await data.getPublishedCategories())), [{ name: '一级', children: [{ name: '二级', children: [] }] }, { name: '仅一级', children: [] }]);
 });

@@ -15,7 +15,7 @@ export default function ProductDetailPage() {
   const [error, setError] = useState('');
   const [selectedCycle, setSelectedCycle] = useState('');
   const [selectedPlan, setSelectedPlan] = useState('');
-  useEffect(() => { fetch(`/api/products?id=${params.id}`, { cache: 'no-store' }).then(async (response) => { if (!response.ok) { setNotFound(true); return; } setProduct(await response.json() as CatalogProduct); setSelectedCycle(new URLSearchParams(window.location.search).get('cycle') || ''); setSelectedPlan(new URLSearchParams(window.location.search).get('plan') || ''); }).catch(() => setNotFound(true)); }, [params.id]);
+  useEffect(() => { fetch(`/api/products?id=${params.id}`, { cache: 'no-store' }).then(async (response) => { if (!response.ok) { setNotFound(true); return; } const data = await response.json() as CatalogProduct; if (data.productType === 'tool' && data.toolChargeType === 'points' && data.toolSlug) { window.location.replace(toolPagePath(data.toolSlug)); return; } setProduct(data); setSelectedCycle(new URLSearchParams(window.location.search).get('cycle') || ''); setSelectedPlan(new URLSearchParams(window.location.search).get('plan') || ''); }).catch(() => setNotFound(true)); }, [params.id]);
   if (notFound) return <main className="simple-page"><div className="not-found"><h1>商品不存在</h1><a href="/">返回商城</a></div></main>;
   if (!product) return <main className="simple-page"><div className="not-found"><h1>正在读取商品…</h1></div></main>;
   const plan = product.toolPlans?.find(plan => toolPlanKey(plan) === selectedPlan) || product.toolPlans?.find(plan => plan.cycle === selectedCycle) || product.toolPlans?.[0];

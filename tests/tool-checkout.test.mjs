@@ -19,7 +19,7 @@ function confirmation(status, productType = 'tool', owner = true) {
   const writes = [];
   const route = load('../app/api/orders/route.ts', {
     '@/db/mysql-runtime': { env: { DB: { prepare(sql) { return { bind() { return this; }, async first() { if (sql.includes('FROM users')) return { id: 1 }; return owner ? { id: 'own-order', status, product_type: productType, category: '工具服务', subcategory: '' } : null; }, async run() { writes.push(sql); return { meta: {} }; } }; } } } },
-    '../../../db/setup': { ensureDatabase: async () => {}, getSessionPhone: () => '13800000000' },
+    '../../../db/setup': { ensureDatabase: async () => {}, getVerifiedSessionPhone: () => '13800000000' },
     '../../../lib/order-notifications': { sendOrderNotification: async () => {} }, '../../../lib/tool-services': tools,
   });
   return { writes, finish: () => route.POST(new Request('http://localhost/api/orders', { method: 'POST', body: JSON.stringify({ action: 'payment-finished', orderId: 'own-order' }) })) };
@@ -52,6 +52,13 @@ test('普通商品保持原来的支付确认和待发货流转', async () => {
   assert.equal((await response.json()).status, 'pending_delivery');
   assert.equal(setup.writes.length, 1);
 });
+test('充值订单仅在服务端已核验状态下确认，前台点击不触发到账或修改状态', async () => {
+  for (const status of ['paid', 'pending_delivery', 'delivered', 'pending', 'closed']) {
+    const setup = confirmation(status, 'points'); const response = await setup.finish();
+    assert.equal(response.status, ['pending', 'closed'].includes(status) ? 400 : 200); assert.equal(setup.writes.length, 0);
+    if (response.status === 200) assert.equal((await response.json()).nextStep, 'points');
+  }
+});
 
 test('重新打开已支付或已完成工具收银台可直接返回工具，未支付订单仍显示付款入口', async () => {
   for (const status of ['paid', 'pending_delivery', 'delivered', 'pending']) {
@@ -73,4 +80,12 @@ test('重新打开已支付或已完成工具收银台可直接返回工具，�
     else { assert.ok(html.includes('工具购买已确认')); assert.ok(html.includes('/tools/stamp-maker.html')); assert.ok(!html.includes('我已完成支付')); }
     assert.ok(calls.every(call => call.method === 'GET'), '读取已支付工具订单不应再发确认支付请求');
   }
+});
+test('积分收银台已核验后显示充值数量和积分中心入口，不要求等待发货', async () => {
+  const slots = [], effects = []; let cursor = 0;
+  const react = { ...React, useState(initial) { const i = cursor++; if (!(i in slots)) slots[i] = typeof initial === 'function' ? initial() : initial; return [slots[i], value => { slots[i] = typeof value === 'function' ? value(slots[i]) : value; }]; }, useEffect: fn => effects.push(fn) };
+  const order = { id: 'own-order', product_id: 101, product_type: 'points', product_name: '积分充值', amount: 20, points_amount: 200, status: 'delivered' };
+  const page = load('../app/checkout/[id]/page.tsx', { react, 'next/navigation': { useParams: () => ({ id: 'own-order' }) }, 'next/image': () => null, 'next/link': ({ href, children }) => React.createElement('a', { href }, children), '../../../lib/tool-services': tools }, { window: { setInterval() {}, clearInterval() {} }, fetch: async () => Response.json(order) });
+  const render = () => { cursor = 0; effects.length = 0; return page.default(); }; render(); effects[0](); await new Promise(resolve => setImmediate(resolve)); render(); effects[1]();
+  const html = renderToStaticMarkup(render()); assert.ok(html.includes('积分充值已到账')); assert.ok(html.includes('200')); assert.ok(html.includes('href="/points"')); assert.ok(!html.includes('我已完成支付'));
 });

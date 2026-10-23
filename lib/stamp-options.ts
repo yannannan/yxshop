@@ -62,5 +62,5 @@ export function stampImageData(base64: string) {
   return { format, image: `data:${stampFormats[format].mime};base64,${base64}` };
 }
 
-export type StampAccess = { chargeType: 'free' | 'paid' | 'pending'; signedIn: boolean; canGenerate: boolean; remaining: number; cycle: string | null; membershipName: string | null; expiresAt: string | null; purchaseUrl: string; recent: { id: string; size: number; createdAt: string }[] };
-export type StampResult = { id: string; image: string; format: StampFormat; size: number; createdAt: string; charged: boolean; reused: boolean };
+export type StampAccess = { chargeType: 'free' | 'paid' | 'pending' | 'points'; pointsBalance?: number; pointsCost?: number; signedIn: boolean; canGenerate: boolean; remaining: number; cycle: string | null; membershipName: string | null; expiresAt: string | null; purchaseUrl: string; recent: { id: string; size: number; createdAt: string }[] };
+export type StampResult = { id: string; image: string; format: StampFormat; size: number; createdAt: string; charged: boolean; reused: boolean; pointsSpent?: number; pointsBalance?: number };

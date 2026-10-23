@@ -2,6 +2,7 @@ import { env } from '@/db/mysql-runtime';
 import { ensureDatabase, ensurePaymentQrRecords } from '../../../db/setup';
 import { sendConfiguredEmail, sendOrderNotification } from '../../../lib/order-notifications';
 import { adminDenied, getAdminContext, hasAdminPermission } from '../../../lib/admin-auth';
+import { changePointsOrderStatus, PointsError } from '../../../lib/points-service';
 
 export async function GET(request: Request) {
   await ensureDatabase();
@@ -21,6 +22,7 @@ export async function POST(request: Request) {
   try {
     return await handleAdminAction(request);
   } catch (error) {
+    if (error instanceof PointsError) return Response.json({ message: error.message }, { status: error.status });
     console.error('后台操作失败', error);
     return Response.json({ message: '服务端处理失败，请稍后重试；如持续失败，请查看服务端日志。' }, { status: 500 });
   }
@@ -65,6 +67,18 @@ async function handleAdminAction(request: Request) {
   };
   const requiredPermission = permissionByAction[action];
   if (!requiredPermission || !hasAdminPermission(admin, requiredPermission)) return adminDenied('无此后台操作权限');
+  if (['product-save', 'product-status', 'product-sort', 'product-delete', 'product-clone'].includes(action) && body.id) {
+    const pointsProduct = await env.DB.prepare("SELECT id FROM products WHERE id=? AND product_type='points'").bind(body.id).first();
+    if (pointsProduct) return Response.json({ message: '请在积分管理中维护充值套餐' }, { status: 400 });
+  }
+  if (action === 'qr-save' && body.productId) {
+    const pointsProduct = await env.DB.prepare("SELECT id FROM products WHERE id=? AND product_type='points'").bind(body.productId).first();
+    if (pointsProduct) return Response.json({ message: '积分收款码请在积分管理中配置' }, { status: 400 });
+  }
+  if (['qr-status', 'qr-delete'].includes(action)) {
+    const pointsQr = await env.DB.prepare("SELECT q.id FROM payment_qrs q JOIN products p ON p.id=q.product_id WHERE q.id=? AND p.product_type='points'").bind(body.id).first();
+    if (pointsQr) return Response.json({ message: '积分收款码请在积分管理中配置' }, { status: 400 });
+  }
 
   switch (action) {
     case 'product-save': {
@@ -285,6 +299,7 @@ async function handleAdminAction(request: Request) {
     case 'order-status': {
       const status = String(body.status || '');
       if (!['pending', 'paid', 'pending_delivery', 'delivered', 'closed'].includes(status)) return Response.json({ message: '订单状态不正确' }, { status: 400 });
+      if (await changePointsOrderStatus(String(body.id), status)) break;
       if (status === 'delivered') await env.DB.prepare('UPDATE orders SET status=?,delivered_at=COALESCE(delivered_at,?),updated_at=?,tool_paid_at=COALESCE(tool_paid_at,?) WHERE id=?').bind(status, now, now, now, body.id).run();
       else {
         await releaseOrderCredential(String(body.id));
@@ -298,6 +313,7 @@ async function handleAdminAction(request: Request) {
       const orderIds = String(body.orderIds || '').split(',').map((id) => id.trim()).filter(Boolean).slice(0, 100);
       if (status !== 'closed' || orderIds.length === 0) return Response.json({ message: '批量作废参数不正确' }, { status: 400 });
       for (const orderId of orderIds) {
+        if (await changePointsOrderStatus(orderId, status)) continue;
         await releaseOrderCredential(orderId);
         await env.DB.prepare("UPDATE orders SET status='closed',delivered_at=NULL,updated_at=? WHERE id=? AND status<>'closed'").bind(now, orderId).run();
       }
@@ -306,6 +322,7 @@ async function handleAdminAction(request: Request) {
     case 'order-delete': {
       const closedOrder = await env.DB.prepare("SELECT id FROM orders WHERE id=? AND status='closed'").bind(body.id).first();
       if (!closedOrder) return Response.json({ message: '仅已作废订单可删除' }, { status: 400 });
+      await changePointsOrderStatus(String(body.id), 'closed');
       await releaseOrderCredential(String(body.id));
       await env.DB.prepare("DELETE FROM orders WHERE id=? AND status='closed'").bind(body.id).run();
       break;
@@ -316,6 +333,7 @@ async function handleAdminAction(request: Request) {
       for (const orderId of orderIds) {
         const closedOrder = await env.DB.prepare("SELECT id FROM orders WHERE id=? AND status='closed'").bind(orderId).first();
         if (!closedOrder) return Response.json({ message: `订单 ${orderId} 尚未作废，本次批量删除已取消` }, { status: 400 });
+        await changePointsOrderStatus(orderId, 'closed');
       }
       for (const orderId of orderIds) {
         await releaseOrderCredential(orderId);
@@ -329,6 +347,7 @@ async function handleAdminAction(request: Request) {
       const order = await env.DB.prepare('SELECT o.id,o.product_id,o.credential_id,o.status,p.name AS product_name,p.category,p.subcategory,p.billing_cycle FROM orders o JOIN products p ON p.id=o.product_id WHERE o.id=?').bind(orderId).first<{ id: string; product_id: number; credential_id: number | null; status: string; product_name: string; category: string; subcategory: string; billing_cycle: string }>();
       if (!order) return Response.json({ message: '订单不存在' }, { status: 404 });
       if (order.status === 'pending') return Response.json({ message: '待支付订单不能发货，请先确认收款' }, { status: 400 });
+      if (await changePointsOrderStatus(orderId, 'delivered')) break;
       if (credentialId > 0) {
         const credential = await env.DB.prepare('SELECT id,product_id,account,password,email_auth_code,verification_url,content,status FROM credentials WHERE id=?').bind(credentialId).first<{ id: number; product_id: number; account: string; password: string; email_auth_code: string; verification_url: string; content: string; status: string }>();
         if (!credential || credential.product_id !== order.product_id) return Response.json({ message: '所选账号卡密与订单商品不匹配' }, { status: 400 });

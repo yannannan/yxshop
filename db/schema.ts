@@ -4,6 +4,9 @@ export const toolGenerationResults = sqliteTable('tool_generation_results', {
   id: text('id').primaryKey(), userId: integer('user_id').notNull(), productId: integer('product_id').notNull(), orderId: text('order_id').notNull(), requestHash: text('request_hash').notNull(), imageBase64: text('image_base64').notNull(), imageSize: integer('image_size').notNull(), charged: integer('charged').notNull().default(0), createdAt: text('created_at').notNull(),
 });
 
+export const pointsWallets = sqliteTable('points_wallets', { userId: integer('user_id').primaryKey(), balance: integer('balance').notNull().default(100), createdAt: text('created_at').notNull(), updatedAt: text('updated_at').notNull() });
+export const pointsLedger = sqliteTable('points_ledger', { operationId: text('operation_id').primaryKey(), userId: integer('user_id').notNull(), kind: text('kind').notNull(), delta: integer('delta').notNull(), balanceAfter: integer('balance_after').notNull(), productId: integer('product_id'), orderId: text('order_id'), createdAt: text('created_at').notNull() });
+
 export const users = sqliteTable('users', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   phone: text('phone').notNull().unique(),
@@ -31,6 +34,8 @@ export const products = sqliteTable('products', {
   toolUrl: text('tool_url'),
   toolChargeType: text('tool_charge_type').notNull().default('pending'),
   toolPlansJson: text('tool_plans_json'),
+  toolPointsCost: integer('tool_points_cost').notNull().default(0),
+  pointsAmount: integer('points_amount').notNull().default(0),
   seoTitle: text('seo_title').notNull().default(''),
   seoDescription: text('seo_description').notNull().default(''),
 });
@@ -50,6 +55,7 @@ export const orders = sqliteTable('orders', {
   toolBillingCycle: text('tool_billing_cycle').notNull().default(''),
   toolPaidAt: text('tool_paid_at'),
   toolUsesRemaining: integer('tool_uses_remaining').notNull().default(0),
+  pointsAmount: integer('points_amount').notNull().default(0),
 });
 
 export const toolUsageEvents = sqliteTable('tool_usage_events', {

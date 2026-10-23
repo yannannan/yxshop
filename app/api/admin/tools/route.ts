@@ -2,6 +2,7 @@ import { env } from '@/db/mysql-runtime';
 import { ensurePaymentQrRecords } from '@/db/setup';
 import { adminDenied, getAdminContext, hasAdminPermission } from '@/lib/admin-auth';
 import { builtInToolEntry, isToolBillingCycle, isToolEntryUrl, isToolSlug, readToolPlans, type ToolPlan } from '@/lib/tool-services';
+import { validPoints } from '@/lib/points';
 
 export async function GET(request: Request) {
   const admin = await getAdminContext(request);
@@ -52,14 +53,16 @@ export async function POST(request: Request) {
     const chargeType = String(body.chargeType || 'pending');
     const inputPlans = body.plans ?? [{ cycle: 'once', price: body.price }];
     if (chargeType === 'paid' && (!Array.isArray(inputPlans) || !inputPlans.length || inputPlans.length > 24 || inputPlans.some(plan => !plan || !isToolBillingCycle(plan.cycle) || (plan.name !== undefined && (typeof plan.name !== 'string' || plan.name.trim().length > 40)) || (plan.key !== undefined && (typeof plan.key !== 'string' || !/^[a-z0-9_-]{1,80}$/i.test(plan.key))) || !Number.isFinite(Number(plan.price)) || Number(plan.price) <= 0 || Number(plan.price) > 9999999.99 || Math.abs(Number(plan.price) * 100 - Math.round(Number(plan.price) * 100)) > 0.000001) || new Set(inputPlans.map(plan => `${String(plan.name || '').trim()}:${plan.cycle}`)).size !== inputPlans.length || new Set(inputPlans.map(plan => plan.key || plan.cycle)).size !== inputPlans.length)) return Response.json({ message: '请配置有效套餐：同一会员分类的周期不能重复；每个套餐须有独立标识，价格须大于 0 且最多两位小数。' }, { status: 400 });
-    const plans: ToolPlan[] = chargeType === 'paid' ? readToolPlans(inputPlans) : [];
+    const pointsCost = Number(body.pointsCost || 0);
+    if (chargeType === 'points' && !validPoints(pointsCost)) return Response.json({ message: '请填写每次成功处理消耗的正整数积分（最多 1000000）' }, { status: 400 });
+    const plans: ToolPlan[] = ['paid', 'points'].includes(chargeType) ? readToolPlans(inputPlans) : [];
     const primaryPlan = [...plans].sort((a, b) => a.price - b.price)[0];
     const price = primaryPlan?.price || 0;
     const logo = String(body.logo || '').trim();
     if (!name) return Response.json({ message: '请填写工具名称' }, { status: 400 });
     if (!isToolSlug(slug)) return Response.json({ message: '页面标识只能使用小写英文、数字和中划线，长度不超过 100' }, { status: 400 });
     if (!isToolEntryUrl(entryUrl)) return Response.json({ message: '工具入口请填写站内路径或完整的 http / https 链接' }, { status: 400 });
-    if (!['free', 'paid', 'pending'].includes(chargeType)) return Response.json({ message: '请选择有效的收费方式' }, { status: 400 });
+    if (!['free', 'paid', 'pending', 'points'].includes(chargeType)) return Response.json({ message: '请选择有效的收费方式' }, { status: 400 });
     if (!Number.isFinite(price) || price < 0 || (chargeType === 'paid' && price <= 0)) return Response.json({ message: '收费工具价格必须大于 0' }, { status: 400 });
     if (logo && !logo.startsWith('/api/product-images?key=products%2F') && !/^\/tool-logos\/[a-z0-9-]+\.svg$/.test(logo)) return Response.json({ message: '请重新上传工具 Logo' }, { status: 400 });
     const duplicate = await env.DB.prepare('SELECT id FROM products WHERE tool_slug=? AND id<>?').bind(slug, id).first();
@@ -78,14 +81,14 @@ export async function POST(request: Request) {
     let productId = id;
     const values = [name, description, detail, logo, price, slug, entryUrl, chargeType, seoTitle, seoDescription, status, now, JSON.stringify(plans), primaryPlan?.cycle || 'once'];
     if (id) {
-      await env.DB.prepare("UPDATE products SET name=?,description=?,detail=?,cover_image=?,price=?,tool_slug=?,tool_url=?,tool_charge_type=?,seo_title=?,seo_description=?,status=?,updated_at=?,tool_plans_json=?,billing_cycle=? WHERE id=? AND product_type='tool'").bind(...values, id).run();
+      await env.DB.prepare("UPDATE products SET name=?,description=?,detail=?,cover_image=?,price=?,tool_slug=?,tool_url=?,tool_charge_type=?,seo_title=?,seo_description=?,status=?,updated_at=?,tool_plans_json=?,billing_cycle=?,tool_points_cost=? WHERE id=? AND product_type='tool'").bind(...values, chargeType === 'points' ? pointsCost : 0, id).run();
     } else {
       const sort = await env.DB.prepare('SELECT COALESCE(MAX(sort_order),0)+1 AS sort_order FROM products').first<{ sort_order: number }>();
-      const result = await env.DB.prepare("INSERT INTO products (name,description,detail,cover_image,price,tool_slug,tool_url,tool_charge_type,seo_title,seo_description,status,updated_at,tool_plans_json,billing_cycle,category,subcategory,product_type,old_price,cost_price,attributes_json,detail_image,tag,tone,initial,stock,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,'工具服务','','tool',0,0,'[]','','工具','blue','',99999,?)")
-        .bind(...values, Number(sort?.sort_order ?? 1)).run();
+      const result = await env.DB.prepare("INSERT INTO products (name,description,detail,cover_image,price,tool_slug,tool_url,tool_charge_type,seo_title,seo_description,status,updated_at,tool_plans_json,billing_cycle,tool_points_cost,category,subcategory,product_type,old_price,cost_price,attributes_json,detail_image,tag,tone,initial,stock,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'工具服务','','tool',0,0,'[]','','工具','blue','',99999,?)")
+        .bind(...values, chargeType === 'points' ? pointsCost : 0, Number(sort?.sort_order ?? 1)).run();
       productId = Number(result.meta.last_row_id);
     }
-    for (const plan of plans) await ensurePaymentQrRecords(productId, plan.price);
+    if (chargeType === 'paid') for (const plan of plans) await ensurePaymentQrRecords(productId, plan.price);
     return Response.json({ ok: true, id: productId });
   } catch (error) {
     console.error('工具保存失败', error);

@@ -1,6 +1,7 @@
 import { env } from '@/db/mysql-runtime';
 import { ensureDatabase } from '../../../../db/setup';
 import { replyStatusMap } from '../../../../lib/order-notifications';
+import { changePointsOrderStatus, pointsFailure } from '../../../../lib/points-service';
 
 export async function POST(request: Request) {
   await ensureDatabase();
@@ -11,6 +12,9 @@ export async function POST(request: Request) {
   const reply = String(body.status || source.match(/待支付|已支付|待发货|已发货|已作废/)?.[0] || '').trim();
   const status = replyStatusMap[reply];
   if (!orderId || !status) return Response.json({ message: '请提供订单号和有效回复状态' }, { status: 400 });
+  try {
+    if (await changePointsOrderStatus(orderId, status)) return Response.json({ ok: true, orderId, status: ['paid', 'pending_delivery', 'delivered'].includes(status) ? 'delivered' : status });
+  } catch (error) { return pointsFailure(error); }
   const order = await env.DB.prepare('SELECT credential_id FROM orders WHERE id=?').bind(orderId).first<{ credential_id: number | null }>();
   if (!order) return Response.json({ message: '订单不存在' }, { status: 404 });
   const now = new Date().toISOString();
