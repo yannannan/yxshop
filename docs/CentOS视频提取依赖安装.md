@@ -58,9 +58,11 @@ bash scripts/install-video-deps-centos.sh --check
 
 2026-10-24 用户最新完整日志进一步确认：系统库和 devtoolset 已安装，当前失败发生在第3/6步下载 yt-dlp 2026.10.21，原脚本超过120秒中断；FFmpeg / Firefox 后续步骤尚未执行。商城仍完成构建并启动（PID14682），所以反复进入补装的原因是依赖安装未完成。日志中的 `No package libX11-xcb available` 未使本轮 yum 退出，不是本次中止位置。
 
-下载逻辑已修复：已可运行的 yt-dlp 直接保留，不下载或自动更新；缺失时流式下载，单次最多600秒、最多尝试3次，优先使用 GitHub 官方资产 API 的二进制接口，官方发行地址作为回退，不使用第三方下载代理或关闭 TLS 校验。下载必须通过同一发行版本 SHA256 / 长度校验，并验证版本命令能运行后，才原子替换目标。小型元数据 / 校验清单也重试。
+用户后续日志显示，即使将下载上限改为600秒，慢速链路仍可能只收到5MB便超时，旧重试会重新从头开始。最新修复使用稳定的版本级 `.part` 断点文件，重试 / 再次执行按已有长度发送 Range；仅在连接响应超过60秒或连续120秒没有收到数据时中断，持续接收数据不再受600秒总时长限制。最多尝试3次，失败后仍保留已写入断点。官方地址返回206时核对 Content-Range 起点、总大小和响应长度再追加；忽略Range返回200时重新写入完整文件，避免重复拼接；摘要错误的完整文件删除，不能执行。
 
-版本、清单和已校验下载保存在 `vendor/video-engine/downloads/yt-dlp/`；重跑复用完整缓存，失败残片清理，旧引擎保留。版本自检超时提高至30秒，失败会显示检查路径及错误代码，便于区分缺文件和启动异常。FFmpeg 继续保留现有可运行文件，Firefox 安装器复用本机对应版本缓存。
+已可运行的 yt-dlp 直接保留，不下载或自动更新；缺失时流式下载，优先使用 GitHub 官方资产 API 的二进制接口，官方发行地址作为回退，不使用第三方下载代理或关闭 TLS 校验。下载必须通过同一发行版本 SHA256 / 长度校验，并验证版本命令能运行后，才原子替换目标。小型元数据 / 校验清单也重试。
+
+版本、清单和已校验下载保存在 `vendor/video-engine/downloads/yt-dlp/`；重跑复用完整缓存或同版本断点，旧引擎保留。版本自检超时为30秒，失败会显示检查路径及错误代码，便于区分缺文件和启动异常。FFmpeg 继续保留现有可运行文件，Firefox 安装器复用本机对应版本缓存。不要同时运行两个安装进程；当前正在运行的旧脚本不会自动加载新下载逻辑，需先结束该次安装再同步代码、重跑。
 
 同步本次完整代码后，可只执行下面命令补装，不需要再次停止已经启动的商城：
 
@@ -77,7 +79,17 @@ vendor/video-engine/downloads/yt-dlp/offline/SHA2-256SUMS
 
 离线包仍逐字节验证 SHA256，错误清单或不匹配文件拒绝安装。当前日志版本为 [官方2026.10.21发行页](https://github.com/yt-dlp/yt-dlp/releases/tag/2026.10.21)，不能拿 Windows 的 yt-dlp.exe 放到 Linux。官方 API 下载方式见 [GitHub 文档](https://docs.github.com/en/rest/releases/assets#get-a-release-asset)。
 
-本次34项安装 / 下载 / CentOS后端回归、修改脚本ESLint和Bash语法检查通过；当前Windows机器实际通过新官方API下载对应Windows版本、核对摘要并运行版本命令成功，临时验证目录已删除。这不等于用户CentOS服务器上的网络、FFmpeg编译或Firefox启动已验收；仍以服务器最后显示“视频提取依赖安装及启动检查通过”为准。
+本机另已准备 `vendor/video-engine/offline-bundles/yt-dlp-linux-x64-2026.10.21.tar.gz`，只含官方Linux x64程序及同版本校验清单，解包路径即上面两个文件。该产物被Git忽略，不会随拉代码自动上传。将它上传到服务器项目根目录后执行：
+
+```bash
+cd /home/www/yxshop/yxshopdev
+tar -xzf yt-dlp-linux-x64-2026.10.21.tar.gz
+bash scripts/install-video-deps-centos.sh
+```
+
+本包只解决当前yt-dlp下载卡点；后续FFmpeg / Firefox仍由同一sh检查、补装。包内程序40569080字节，ELF64 x86-64；SHA256为 `d8bd33fca9d5b23bd5b9952b3fca36db5c46331933fda9f598a3da14ce2c243f`。外层tar.gz的SHA256为 `b388b6df7f1add068ea27a2996a5b7010e955286fb11b87c82983fbb5cdd6bf1`，同目录提供 `.sha256` 文件。已重新读包核对仅有两个普通文件、路径正确、摘要匹配；未在Windows执行Linux文件。
+
+本次45项下载 / 升级 / CentOS后端回归、修改脚本ESLint通过。真实官方Linux下载完成并校验；另准备1MiB断点再请求官方资产接口，收到HTTP206 / `bytes 1048576-40569079/40569080`，续传成品完整SHA256通过，验证目录已删除。此前Windows对应程序实际版本命令也已通过。这不等于用户CentOS服务器上的网络、FFmpeg编译或Firefox启动已验收；仍以服务器最后显示“视频提取依赖安装及启动检查通过”为准。
 
 本轮在 Windows 上通过新 Firefox 后端实际提取并下载抖音公开作品 `7692515320217407402`，无需抖音登录。另有模拟 CentOS / root 账号、代理、失败清理、权限限制和跨系统路径的回归检查，以及 Bash 语法检查。
 

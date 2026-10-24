@@ -68,19 +68,81 @@ function releaseAsset(release, name) {
   return { ...asset, sources: [{ url: `https://api.github.com/repos/yt-dlp/yt-dlp/releases/assets/${asset.id}`, accept: 'application/octet-stream' }, { url: asset.browser_download_url, accept: 'application/octet-stream' }] };
 }
 
-export async function installYtdlp({ root, platform = process.platform, arch = process.arch, environment = process.env, execute = executeFile, fetchImpl = fetch, sleep = pause, log = console.log, warn = console.error, timeoutMs = 600000 } = {}) {
+async function partialSize(path, expectedSize) {
+  try {
+    const info = await lstat(path);
+    if (!info.isFile() || info.isSymbolicLink() || info.size > expectedSize) throw new Error('yt-dlp 断点文件不正确，请移走该文件后重试');
+    return info.size;
+  } catch (error) { if (error.code === 'ENOENT') return 0; throw error; }
+}
+
+async function downloadBinary(cached, asset, expected, { fetchImpl, sleep, log, warn, connectTimeoutMs, idleTimeoutMs }) {
+  const partial = `${cached}.part`;
+  // 版本目录和官方摘要固定了下载对象；中断后保留同一个文件供下次执行继续。
+  if (await partialSize(partial, asset.size) === asset.size) {
+    if ((await digestFile(partial)).hash === expected) { await rename(partial, cached); return; }
+    await unlink(partial);
+  }
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const offset = await partialSize(partial, asset.size), controller = new AbortController();
+    let timer, response;
+    const arm = milliseconds => {
+      clearTimeout(timer);
+      timer = setTimeout(() => controller.abort(new DOMException('下载连接或接收数据超时', 'TimeoutError')), milliseconds);
+    };
+    try {
+      const source = asset.sources[attempt % asset.sources.length];
+      log(`yt-dlp ${offset ? `从 ${(offset / 1024 ** 2).toFixed(1)} MB 断点续传` : '开始下载'} / ${(asset.size / 1024 ** 2).toFixed(1)} MB（第 ${attempt + 1}/3 次）。`);
+      arm(connectTimeoutMs);
+      response = await fetchImpl(source.url, { headers: { ...requestHeaders(source.accept), 'Accept-Encoding': 'identity', ...(offset ? { Range: `bytes=${offset}-` } : {}) }, signal: controller.signal });
+      controller.signal.throwIfAborted();
+      arm(idleTimeoutMs);
+      if (response.status === 416) { await unlink(partial).catch(error => { if (error.code !== 'ENOENT') throw error; }); throw new Error('断点范围不可用，下一次从头下载'); }
+      if (!response.ok || !response.body) throw Object.assign(new Error('官方下载响应不可用'), { status: response.status });
+      if (response.url && new URL(response.url).protocol !== 'https:') throw new Error('官方下载必须使用 HTTPS');
+      if ((response.headers.get('content-type') || '').includes('json')) throw new Error('官方 API 返回了元数据，切换发行文件地址');
+      if (response.headers.get('content-encoding') && response.headers.get('content-encoding') !== 'identity') throw new Error('官方下载响应使用了不兼容断点续传的压缩');
+      let start = 0, end = asset.size - 1;
+      if (response.status === 206) {
+        const range = /^bytes (\d+)-(\d+)\/(\d+)$/.exec(response.headers.get('content-range') || '');
+        if (!range || Number(range[1]) !== offset || Number(range[2]) < offset || Number(range[2]) >= asset.size || Number(range[3]) !== asset.size) throw new Error('官方响应的续传范围不正确，未追加文件');
+        start = offset; end = Number(range[2]);
+      } else if (response.status !== 200) throw new Error('官方下载响应状态不正确');
+      else if (offset) log('该官方地址未接受续传，安全地从头下载，不拼接重复内容。');
+      const lengthHeader = response.headers.get('content-length');
+      if (lengthHeader !== null && (!/^\d+$/.test(lengthHeader) || Number(lengthHeader) !== end - start + 1)) throw new Error('官方下载文件长度与预期范围不一致');
+      let length = start, reported = start, reportedAt = Date.now();
+      const meter = new Transform({ transform(chunk, encoding, callback) {
+        arm(idleTimeoutMs); length += chunk.length;
+        if (length > end + 1) return callback(Object.assign(new Error('yt-dlp 下载长度超过官方大小，未安装'), { integrity: true }));
+        if (length - reported >= 5 * 1024 ** 2 || Date.now() - reportedAt >= 15000) {
+          reported = length; reportedAt = Date.now(); log(`yt-dlp 已下载 ${(length / 1024 ** 2).toFixed(1)} / ${(asset.size / 1024 ** 2).toFixed(1)} MB…`);
+        }
+        callback(null, chunk);
+      } });
+      await pipeline(Readable.fromWeb(response.body), meter, createWriteStream(partial, { flags: (start ? constants.O_APPEND : constants.O_TRUNC) | constants.O_CREAT | constants.O_WRONLY | (constants.O_NOFOLLOW || 0), mode: 0o600 }), { signal: controller.signal });
+      clearTimeout(timer);
+      const info = await digestFile(partial);
+      if (info.size !== asset.size) throw new Error('下载提前结束，保留断点继续');
+      if (info.hash !== expected) throw Object.assign(new Error('yt-dlp SHA256 校验失败，未安装下载文件'), { integrity: true });
+      await rename(partial, cached); return;
+    } catch (error) {
+      if (error.integrity) { await unlink(partial).catch(() => {}); throw error; }
+      warn(`yt-dlp 官方下载${reason(controller.signal.aborted ? controller.signal.reason : error)}（第 ${attempt + 1}/3 次），保留已下载进度。`);
+      if (attempt === 2) throw new Error('yt-dlp 下载三次失败，断点已保留，下次运行会继续。也可将官方文件和同版本 SHA2-256SUMS 放入 vendor/video-engine/downloads/yt-dlp/offline/ 后重跑原安装脚本');
+    } finally {
+      clearTimeout(timer); controller.abort();
+      if (response?.body && !response.body.locked) await response.body.cancel().catch(() => {});
+    }
+    await sleep(1000 * (attempt + 1));
+  }
+}
+
+// 仅获取及校验指定平台文件，可在 Windows 准备 Linux 离线包；不会执行跨平台程序。
+export async function downloadYtdlp({ root, platform = process.platform, arch = process.arch, fetchImpl = fetch, sleep = pause, log = console.log, warn = console.error, connectTimeoutMs = 60000, idleTimeoutMs = 120000 } = {}) {
   root = await realpath(root);
   const engine = join(root, 'vendor/video-engine'), assetName = binaries[`${platform}:${arch}`];
   if (!assetName) throw new Error('当前系统架构请手动从 yt-dlp 官方发行页安装');
-  const target = join(engine, platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp');
-  const selected = resolve(root, environment.VIDEO_YTDLP_PATH || target);
-  const versionArgs = ['--ignore-config', '--no-plugin-dirs', '--version'];
-  try {
-    const { stdout } = await execute(selected, versionArgs, { timeout: 30000, maxBuffer: 100000, windowsHide: true });
-    if (!/^\d{4}\.\d{2}\.\d{2}/.test(stdout.trim())) throw new Error('无效版本');
-    log(`保留已经可运行的 yt-dlp ${stdout.trim().split(/\r?\n/)[0]}，不下载、不更新。`);
-    return { installed: false, path: selected };
-  } catch { if (environment.VIDEO_YTDLP_PATH && selected !== target) throw new Error('VIDEO_YTDLP_PATH 指定的程序不可运行，请修正或清空该配置；未覆盖其他路径'); }
   await directory(engine);
   const cache = join(engine, 'downloads/yt-dlp'); await directory(cache);
   let cached, expected, release, binaryAsset;
@@ -100,6 +162,7 @@ export async function installYtdlp({ root, platform = process.platform, arch = p
       try { await writeFile(temporary, JSON.stringify(release), { flag: 'wx' }); await rename(temporary, metadataPath); } finally { await unlink(temporary).catch(() => {}); }
     }
     binaryAsset = releaseAsset(release, assetName);
+    if (!Number.isSafeInteger(binaryAsset.size) || binaryAsset.size < 1 || binaryAsset.size > maxBinaryBytes) throw new Error('官方发行文件大小不正确');
     const sumsAsset = releaseAsset(release, 'SHA2-256SUMS');
     const versionCache = join(cache, release.tag_name); await directory(versionCache);
     const sumsPath = join(versionCache, 'SHA2-256SUMS');
@@ -117,33 +180,24 @@ export async function installYtdlp({ root, platform = process.platform, arch = p
   try { verified = (await digestFile(cached)).hash === expected; } catch { /* 缓存缺失或不完整时重新下载。 */ }
   if (!verified && !binaryAsset) throw new Error('离线包 SHA256 校验失败，未安装；请从同一官方版本重新获取文件和 SHA2-256SUMS');
   if (!verified) {
-    log(`下载官方 yt-dlp ${release.tag_name}（${assetName}），单次超时 ${timeoutMs / 1000} 秒，最多尝试 3 次。`);
-    for (let attempt = 0; attempt < 3; attempt++) {
-      const temporary = `${cached}.${randomUUID()}.part`;
-      try {
-        const source = binaryAsset.sources[attempt % binaryAsset.sources.length];
-        const response = await responseFor(source.url, { fetchImpl, timeoutMs, accept: source.accept });
-        if ((response.headers.get('content-type') || '').includes('json')) { await response.body.cancel(); throw new Error('官方 API 返回了元数据，切换发行文件地址'); }
-        if (Number(response.headers.get('content-length')) > maxBinaryBytes) { await response.body.cancel(); throw new Error('下载文件超过预期大小'); }
-        let length = 0, reported = 0;
-        const meter = new Transform({ transform(chunk, encoding, callback) {
-          length += chunk.length;
-          if (length > maxBinaryBytes) return callback(new Error('下载文件超过预期大小'));
-          if (length - reported >= 5 * 1024 ** 2) { reported = length; log(`yt-dlp 已下载 ${(length / 1024 ** 2).toFixed(1)} MB…`); }
-          callback(null, chunk);
-        } });
-        await pipeline(Readable.fromWeb(response.body), meter, createWriteStream(temporary, { flags: 'wx', mode: 0o600 }));
-        const info = await digestFile(temporary);
-        if (info.hash !== expected || Number.isSafeInteger(binaryAsset.size) && info.size !== binaryAsset.size) throw Object.assign(new Error('yt-dlp SHA256 / 长度校验失败，未安装下载文件'), { integrity: true });
-        await rename(temporary, cached); verified = true; break;
-      } catch (error) {
-        if (error.integrity) throw error;
-        warn(`yt-dlp 官方下载${reason(error)}（第 ${attempt + 1}/3 次）。`);
-        if (attempt === 2) throw new Error(`yt-dlp 下载三次失败。可从官方发行页取得 ${assetName} 和同版本 SHA2-256SUMS，放入 vendor/video-engine/downloads/yt-dlp/offline/ 后重跑原安装脚本`);
-        await sleep(1000 * (attempt + 1));
-      } finally { await unlink(temporary).catch(() => {}); }
-    }
+    log(`下载官方 yt-dlp ${release.tag_name}（${assetName}），支持断点续传；连接超时 ${connectTimeoutMs / 1000} 秒，连续 ${idleTimeoutMs / 1000} 秒无数据才重试，最多 3 次。`);
+    await downloadBinary(cached, binaryAsset, expected, { fetchImpl, sleep, log, warn, connectTimeoutMs, idleTimeoutMs });
   } else log('复用已通过 SHA256 校验的 yt-dlp 缓存，不重新下载。');
+  return { path: cached, sha256: expected, assetName, version: release?.tag_name };
+}
+
+export async function installYtdlp({ root, platform = process.platform, arch = process.arch, environment = process.env, execute = executeFile, log = console.log, ...downloadOptions } = {}) {
+  root = await realpath(root);
+  const target = join(root, 'vendor/video-engine', platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp');
+  const selected = resolve(root, environment.VIDEO_YTDLP_PATH || target);
+  const versionArgs = ['--ignore-config', '--no-plugin-dirs', '--version'];
+  try {
+    const { stdout } = await execute(selected, versionArgs, { timeout: 30000, maxBuffer: 100000, windowsHide: true });
+    if (!/^\d{4}\.\d{2}\.\d{2}/.test(stdout.trim())) throw new Error('无效版本');
+    log(`保留已经可运行的 yt-dlp ${stdout.trim().split(/\r?\n/)[0]}，不下载、不更新。`);
+    return { installed: false, path: selected };
+  } catch { if (environment.VIDEO_YTDLP_PATH && selected !== target) throw new Error('VIDEO_YTDLP_PATH 指定的程序不可运行，请修正或清空该配置；未覆盖其他路径'); }
+  const { path: cached } = await downloadYtdlp({ root, platform, arch, log, ...downloadOptions });
   const temporary = `${target}.${randomUUID()}.tmp${platform === 'win32' ? '.exe' : ''}`;
   try {
     await copyFile(cached, temporary, constants.COPYFILE_EXCL); await chmod(temporary, 0o755);

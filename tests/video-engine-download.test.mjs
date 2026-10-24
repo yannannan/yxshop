@@ -3,7 +3,7 @@ import test from 'node:test';
 import { mkdtemp, mkdir, writeFile, readFile, readdir, realpath, rm, lstat } from 'node:fs/promises';
 import { join, relative, isAbsolute } from 'node:path';
 import { createHash } from 'node:crypto';
-import { fetchSetupBytes, installYtdlp } from '../scripts/video-engine-download.mjs';
+import { downloadYtdlp, fetchSetupBytes, installYtdlp } from '../scripts/video-engine-download.mjs';
 
 const bytes = Buffer.from('fake-official-linux-program-for-isolated-tests');
 const hash = createHash('sha256').update(bytes).digest('hex');
@@ -64,7 +64,7 @@ test('API 意外返回元数据时使用官方发行文件，不能把 JSON 当�
   assert.deepEqual(await readFile(join(f.engine, 'yt-dlp')), bytes); assert.ok(f.requests.some(([url]) => url === release.assets[1].browser_download_url));
 });
 
-test('传输中断重试会清理残片，不把部分文件当成成功缓存', async t => {
+test('无有效数据的断线会回退下载，成功后不遗留断点', async t => {
   const f = await fixture(t), fetchImpl = f.config.fetchImpl; let broken = false;
   await f.install({ fetchImpl: async (url, options) => {
     if (url.endsWith('/assets/2') && !broken) { broken = true; return new Response(new ReadableStream({ start(controller) { controller.enqueue(bytes.subarray(0, 5)); controller.error(Error('connection reset')); } })); }
@@ -85,10 +85,11 @@ test('下载三次失败保留已有文件，后续可从完整缓存继续，�
   await f.install({ fetchImpl: async () => { throw Error('不应再次访问网络'); } });
 });
 
-test('SHA256 或长度不匹配不替换原引擎，不保留伪造的完整缓存', async t => {
+test('SHA256 不匹配不替换原引擎，不保留伪造的完整缓存或断点', async t => {
   const f = await fixture(t), fetchImpl = f.config.fetchImpl, target = join(f.engine, 'yt-dlp'); await writeFile(target, 'old-program');
-  await assert.rejects(f.install({ fetchImpl: (url, options) => url.endsWith('/assets/2') ? Promise.resolve(new Response(Buffer.from('tampered'))) : fetchImpl(url, options) }), /SHA256/);
+  await assert.rejects(f.install({ fetchImpl: (url, options) => url.endsWith('/assets/2') ? Promise.resolve(new Response(Buffer.alloc(bytes.length, 1))) : fetchImpl(url, options) }), /SHA256/);
   assert.equal(await readFile(target, 'utf8'), 'old-program'); assert.equal(await lstat(join(f.cache, version, assetName)).catch(() => null), null);
+  assert.equal(await lstat(join(f.cache, version, `${assetName}.part`)).catch(() => null), null);
 });
 
 test('本机离线包使用同一 SHA256 清单，完全不连接 GitHub；缺失或错误摘要拒绝安装', async t => {
@@ -121,4 +122,110 @@ test('小型官方元数据与校验清单也支持超时重试及响应大小�
   const bytes = await fetchSetupBytes('https://api.github.com/example', 100, { sleep: async () => {}, warn: () => {}, fetchImpl: async () => { if (++calls < 3) throw new DOMException('timeout', 'TimeoutError'); return new Response('ok'); } });
   assert.equal(bytes.toString(), 'ok'); assert.equal(calls, 3);
   await assert.rejects(fetchSetupBytes('https://api.github.com/example', 1, { attempts: 1, warn: () => {}, fetchImpl: async () => new Response('too large') }), /失败/);
+});
+
+const binaryRequest = url => url.endsWith('/assets/2') || url.endsWith(`/${assetName}`);
+function rangedResponse(offset, options = {}) {
+  return new Response(bytes.subarray(offset), { status: 206, headers: { 'Content-Range': `bytes ${offset}-${bytes.length - 1}/${bytes.length}`, 'Content-Length': String(bytes.length - offset), ...options } });
+}
+async function cachedPartial(f, content) {
+  const folder = join(f.cache, version); await mkdir(folder, { recursive: true });
+  await writeFile(join(f.cache, 'release.json'), JSON.stringify(release));
+  await writeFile(join(folder, 'SHA2-256SUMS'), sums);
+  await writeFile(join(folder, `${assetName}.part`), content);
+}
+
+test('进程重启后从磁盘断点发送 Range，206 只追加剩余内容并校验完整文件', async t => {
+  const f = await fixture(t); await cachedPartial(f, bytes.subarray(0, 7));
+  await f.install({ fetchImpl: async (url, options) => { assert.ok(binaryRequest(url)); assert.equal(options.headers.Range, 'bytes=7-'); assert.equal(options.headers['Accept-Encoding'], 'identity'); return rangedResponse(7); } });
+  assert.deepEqual(await readFile(join(f.engine, 'yt-dlp')), bytes);
+  assert.equal(await lstat(join(f.cache, version, `${assetName}.part`)).catch(() => null), null);
+});
+
+test('网络持续失败后保留有效残片，下一次运行继续而不重新下载前缀', async t => {
+  const f = await fixture(t); await cachedPartial(f, bytes.subarray(0, 7));
+  await assert.rejects(f.install({ fetchImpl: async () => { throw Error('connection reset'); } }), /三次失败.*断点已保留/);
+  assert.deepEqual(await readFile(join(f.cache, version, `${assetName}.part`)), bytes.subarray(0, 7));
+  await f.install({ fetchImpl: async (url, options) => { assert.equal(options.headers.Range, 'bytes=7-'); return rangedResponse(7); } });
+});
+
+test('收到一部分数据后断线，重试直接使用新写入的断点', async t => {
+  const f = await fixture(t), fetchImpl = f.config.fetchImpl; let binaryCalls = 0;
+  await f.install({ fetchImpl: async (url, options) => {
+    if (!binaryRequest(url)) return fetchImpl(url, options);
+    if (++binaryCalls > 1) { assert.equal(options.headers.Range, 'bytes=9-'); return rangedResponse(9); }
+    let sent = false;
+    return new Response(new ReadableStream({ async pull(controller) {
+      if (!sent) { sent = true; controller.enqueue(bytes.subarray(0, 9)); }
+      else { await new Promise(resolve => setTimeout(resolve, 40)); controller.error(Error('connection reset')); }
+    } }));
+  } });
+  assert.equal(binaryCalls, 2); assert.deepEqual(await readFile(join(f.engine, 'yt-dlp')), bytes);
+});
+
+test('官方地址忽略 Range 返回 200 时截断旧文件，不重复拼接', async t => {
+  const f = await fixture(t); await cachedPartial(f, bytes.subarray(0, 7));
+  await f.install({ fetchImpl: async () => new Response(bytes) });
+  assert.deepEqual(await readFile(join(f.engine, 'yt-dlp')), bytes); assert.ok(f.logs.some(value => value.includes('未接受续传')));
+});
+
+test('错误 Content-Range、总大小或长度不能污染已有断点', async t => {
+  for (const headers of [{ 'Content-Range': `bytes 0-${bytes.length - 1}/${bytes.length}` }, { 'Content-Range': `bytes 7-${bytes.length - 1}/${bytes.length + 1}` }, { 'Content-Length': '999999999' }]) {
+    const f = await fixture(t); await cachedPartial(f, bytes.subarray(0, 7));
+    await assert.rejects(f.install({ fetchImpl: async () => rangedResponse(7, headers) }), /三次失败/);
+    assert.deepEqual(await readFile(join(f.cache, version, `${assetName}.part`)), bytes.subarray(0, 7));
+  }
+});
+
+test('416 范围拒绝时丢弃过期断点，并在下一地址重新校验下载', async t => {
+  const f = await fixture(t); await cachedPartial(f, bytes.subarray(0, 7)); let calls = 0;
+  await f.install({ fetchImpl: async (url, options) => { if (++calls === 1) return new Response(null, { status: 416 }); assert.equal(options.headers.Range, undefined); return new Response(bytes); } });
+  assert.equal(calls, 2); assert.deepEqual(await readFile(join(f.engine, 'yt-dlp')), bytes);
+});
+
+test('完整残片可直接验证提升为缓存，损坏完整残片会丢弃后重取', async t => {
+  for (const content of [bytes, Buffer.alloc(bytes.length, 1)]) {
+    const f = await fixture(t); await cachedPartial(f, content); let calls = 0;
+    await f.install({ fetchImpl: async (url, options) => { calls++; assert.equal(options.headers.Range, undefined); return new Response(bytes); } });
+    assert.equal(calls, content === bytes ? 0 : 1); assert.deepEqual(await readFile(join(f.engine, 'yt-dlp')), bytes);
+  }
+});
+
+test('持续慢速传输超过一个空闲窗口也不超时，只有连续无数据才中断续传', async t => {
+  const f = await fixture(t); await cachedPartial(f, bytes.subarray(0, 0)); let calls = 0;
+  const began = Date.now();
+  await f.install({ idleTimeoutMs: 120, fetchImpl: async () => {
+    calls++; let offset = 0;
+    return new Response(new ReadableStream({ async pull(controller) {
+      await new Promise(resolve => setTimeout(resolve, 30));
+      controller.enqueue(bytes.subarray(offset, offset + 5)); offset += 5;
+      if (offset >= bytes.length) controller.close();
+    } }));
+  } });
+  assert.ok(Date.now() - began > 120); assert.equal(calls, 1);
+});
+
+test('长时间无数据会取消流并保留断点，回退地址继续而不是卡死', async t => {
+  const f = await fixture(t); await cachedPartial(f, bytes.subarray(0, 7)); let calls = 0, cancelled = false;
+  await f.install({ idleTimeoutMs: 60, fetchImpl: async (url, options) => {
+    if (++calls > 1) { assert.equal(options.headers.Range, 'bytes=10-'); return rangedResponse(10); }
+    return new Response(new ReadableStream({ start(controller) { controller.enqueue(bytes.subarray(7, 10)); }, cancel() { cancelled = true; } }), { status: 206, headers: { 'Content-Range': `bytes 7-${bytes.length - 1}/${bytes.length}` } });
+  } });
+  assert.equal(calls, 2); assert.ok(cancelled); assert.ok(f.warnings.some(value => value.includes('超时')));
+});
+
+test('连接响应超时会取消连接并重试，不遗留计时器', async t => {
+  const f = await fixture(t); await cachedPartial(f, Buffer.alloc(0)); let calls = 0;
+  await f.install({ connectTimeoutMs: 40, fetchImpl: async (url, options) => {
+    if (++calls > 1) return new Response(bytes);
+    return new Promise((resolve, reject) => options.signal.addEventListener('abort', () => reject(options.signal.reason), { once: true }));
+  } });
+  assert.equal(calls, 2); assert.ok(f.warnings.some(value => value.includes('超时')));
+});
+
+test('准备跨平台离线文件只做下载和摘要检查，不执行或覆盖本机引擎', async t => {
+  const f = await fixture(t), target = join(f.engine, 'yt-dlp'); await writeFile(target, 'existing-program');
+  const prepared = await downloadYtdlp(f.config);
+  assert.equal(prepared.sha256, hash); assert.equal(prepared.assetName, assetName); assert.equal(prepared.version, version);
+  assert.deepEqual(await readFile(prepared.path), bytes); assert.equal(await readFile(target, 'utf8'), 'existing-program');
 });
