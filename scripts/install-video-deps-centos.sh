@@ -37,6 +37,11 @@ check_engines() {
     "$NODE_BIN" "${ENV_ARGS[@]}" scripts/check-video-link.mjs --runtime || return
 }
 if (( CHECK_ONLY )); then check_engines; exit 0; fi
+echo '检查现有视频依赖...'
+if check_engines; then
+    echo '视频依赖已就绪，跳过重复安装。'
+    exit 0
+fi
 [[ "$EUID" -eq 0 ]] || fail '首次安装系统库请使用 root 或 sudo bash 执行；商城进程不会被重启'
 command -v pnpm >/dev/null || fail '未找到 pnpm；你现有的 pnpm 10.32.0 可直接沿用'
 mkdir -p "$ENGINE"
