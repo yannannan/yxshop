@@ -155,17 +155,24 @@ test('sitemap 与 robots 路由包含独立工具页面并返回正确类型', a
   const text = await robots.GET().text(); assert.ok(text.includes('Sitemap:')); assert.ok(text.includes('/sitemap.xml')); assert.ok(text.includes('Disallow: /api/'));
 });
 
-test('工具目录渲染入口导航卡片，不渲染普通商品的下单卡片', () => {
+test('客户端路由不可用时，工具卡片、更多和独立目录翻页仍提供原生导航', () => {
+  const unavailableLink = () => { throw new Error('客户端路由不可用'); };
   const directory = load('../components/tool-directory.tsx', {
     '../lib/tool-services': helpers,
     '../lib/homepage-display': homepageHelpers,
-    './catalog-pagination': load('../components/catalog-pagination.tsx', { 'next/link': ({ href, children, ...props }) => React.createElement('a', { href, ...props }, children) }),
-    'next/link': ({ href, children, ...props }) => React.createElement('a', { href, ...props }, children),
+    './catalog-pagination': load('../components/catalog-pagination.tsx', { 'next/link': unavailableLink }),
+    'next/link': unavailableLink,
     'next/image': ({ src, alt }) => React.createElement('img', { src, alt }),
   });
   const html = renderToStaticMarkup(React.createElement(directory.ToolDirectory, { tools: [tool] }));
   assert.ok(html.includes('tool-entry-card')); assert.ok(html.includes('/tools/sample-tool.html'));
   assert.ok(html.includes('入口待配置')); assert.ok(!html.includes('立即下单')); assert.ok(!html.includes('product-card'));
+  assert.ok(html.includes('href="/tools"'));
+  const tools = Array.from({ length: 13 }, (_, index) => ({ ...tool, id: index + 1, slug: `tool-${index + 1}` }));
+  const paged = renderToStaticMarkup(React.createElement(directory.ToolDirectory, { tools, page: 2, pageSize: 12, moreHref: null }));
+  assert.match(paged, /<a[^>]+href="\/tools\/tool-13.html"/);
+  assert.match(paged, /<a href="\/tools\?page=1">上一页<\/a>/);
+  assert.equal((paged.match(/class="tool-entry-card"/g) || []).length, 1);
 });
 
 test('商城订单仅允许购买已配置入口的收费工具，金额以服务端配置为准', async () => {

@@ -39,6 +39,26 @@ bash ./start.sh
 - 显示“入口待配置”的非内置工具，需要管理员配置实际入口；登录不会自动补全入口。
 - 打开视频页与安装视频引擎是不同阶段。缺少引擎会在操作页提示，不应导致整个页面因 ipaddr.js 缺失返回 500。
 
+## 首页所有工具点击没有反应（后续问题）
+
+2026-10-24 用户完成Firefox启动修复并重建商城后，反馈所有工具卡片点击“完全没反应”。本轮直接HTTP检查线上首页、公开工具接口及5个工具页面（c-drive-cleaner、video-extractor、document-signature、stamp-maker、yxstar-site-tool）全部200，无默认错误页；视频与印章的HTML包含实际操作面板。两页RSC请求同样200，首页25个直接静态资源及递归检查的38份JavaScript均可读取。这里只做HTTP及源码检查，没有打开浏览器或捕获用户控制台，不能把具体客户端异常说成已经复现。
+
+卡片原本统一使用next/link，其点击处理先preventDefault再等待客户端路由完成。现将ToolDirectory卡片、“更多工具”以及CatalogPagination的链接翻页改成原生a，让已正常返回的独立页面由浏览器打开；首页原有onChange按钮分页继续按原逻辑切换。独立页刷新是预期行为，URL、样式、6 / 12个工具分页、商品12件分页及后台排序均保持原规则。没有修改工具权限、Nginx或依赖。
+
+用户同时说明Linux尚未配置密钥。若指OSS AccessKey，它影响视频成品存储和下载，新提取会被明确阻止；不会阻止首页卡片进入公开工具页。服务器`/home/www/yxshop/yxshopdev/.env.mysql`填写`VIDEO_OSS_ACCESS_KEY_ID`、`VIDEO_OSS_ACCESS_KEY_SECRET`，其他已确认的上海Bucket配置沿用。真实密钥只由用户填写服务器，不发聊天、不提交Git；重启进程后生效。
+
+新忽略产物`vendor/video-engine/offline-bundles/tool-entry-navigation-fix-20261024.tar.gz`为1841字节，SHA256为`e48b9f11ca7f29df59f007896f0ac88be32e4b086e78855a8311629ae349f8a2`；仅包含`components/tool-directory.tsx`和`components/catalog-pagination.tsx`，不含环境文件或视频引擎，不覆盖已通过的Firefox修复。上传服务器项目根后：
+
+```bash
+cd /home/www/yxshop/yxshopdev
+tar -xzf tool-entry-navigation-fix-20261024.tar.gz &&
+bash stop.sh && pnpm build && bash start.sh
+```
+
+刷新首页后验证卡片、更多入口和独立页翻页，再测试实际提取与OSS下载。服务器远程master未确认同步全部修复前，不用upgrade的reset覆盖手动补丁。之后需把源码修复同步实际发布代码源，恢复日常升级。本轮无需新SQL或重装视频依赖。
+
+工具 / 首页 / 视频93项回归及3项严格生产渲染检查、源码ESLint与生产构建通过；更新原目录测试，在next/link不可用时验证卡片 / 更多 / 独立目录翻页仍能提供有效原生链接。生产测试使用模拟只读工具数据，不监听端口、打开浏览器或连接真实业务库。当前仅源码及HTTP证据，服务器真实点击结果仍待用户验收。
+
 ## 生产渲染回归
 
 ```bash
