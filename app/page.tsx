@@ -637,7 +637,8 @@ export default function StorePage() {
 
       <footer className="store-footer">
         <div>
-          <Link className="brand" href="/">
+          {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- 首页入口采用原生导航，保证软路由异常时仍可返回商城。 */}
+          <a className="brand" href="/">
             <span className="brand-mark">
               <Image
                 src="/yxstar_logo.png"
@@ -647,7 +648,7 @@ export default function StorePage() {
               />
             </span>
             <span>宇星商城</span>
-          </Link>
+          </a>
           <p>简单、透明、可靠的数字商品购买体验。</p>
         </div>
         <div>

@@ -287,6 +287,52 @@ test('显式传入角色的首页导航沿用受控身份，不重复请求身�
   assert.ok(markup(host.render({isAdmin:true,isTechnician:false})).includes('进入管理后台'));host.mountEffects();
 });
 
+test('软路由不可用时商城Logo和跨页主导航仍为原生链接，独立页面不拦截点击', () => {
+  const unavailableLink = () => { throw Error('软路由不可用'); };
+  const host = hookHost('../components/storefront-header.tsx', 'StorefrontHeader', { 'next/link': unavailableLink, 'next/image': Image });
+  const tree = host.render({ isAdmin: false, isTechnician: false, children: React.createElement('span', null, '账户') });
+  const logo = elements(tree).find(node => node.props.className === 'brand');
+  assert.equal(logo.type, 'a'); assert.equal(logo.props.href, '/'); assert.equal(logo.props.onClick, undefined);
+  const html = markup(tree); assert.ok(html.includes('宇星商城首页'));
+  for (const label of ['AI商城服务', '上门技术服务', '技术人才入驻']) {
+    const link = elements(tree).find(node => node.type === 'a' && textOf(node) === label);
+    assert.ok(link); let prevented = false;
+    link.props.onClick({ button: 0, preventDefault() { prevented = true; } });
+    assert.equal(prevented, false);
+  }
+});
+
+test('首页频道导航继续原地切换，Ctrl点击仍保留浏览器打开新页行为', () => {
+  const calls = [], host = hookHost('../components/storefront-header.tsx', 'StorefrontHeader', { 'next/link': Link, 'next/image': Image });
+  const tree = host.render({ isAdmin: false, isTechnician: false, onNavigate: (...args) => calls.push(args) });
+  const link = elements(tree).find(node => node.type === 'a' && textOf(node) === '上门技术服务');
+  let prevented = false;
+  link.props.onClick({ button: 0, preventDefault() { prevented = true; } });
+  assert.equal(prevented, true); assert.deepEqual(calls, [['technical', 'content']]);
+  prevented = false; link.props.onClick({ button: 0, ctrlKey: true, preventDefault() { prevented = true; } });
+  assert.equal(prevented, false); assert.equal(calls.length, 1);
+});
+
+test('订单、地址、后台、技术人员和工具介绍等页面的商城Logo都使用原生首页链接', () => {
+  for (const name of ['page.tsx', 'orders/page.tsx', 'addresses/page.tsx', 'admin/page.tsx', 'technician/page.tsx', 'service-orders/page.tsx', 'service-orders/[id]/page.tsx', 'tools/[slug]/page.tsx', 'product/[id]/page.tsx', 'checkout/[id]/page.tsx', 'service/[slug]/page.tsx']) {
+    const source = ts.createSourceFile(name, readFileSync(new URL(`../app/${name}`, import.meta.url), 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    let count = 0;
+    function visit(node) {
+      if (ts.isJsxOpeningElement(node)) {
+        const attrs = node.attributes.properties.filter(ts.isJsxAttribute);
+        const className = attrs.find(attr => attr.name.getText(source) === 'className')?.initializer;
+        if (className && ts.isStringLiteral(className) && className.text.split(' ').some(value => ['brand', 'tools-brand'].includes(value))) {
+          count++; assert.equal(node.tagName.getText(source), 'a', name);
+          const href = attrs.find(attr => attr.name.getText(source) === 'href')?.initializer;
+          assert.ok(href && ts.isStringLiteral(href) && href.text === '/', name);
+        }
+      }
+      ts.forEachChild(node, visit);
+    }
+    visit(source); assert.equal(count, 1, name);
+  }
+});
+
 test('首页工具翻页按钮确实切换到后 6 个工具，数据缩减不会停留在空页', () => {
   const host = hookHost('../components/tool-directory.tsx', 'ToolDirectory', directoryMocks);
   let tree = host.render({ tools });

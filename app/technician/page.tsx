@@ -87,7 +87,8 @@ export default function TechnicianPage() {
 
   return <main className="technician-workbench">
     <aside className="technician-sidebar">
-      <Link className="brand technician-brand" href="/"><span className="brand-mark"><Image src="/yxstar_logo.png" alt="宇星商城" fill sizes="34px"/></span><span>宇星商城</span></Link>
+      {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- 首页入口采用原生导航，保证软路由异常时仍可返回商城。 */}
+      <a className="brand technician-brand" href="/"><span className="brand-mark"><Image src="/yxstar_logo.png" alt="宇星商城" fill sizes="34px"/></span><span>宇星商城</span></a>
       <div className="technician-profile-mini">{data.provider.avatar?<img src={data.provider.avatar} alt=""/>:<span>{data.provider.name.slice(0,1)}</span>}<div><b>{data.provider.name}</b><small>{data.provider.roleName||"技术人员"}</small></div></div>
       <nav>
         <button className={tab==="overview"?"active":""} onClick={()=>setTab("overview")}>工作台首页</button>

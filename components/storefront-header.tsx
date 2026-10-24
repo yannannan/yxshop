@@ -34,17 +34,19 @@ export function StorefrontHeader({ channel = 'mall', onNavigate, isAdmin, isTech
     onNavigate(next, target);
   }
 
+  /* eslint-disable @next/next/no-html-link-for-pages -- 首页及跨页频道入口采用原生导航，避免软路由异常时点击失效。 */
   return <header className={`topbar refined-topbar compact-topbar${adminVisible || technicianVisible ? ' has-admin-entry' : ''}`}>
-    <Link className="brand" href="/" aria-label="宇星商城首页">
+    <a className="brand" href="/" aria-label="宇星商城首页">
       <span className="brand-mark"><Image src="/yxstar_logo.png" alt="宇星商城 Logo" fill sizes="34px" /></span><span>宇星商城</span>
-    </Link>
+    </a>
     <nav className="site-navigation" aria-label="主导航">
-      <Link href="/#channel-content" className={channel === 'mall' ? 'active' : ''} aria-current={channel === 'mall' ? 'location' : undefined} onClick={event => navigate(event, 'mall', 'content')}>AI商城服务</Link>
-      <Link href="/?channel=technical#channel-content" className={channel === 'technical' ? 'active' : ''} aria-current={channel === 'technical' ? 'location' : undefined} onClick={event => navigate(event, 'technical', 'content')}>上门技术服务</Link>
-      <Link href="/?channel=technical#talent-entry" onClick={event => navigate(event, 'technical', 'talent-entry')}>技术人才入驻</Link>
+      <a href="/#channel-content" className={channel === 'mall' ? 'active' : ''} aria-current={channel === 'mall' ? 'location' : undefined} onClick={event => navigate(event, 'mall', 'content')}>AI商城服务</a>
+      <a href="/?channel=technical#channel-content" className={channel === 'technical' ? 'active' : ''} aria-current={channel === 'technical' ? 'location' : undefined} onClick={event => navigate(event, 'technical', 'content')}>上门技术服务</a>
+      <a href="/?channel=technical#talent-entry" onClick={event => navigate(event, 'technical', 'talent-entry')}>技术人才入驻</a>
     </nav>
     {adminVisible && <Link className="admin-entry" href="/admin" target="_blank" rel="noopener noreferrer">进入管理后台</Link>}
     {technicianVisible && <Link className="admin-entry" href="/technician">进入技术人员工作台</Link>}
-    {children ?? <div className="account-actions"><Link className="orders-link" href="/points">我的积分</Link><Link className="orders-link" href="/orders">我的订单</Link><Link className="catalog-home-link" href="/">返回首页</Link></div>}
+    {children ?? <div className="account-actions"><Link className="orders-link" href="/points">我的积分</Link><Link className="orders-link" href="/orders">我的订单</Link><a className="catalog-home-link" href="/">返回首页</a></div>}
   </header>;
+  /* eslint-enable @next/next/no-html-link-for-pages */
 }

@@ -17,7 +17,7 @@ for argument in "$@"; do
 done
 [[ "$JOBS" =~ ^[1-8]$ ]] || { echo '--jobs 只能为 1～8' >&2; exit 2; }
 fail() { echo "错误：$*" >&2; exit 1; }
-trap 'echo "视频依赖安装失败（第 $LINENO 行）。未启动或停止商城；修复错误后可重跑。" >&2' ERR
+trap 'if (( CHECK_ONLY )); then echo "视频依赖检查失败（第 $LINENO 行）。本次未进入安装或下载流程。" >&2; else echo "视频依赖安装失败（第 $LINENO 行）。未启动或停止商城；修复错误后可重跑。" >&2; fi' ERR
 [[ "$(uname -s)" == Linux ]] || fail '此脚本只适用于 CentOS / RHEL 系 Linux'
 [[ "$(uname -m)" == x86_64 ]] || fail '本脚本目前适配 x86_64；不冒充 ARM64 / 32 位兼容'
 [[ -r /etc/os-release ]] || fail '缺少 /etc/os-release'
@@ -36,7 +36,11 @@ check_engines() {
     "$NODE_BIN" "${ENV_ARGS[@]}" scripts/setup-video-engine.mjs --check || return
     "$NODE_BIN" "${ENV_ARGS[@]}" scripts/check-video-link.mjs --runtime || return
 }
-if (( CHECK_ONLY )); then check_engines; exit 0; fi
+if (( CHECK_ONLY )); then
+    echo '仅检查现有视频依赖；本次不会进入安装或下载流程。'
+    check_engines
+    exit 0
+fi
 echo '检查现有视频依赖...'
 if check_engines; then
     echo '视频依赖已就绪，跳过重复安装。'

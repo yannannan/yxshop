@@ -494,7 +494,8 @@ export default function AdminPage() {
 
   return <main className="admin-shell">
     <aside className="admin-sidebar">
-      <Link className="brand admin-brand" href="/"><span className="brand-mark"><Image src="/yxstar_logo.png" alt="宇星商城 Logo" fill sizes="34px" /></span><span>宇星商城</span></Link>
+      {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- 首页入口采用原生导航，保证软路由异常时仍可返回商城。 */}
+      <a className="brand admin-brand" href="/"><span className="brand-mark"><Image src="/yxstar_logo.png" alt="宇星商城 Logo" fill sizes="34px" /></span><span>宇星商城</span></a>
       <small>商城管理</small>
       <AdminNavigation menus={navigationMenus} active={active} pendingOrders={pendingOrders} onSelect={(key) => { setActive(key); setToolCreateRequested(false); if (tabs.some((tab) => tab.key === key)) void load(true); }} />
       <div className="admin-user"><span>管</span><div><b>{adminSession.admin.displayName}</b><small>{adminSession.admin.username}</small></div></div>

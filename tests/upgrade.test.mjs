@@ -26,7 +26,7 @@ async function fixture(t, branch = 'main', { trackedEnvironment = false } = {}) 
   await writeFile(join(root, 'git-config'), '');
   await writeFile(join(root, 'os-release'), 'ID=centos\nVERSION_ID=7\nPRETTY_NAME="CentOS Linux 7 (Core)"\n');
   await writeFile(join(seed, 'upgrade.sh'), upgrade);
-  await writeFile(join(seed, '.gitignore'), '.env.mysql\n.env.local\n.env.upgrade.*/\nuploads/\n');
+  await writeFile(join(seed, '.gitignore'), '.env.mysql\n.env.local\n.env.upgrade.*/\nuploads/\nvendor/video-engine/\n');
   if (trackedEnvironment) {
     await writeFile(join(seed, '.env.mysql'), 'old-template-mysql\n');
     await writeFile(join(seed, '.env.local'), 'old-template-local\n');
@@ -76,7 +76,7 @@ async function fixture(t, branch = 'main', { trackedEnvironment = false } = {}) 
     }
     await writeFile(join(client, 'scripts/install-video-deps-centos.sh'), script);
     await writeFile(join(bin, 'uname'), '#!/bin/bash\nif [[ "$1" == -s ]]; then echo Linux; else echo x86_64; fi\n', { mode: 0o755 });
-    await writeFile(join(bin, 'node-video-test'), '#!/bin/bash\ncase "$*" in *setup-video-engine.mjs*) echo binary-check >>"$UPGRADE_TRACE"; exit "${BINARY_FAILURE:-0}";; *check-video-link.mjs*) echo browser-check >>"$UPGRADE_TRACE"; exit 0;; *) exit 0;; esac\n', { mode: 0o755 });
+    await writeFile(join(bin, 'node-video-test'), '#!/bin/bash\ncase "$*" in *setup-video-engine.mjs*) echo binary-check >>"$UPGRADE_TRACE"; exit "${BINARY_FAILURE:-0}";; *check-video-link.mjs*) echo browser-check >>"$UPGRADE_TRACE"; exit "${BROWSER_FAILURE:-0}";; *) exit 0;; esac\n', { mode: 0o755 });
     for (const name of ['yum', 'dnf', 'useradd']) await writeFile(join(bin, name), '#!/bin/bash\necho 不允许测试安装系统依赖 >&2\nexit 91\n', { mode: 0o755 });
     if (install) {
       await writeFile(join(bin, 'flock'), '#!/bin/bash\nexit 0\n', { mode: 0o755 });
@@ -100,7 +100,42 @@ test('main 分支按现有跟踪关系升级，只调用一次独立 video 脚�
   assert.equal(await readFile(join(f.client, '.env.mysql'), 'utf8'), 'keep-server-environment');
   assert.equal(await readFile(join(f.client, 'uploads/keep.txt'), 'utf8'), 'keep-user-upload');
   assert.equal(await readFile(join(f.client, '.next/routes.d.ts'), 'utf8'), 'types-v2\n');
-  assert.deepEqual(await f.events(), ['stop', 'pnpm install --frozen-lockfile --prod=false', 'video-script', 'pnpm build', 'start']);
+  assert.deepEqual(await f.events(), ['stop', 'pnpm install --frozen-lockfile --prod=false', 'video-script --check', 'pnpm build', 'start']);
+});
+
+test('远程升级入口仍会自动安装时，在停服和reset之前拒绝覆盖新的仅检查策略', async t => {
+  const f = await fixture(t, 'master');
+  await f.publish(async seed => {
+    const path = join(seed, 'upgrade.sh');
+    await writeFile(path, (await readFile(path, 'utf8')).replace('# video-upgrade-policy: check-only-v1\n', ''));
+  });
+  const result = await f.run(); assert.notEqual(result.code, 0);
+  assert.match(result.stderr, /远程 origin\/master.*仅检查策略/); assert.match(result.stderr, /商城尚未停止/);
+  assert.deepEqual(await f.events(), []); assert.equal(await readFile(join(f.client, 'app.txt'), 'utf8'), 'v1\n');
+});
+
+test('日常升级复用已安装视频引擎和离线缓存，自检失败也不替换或删除这些文件', async t => {
+  const f = await fixture(t); await f.publish();
+  const engine = join(f.client, 'vendor/video-engine');
+  const files = { 'yt-dlp': 'installed-ytdlp', ffmpeg: 'installed-ffmpeg', 'browser-runtime.json': '{"engine":"firefox","platform":"linux"}', 'firefox/current/firefox': 'installed-browser', 'downloads/ffmpeg/9.0.2/ffmpeg-9.0.2.tar.xz': 'offline-source' };
+  for (const [name, content] of Object.entries(files)) { const path = join(engine, name); await mkdir(resolve(path, '..'), { recursive: true }); await writeFile(path, content); }
+  const result = await f.run([], { VIDEO_INSTALL_FAILURE: '23' }); assert.equal(result.code, 0, result.stderr);
+  assert.ok((await f.events()).includes('video-script --check')); assert.ok((await f.events()).includes('start'));
+  for (const [name, content] of Object.entries(files)) assert.equal(await readFile(join(engine, name), 'utf8'), content, name);
+  assert.match(result.stderr, /不自动下载或修复/);
+});
+
+test('远程误提交Windows或其他视频引擎文件时提前拒绝，不覆盖本机Linux引擎', async t => {
+  const f = await fixture(t, 'master');
+  const engine = join(f.client, 'vendor/video-engine'); await mkdir(engine, { recursive: true }); await writeFile(join(engine, 'yt-dlp'), 'server-linux-engine');
+  await f.publish(async seed => {
+    await mkdir(join(seed, 'vendor/video-engine'), { recursive: true });
+    await writeFile(join(seed, 'vendor/video-engine/yt-dlp'), 'wrong-binary');
+    await f.git(seed, 'add', '-f', 'vendor/video-engine/yt-dlp');
+  });
+  const result = await f.run(); assert.notEqual(result.code, 0);
+  assert.match(result.stderr, /远程代码包含视频引擎目录/); assert.deepEqual(await f.events(), []);
+  assert.equal(await readFile(join(engine, 'yt-dlp'), 'utf8'), 'server-linux-engine');
 });
 
 test('旧服务器环境文件从 Git 跟踪转为忽略后，首次升级仍保留两份真实本地配置', async t => {
@@ -132,7 +167,7 @@ test('服务器只有 master 时同步 origin/master，不依赖不存在的 ori
   const result = await f.run(); assert.equal(result.code, 0, result.stderr);
   assert.match(result.stdout, /本次同步目标：origin\/master/);
   assert.equal(await readFile(join(f.client, 'app.txt'), 'utf8'), 'v2\n');
-  assert.deepEqual(await f.events(), ['stop', 'pnpm install --frozen-lockfile --prod=false', 'video-script', 'pnpm build', 'start']);
+  assert.deepEqual(await f.events(), ['stop', 'pnpm install --frozen-lockfile --prod=false', 'video-script --check', 'pnpm build', 'start']);
 });
 
 test('master 已跟踪 origin/master 时不被缓存的 main 或 origin/HEAD 改变目标', async t => {
@@ -174,11 +209,11 @@ test('当前分支跟踪其他远程时拒绝混用 origin，不停止现有商�
   const result = await f.run(); assert.notEqual(result.code, 0);
   assert.match(result.stderr, /当前分支跟踪 other\/main/); assert.deepEqual(await f.events(), []);
 });
-test('video 脚本失败单独提示，仍继续构建和启动商城，不误报视频安装成功', async t => {
+test('video 仅检查失败单独提示，仍继续构建和启动商城，不误报视频就绪', async t => {
   const f = await fixture(t); await f.publish();
   const result = await f.run([], { VIDEO_INSTALL_FAILURE: '23' }); assert.equal(result.code, 0, result.stderr);
-  assert.deepEqual(await f.events(), ['stop', 'pnpm install --frozen-lockfile --prod=false', 'video-script', 'pnpm build', 'start']);
-  assert.match(result.stderr, /视频依赖安装失败/); assert.match(result.stdout, /商城已启动；视频依赖未就绪/);
+  assert.deepEqual(await f.events(), ['stop', 'pnpm install --frozen-lockfile --prod=false', 'video-script --check', 'pnpm build', 'start']);
+  assert.match(result.stderr, /视频依赖检查未通过/); assert.match(result.stdout, /商城已启动；视频依赖检查未通过/);
   assert.doesNotMatch(result.stdout, /升级发布完成/);
 });
 test('不再保留 pull-only 第二种升级模式，错误参数不触发部署', async t => {
@@ -194,7 +229,7 @@ test('拉取失败在停服前报错退出，不执行依赖安装、构建和�
 test('项目依赖或构建失败仍中断升级，不将项目失败当作 video 失败忽略', async t => {
   const f = await fixture(t); await f.publish();
   const failed = await f.run([], { INSTALL_FAILURE: '23' });
-  assert.notEqual(failed.code, 0); assert.match(failed.stderr, /升级失败/); assert.ok(!(await f.events()).includes('video-script')); assert.ok(!(await f.events()).includes('start'));
+  assert.notEqual(failed.code, 0); assert.match(failed.stderr, /升级失败/); assert.ok(!(await f.events()).includes('video-script --check')); assert.ok(!(await f.events()).includes('start'));
   await writeFile(f.trace, '');
   const build = await f.run([], { BUILD_FAILURE: '24' }); assert.notEqual(build.code, 0); assert.match(build.stderr, /升级失败/);
   assert.ok(!(await f.events()).includes('start')); assert.doesNotMatch(build.stdout, /升级发布完成/);
@@ -209,6 +244,14 @@ test('video 只读自检失败返回非零，不会偷偷安装或报告就绪',
   const f = await fixture(t);
   const result = await f.runVideo(['--check'], { BINARY_FAILURE: '25' }); assert.notEqual(result.code, 0);
   assert.deepEqual(await f.events(), ['binary-check']); assert.doesNotMatch(result.stdout, /跳过重复安装/);
+});
+
+test('浏览器实际启动自检失败也不进入yum、pnpm或引擎下载修复', async t => {
+  const f = await fixture(t);
+  const result = await f.runVideo(['--check'], { BROWSER_FAILURE: '26' }); assert.notEqual(result.code, 0);
+  assert.deepEqual(await f.events(), ['binary-check', 'browser-check']);
+  assert.match(result.stdout, /不会进入安装或下载流程/); assert.doesNotMatch(result.stdout, /安装系统库|安装及启动检查通过/);
+  assert.match(result.stderr, /视频依赖检查失败/); assert.doesNotMatch(result.stderr, /视频依赖安装失败/);
 });
 
 test('CentOS 7 安装使用三个 HTTPS 归档镜像和本地官方公钥，yum 失败不改动已有引擎或启动商城', async t => {

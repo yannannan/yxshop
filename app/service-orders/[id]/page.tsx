@@ -143,7 +143,8 @@ export default function TechnicalServiceOrderPage() {
 
   return <main className="technical-order-page">
     <header className="inner-header">
-      <Link className="brand" href="/"><span className="brand-mark"><Image src="/yxstar_logo.png" alt="宇星商城 Logo" fill sizes="34px" /></span><span>宇星商城</span></Link>
+      {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- 首页入口采用原生导航，保证软路由异常时仍可返回商城。 */}
+      <a className="brand" href="/"><span className="brand-mark"><Image src="/yxstar_logo.png" alt="宇星商城 Logo" fill sizes="34px" /></span><span>宇星商城</span></a>
       <span className="orders-header-label">技术服务订单</span>
       <Link href="/?channel=technical">返回上门服务</Link>
     </header>

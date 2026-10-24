@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# video-upgrade-policy: check-only-v1
 set -Eeuo pipefail
 
 APP_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
@@ -84,6 +85,14 @@ if ! git rev-parse --verify --quiet "refs/remotes/$UPGRADE_REF^{commit}" >/dev/n
     echo "未找到远程分支 $UPGRADE_REF，请检查当前分支和 origin 配置。商城尚未停止。" >&2
     exit 1
 fi
+if ! git show "$UPGRADE_REF:upgrade.sh" | grep -Fx '# video-upgrade-policy: check-only-v1' >/dev/null; then
+    echo "远程 $UPGRADE_REF 尚未包含视频依赖仅检查策略。请先将本轮完整代码同步到该远程分支，再运行升级。商城尚未停止。" >&2
+    exit 1
+fi
+if [[ -n "$(git ls-tree -r --name-only "$UPGRADE_REF" -- vendor/video-engine)" ]]; then
+    echo '远程代码包含视频引擎目录，可能覆盖本机程序。请先从版本管理移除 vendor/video-engine；商城尚未停止。' >&2
+    exit 1
+fi
 echo "本次同步目标：$UPGRADE_REF"
 
 backup_environment
@@ -99,11 +108,11 @@ restore_environment
 echo '[4/7] 安装项目依赖...'
 pnpm install --frozen-lockfile --prod=false
 
-echo '[5/7] 运行独立的视频依赖脚本...'
+echo '[5/7] 检查已安装的视频依赖（不下载、不安装、不更新引擎）...'
 VIDEO_READY=1
-if ! bash ./scripts/install-video-deps-centos.sh; then
+if ! bash ./scripts/install-video-deps-centos.sh --check; then
     VIDEO_READY=0
-    echo '提示：视频依赖安装失败，请保留上方错误；继续构建并启动商城。' >&2
+    echo '提示：视频依赖检查未通过；保留现有引擎和离线缓存，不自动下载或修复，继续构建并启动商城。' >&2
 fi
 
 echo '[6/7] 构建生产版本...'
@@ -115,5 +124,5 @@ bash ./start.sh
 if (( VIDEO_READY )); then
     echo 'yxshop 升级发布完成。'
 else
-    echo '商城已启动；视频依赖未就绪，视频提取可能不可用，请稍后单独重试视频安装脚本。'
+    echo '商城已启动；视频依赖检查未通过，请保留上方错误另行排查。本次未自动安装或更新视频引擎。'
 fi
