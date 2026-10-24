@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
-import { mkdtemp, mkdir, writeFile, readFile, rm, realpath } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, rm, realpath, readdir } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { join, resolve, relative, isAbsolute, delimiter } from 'node:path';
@@ -14,7 +14,7 @@ const quote = value => `'${slashes(value).replaceAll("'", "'\\''")}'`;
 const upgrade = readFileSync(new URL('../upgrade.sh', import.meta.url), 'utf8').replaceAll('\r\n', '\n');
 const videoInstaller = readFileSync(new URL('../scripts/install-video-deps-centos.sh', import.meta.url), 'utf8').replaceAll('\r\n', '\n');
 
-async function fixture(t, branch = 'main') {
+async function fixture(t, branch = 'main', { trackedEnvironment = false } = {}) {
   const root = await mkdtemp(join(process.cwd(), '.upgrade-test-'));
   t.after(async () => {
     const actual = await realpath(root), child = relative(process.cwd(), actual);
@@ -26,7 +26,11 @@ async function fixture(t, branch = 'main') {
   await writeFile(join(root, 'git-config'), '');
   await writeFile(join(root, 'os-release'), 'ID=centos\nVERSION_ID=7\nPRETTY_NAME="CentOS Linux 7 (Core)"\n');
   await writeFile(join(seed, 'upgrade.sh'), upgrade);
-  await writeFile(join(seed, '.gitignore'), '.env.mysql\nuploads/\n');
+  await writeFile(join(seed, '.gitignore'), '.env.mysql\n.env.local\n.env.upgrade.*/\nuploads/\n');
+  if (trackedEnvironment) {
+    await writeFile(join(seed, '.env.mysql'), 'old-template-mysql\n');
+    await writeFile(join(seed, '.env.local'), 'old-template-local\n');
+  }
   await writeFile(join(seed, 'app.txt'), 'v1\n');
   await mkdir(join(seed, '.next')); await writeFile(join(seed, '.next/routes.d.ts'), 'types-v1\n');
   await mkdir(join(seed, 'dist')); await writeFile(join(seed, 'dist/server.js'), 'old-build\n');
@@ -41,9 +45,13 @@ async function fixture(t, branch = 'main') {
   const git = async (cwd, ...args) => execute('git', args, { cwd, env, windowsHide: true });
   await git(root, 'init', '--bare', remote); await git(seed, 'init', '-b', branch);
   await git(seed, 'config', 'user.name', 'Upgrade test'); await git(seed, 'config', 'user.email', 'upgrade@example.invalid'); await git(seed, 'config', 'core.autocrlf', 'false');
-  await git(seed, 'add', '.'); await git(seed, 'commit', '-m', 'base'); await git(seed, 'remote', 'add', 'origin', remote); await git(seed, 'push', 'origin', branch);
+  await git(seed, 'add', '.');
+  if (trackedEnvironment) await git(seed, 'add', '-f', '.env.local', '.env.mysql');
+  await git(seed, 'commit', '-m', 'base'); await git(seed, 'remote', 'add', 'origin', remote); await git(seed, 'push', 'origin', branch);
   await git(root, 'clone', '-b', branch, remote, client); await git(client, 'config', 'core.autocrlf', 'false');
-  await writeFile(join(client, '.env.mysql'), 'keep-server-environment'); await mkdir(join(client, 'uploads')); await writeFile(join(client, 'uploads/keep.txt'), 'keep-user-upload');
+  await writeFile(join(client, '.env.mysql'), 'keep-server-environment');
+  await writeFile(join(client, '.env.local'), 'keep-local-environment');
+  await mkdir(join(client, 'uploads')); await writeFile(join(client, 'uploads/keep.txt'), 'keep-user-upload');
   async function publish(extra) {
     await writeFile(join(seed, 'app.txt'), 'v2\n'); await writeFile(join(seed, '.next/routes.d.ts'), 'types-v2\n');
     if (extra) await extra(seed);
@@ -93,6 +101,30 @@ test('main 分支按现有跟踪关系升级，只调用一次独立 video 脚�
   assert.equal(await readFile(join(f.client, 'uploads/keep.txt'), 'utf8'), 'keep-user-upload');
   assert.equal(await readFile(join(f.client, '.next/routes.d.ts'), 'utf8'), 'types-v2\n');
   assert.deepEqual(await f.events(), ['stop', 'pnpm install --frozen-lockfile --prod=false', 'video-script', 'pnpm build', 'start']);
+});
+
+test('旧服务器环境文件从 Git 跟踪转为忽略后，首次升级仍保留两份真实本地配置', async t => {
+  const f = await fixture(t, 'master', { trackedEnvironment: true });
+  await f.publish(async seed => { await f.git(seed, 'rm', '--cached', '.env.local', '.env.mysql'); });
+  const result = await f.run(); assert.equal(result.code, 0, result.stderr);
+  assert.equal(await readFile(join(f.client, '.env.mysql'), 'utf8'), 'keep-server-environment');
+  assert.equal(await readFile(join(f.client, '.env.local'), 'utf8'), 'keep-local-environment');
+  assert.equal((await f.git(f.client, 'ls-files', '--', '.env.local', '.env.mysql')).stdout.trim(), '');
+  assert.ok(!(await readdir(f.client)).some(name => name.startsWith('.env.upgrade.')));
+  assert.doesNotMatch(result.stdout + result.stderr, /keep-server-environment|keep-local-environment/);
+});
+
+test('远程仍跟踪环境模板时升级保留本机值；reset 或后续安装失败也不丢配置', async t => {
+  for (const failure of ['none', 'reset', 'install']) {
+    const f = await fixture(t, 'main', { trackedEnvironment: true });
+    await f.publish(async seed => { await writeFile(join(seed, '.env.mysql'), 'new-remote-template\n'); await writeFile(join(seed, '.env.local'), 'new-local-template\n'); });
+    if (failure === 'reset') await writeFile(join(f.client, '.git/index.lock'), 'simulated-lock');
+    const result = await f.run([], failure === 'install' ? { INSTALL_FAILURE: '23' } : {});
+    assert.equal(result.code === 0, failure === 'none', result.stderr);
+    assert.equal(await readFile(join(f.client, '.env.mysql'), 'utf8'), 'keep-server-environment');
+    assert.equal(await readFile(join(f.client, '.env.local'), 'utf8'), 'keep-local-environment');
+    assert.ok(!(await readdir(f.client)).some(name => name.startsWith('.env.upgrade.')));
+  }
 });
 
 test('服务器只有 master 时同步 origin/master，不依赖不存在的 origin/main', async t => {

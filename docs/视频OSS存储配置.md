@@ -15,6 +15,8 @@
 
 ## 服务器配置
 
+实际 `.env.local` / `.env.mysql` 只保留在各机器，已退出 Git 跟踪；`.env.mysql.example` 只作空密钥模板。新机器需要自行建立实际环境文件，已有文件保留。首次从旧版跟踪环境文件的服务器升级，先按 [Git 密钥拦截与环境配置](Git密钥拦截与环境配置.md) 获取新版 upgrade.sh，防止旧脚本同步时删除配置。
+
 先同步代码并安装本次 `ali-oss` 依赖。在服务器项目 `/home/www/yxshop/yxshopdev/.env.mysql` **追加**下面变量，保留原数据库和登录配置：
 
 ```dotenv

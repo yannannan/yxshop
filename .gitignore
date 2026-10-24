@@ -3,6 +3,7 @@
 /.vinext/
 /.wrangler/
 /dist/
+# 真实环境文件仅保留本机；代码库只维护下方的示例模板。
 /.env
 /.env.*
 !/.env.example

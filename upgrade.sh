@@ -9,6 +9,60 @@ if (( $# )); then
 fi
 trap 'echo "升级失败（第 $LINENO 行），请检查上方错误并修复后重跑。" >&2' ERR
 
+# 兼容旧版本仍跟踪环境文件的服务器。reset 前私有备份，之后原样恢复。
+ENV_BACKUP_DIR=''
+ENV_BACKUP_FILES=()
+ENV_RESTORED=0
+restore_environment() {
+    [[ -n "$ENV_BACKUP_DIR" && "$ENV_RESTORED" -eq 0 ]] || return 0
+    local name
+    for name in "${ENV_BACKUP_FILES[@]}"; do
+        if [[ -L "$APP_DIR/$name" || ( -e "$APP_DIR/$name" && ! -f "$APP_DIR/$name" ) ]]; then
+            echo "环境文件位置异常，未覆盖：$name" >&2
+            return 1
+        fi
+        if ! cmp -s -- "$ENV_BACKUP_DIR/$name" "$APP_DIR/$name"; then
+            cp -p -- "$ENV_BACKUP_DIR/$name" "$APP_DIR/$name" || return 1
+        fi
+    done
+    ENV_RESTORED=1
+}
+finish_upgrade() {
+    local exit_status=$?
+    trap - EXIT
+    if ! restore_environment; then
+        echo "环境文件恢复失败，私有备份保留在：$ENV_BACKUP_DIR" >&2
+        exit 1
+    fi
+    if [[ -n "$ENV_BACKUP_DIR" ]]; then
+        # 只删除本次 mktemp 在项目内生成的两份固定名称备份，不递归删除。
+        if [[ "$ENV_BACKUP_DIR" == "$APP_DIR"/.env.upgrade.* && -d "$ENV_BACKUP_DIR" && ! -L "$ENV_BACKUP_DIR" ]]; then
+            if ! { rm -f -- "$ENV_BACKUP_DIR/.env.local" "$ENV_BACKUP_DIR/.env.mysql" && rmdir -- "$ENV_BACKUP_DIR"; }; then
+                echo "环境文件已恢复，私有备份目录清理失败：$ENV_BACKUP_DIR" >&2
+            fi
+        fi
+    fi
+    exit "$exit_status"
+}
+trap finish_upgrade EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+backup_environment() {
+    local name
+    for name in .env.local .env.mysql; do
+        [[ -e "$APP_DIR/$name" || -L "$APP_DIR/$name" ]] || continue
+        if [[ -L "$APP_DIR/$name" || ! -f "$APP_DIR/$name" ]]; then
+            echo "环境文件必须是项目内的普通文件：$name。商城尚未停止。" >&2
+            return 1
+        fi
+        if [[ -z "$ENV_BACKUP_DIR" ]]; then
+            ENV_BACKUP_DIR="$(mktemp -d "$APP_DIR/.env.upgrade.XXXXXXXX")" || return 1
+        fi
+        cp -p -- "$APP_DIR/$name" "$ENV_BACKUP_DIR/$name" || return 1
+        ENV_BACKUP_FILES+=("$name")
+    done
+}
+
 echo '======================================'
 echo ' 宇星商城 yxshop 自动升级'
 echo '======================================'
@@ -32,12 +86,15 @@ if ! git rev-parse --verify --quiet "refs/remotes/$UPGRADE_REF^{commit}" >/dev/n
 fi
 echo "本次同步目标：$UPGRADE_REF"
 
+backup_environment
+
 echo '[2/7] 停止服务...'
 bash ./stop.sh
 
 echo "[3/7] 同步 $UPGRADE_REF..."
 # 沿用原有强制同步方式：会覆盖已跟踪文件的本地修改。
 git reset --hard "$UPGRADE_REF"
+restore_environment
 
 echo '[4/7] 安装项目依赖...'
 pnpm install --frozen-lockfile --prod=false
