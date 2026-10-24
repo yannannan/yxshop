@@ -1,6 +1,6 @@
 import { mkdir, mkdtemp, chmod, chown, realpath, rm } from 'node:fs/promises';
 import { resolve, join, relative, isAbsolute } from 'node:path';
-import type { Browser, BrowserContext } from 'puppeteer-core';
+import type { Browser } from 'puppeteer-core';
 import { openVideoProxy } from './video-proxy';
 import { douyinCanonicalUrl, douyinDataVideo, douyinPageVideo, douyinRestriction, isDouyinPage, type PublicVideoPage } from './video-public-pages';
 import { VideoError } from './video-options';
@@ -14,7 +14,7 @@ export async function inspectFirefoxVideo(source: string, runtime: FirefoxRuntim
   const temporary = resolve('vendor/video-engine/browser-temporary');
   await mkdir(temporary, { recursive: true });
   const profile = await mkdtemp(join(temporary, 'firefox-'));
-  let browser: Browser | undefined, context: BrowserContext | undefined;
+  let browser: Browser | undefined;
   let proxy: Awaited<ReturnType<typeof openVideoProxy>> | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined, finished = false;
   const report = (stage: string) => { if (probe && diagnostics) console.error(`[Firefox启动检查] ${stage}`); };
@@ -26,7 +26,7 @@ export async function inspectFirefoxVideo(source: string, runtime: FirefoxRuntim
       await chown(profile, worker.uid, worker.gid);
     }
     await chmod(profile, 0o700);
-    proxy = await openVideoProxy();
+    proxy = await openVideoProxy({ browserAuthentication: true });
     const budget = probe ? 90000 : Math.max(1000, timeout);
     const proxyUrl = new URL(proxy.server), deadline = Date.now() + budget;
     const environment: NodeJS.ProcessEnv = { ...process.env, TMPDIR: temporary, TMP: temporary, TEMP: temporary, HOME: profile, XDG_RUNTIME_DIR: profile, XDG_CACHE_HOME: profile, XDG_CONFIG_HOME: profile, YX_VIDEO_FIREFOX_BINARY: runtime.executable };
@@ -46,11 +46,17 @@ export async function inspectFirefoxVideo(source: string, runtime: FirefoxRuntim
         // 沙箱采用当前 Firefox 默认策略，不降低级别。
       },
     });
-    report('BiDi 会话已建立，正在创建隔离上下文。');
-    context = await browser.createBrowserContext();
-    report('隔离上下文已建立，正在创建页面。');
-    const page = await context.newPage(), douyin = isDouyinPage(new URL(source).hostname), urls = new Set<string>();
+    report('BiDi 会话已建立，正在读取本次新进程的初始空白页。');
+    // 每次调用都有独立进程和 mkdtemp 档案，不复用其他任务的状态。
+    // Firefox 启动已创建 about:blank，避免再走一次 browsingContext.create。
+    const context = browser.defaultBrowserContext();
+    const initial = (await context.pages()).find(page => !page.isClosed() && page.url() === 'about:blank');
+    const page = initial || await context.newPage(), douyin = isDouyinPage(new URL(source).hostname), urls = new Set<string>();
+    report(initial ? '已复用本次新进程的空白页，准备检查页面脚本。' : '本次新进程没有空白页，已创建新页面。');
     await page.authenticate({ username: proxy.username, password: proxy.password });
+    report('页面认证处理器已就绪，正在完成本机代理握手（不请求外网）。');
+    const authenticated = await page.goto(proxy.authenticationUrl, { waitUntil: 'domcontentloaded', timeout: Math.min(10000, Math.max(1000, deadline - Date.now())) });
+    if (authenticated?.status() !== 200) throw new VideoError('网页解析代理认证失败，请管理员检查视频引擎', 503);
     await page.setViewport({ width: 1365, height: 900 });
     if (probe) {
       report('正在检查 about:blank 和页面脚本。');
@@ -105,7 +111,7 @@ export async function inspectFirefoxVideo(source: string, runtime: FirefoxRuntim
   } finally {
     report('关闭本次浏览器、代理并清理匿名档案。');
     finished = true; clearTimeout(timer);
-    await context?.close().catch(() => {}); await browser?.close().catch(() => {}); await proxy?.close().catch(() => {});
+    await browser?.close().catch(() => {}); await proxy?.close().catch(() => {});
     const actual = await realpath(profile), child = relative(await realpath(temporary), actual);
     if (!isAbsolute(child) && !child.startsWith('..') && /^firefox-[^/\\]+$/.test(child)) await rm(actual, { recursive: true, force: true });
   }

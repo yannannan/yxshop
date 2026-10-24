@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
+import * as fileSystem from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import vm from 'node:vm';
 import ts from 'typescript';
@@ -16,23 +17,23 @@ function load(file, mocks, processMock = process, globals = {}) {
 const publicPages = load('../lib/video-public-pages.ts', {});
 const source = 'https://www.douyin.com/video/7692515320217407402';
 const video = { aweme_id: '7692515320217407402', desc: '匿名公开视频', video: { duration: 5000, play_addr: { url_list: ['https://cdn.example/public.mp4'] } } };
-function harness({ data = { aweme_detail: video }, root = false, launchError = false, coldStart = false } = {}) {
-  const state = { browserClosed: 0, contextClosed: 0, proxyClosed: 0, removed: [], navigations: [], budgets: [], diagnostics: [] };
+function harness({ data = { aweme_detail: video }, root = false, launchError = false, coldStart = false, initialPage = true, createError = false, authenticationStatus = 200, realProfiles = false } = {}) {
+  const state = { browserClosed: 0, contextClosed: 0, proxyClosed: 0, removed: [], navigations: [], budgets: [], diagnostics: [], newPageCalls: 0, launches: 0 };
   let responseHandler;
   const page = {
     authenticate: async credentials => { state.credentials = credentials; }, setViewport: async () => {}, setRequestInterception: async value => { state.intercept = value; },
     on(name, handler) { if (name === 'response') responseHandler = handler; else if (name === 'request') state.request = handler; },
-    async goto(url) { state.navigations.push(url); responseHandler?.({ url: () => 'https://www.douyin.com/aweme/v1/web/aweme/detail/', headers: () => ({}), status: () => 200, content: async () => Buffer.from(JSON.stringify(data)) }); await Promise.resolve(); },
-    content: async () => '', isClosed: () => false, url: () => source,
+    async goto(url) { state.navigations.push(url); responseHandler?.({ url: () => 'https://www.douyin.com/aweme/v1/web/aweme/detail/', headers: () => ({}), status: () => 200, content: async () => Buffer.from(JSON.stringify(data)) }); await Promise.resolve(); return { status: () => authenticationStatus }; },
+    content: async () => '', isClosed: () => false, url: () => state.navigations.at(-1) || 'about:blank',
     evaluate: async fn => fn.toString().includes('document.title') ? { title: '标题', urls: [], userAgent: 'Firefox/158' } : 'Firefox/158',
   };
-  const context = { newPage: async () => page, close: async () => { state.contextClosed++; } };
-  const browser = { createBrowserContext: async () => context, close: async () => { state.browserClosed++; } };
+  const context = { pages: async () => initialPage ? [page] : [], newPage: async () => { state.newPageCalls++; if (createError) throw Error('browsingContext.create timed out'); return page; }, close: async () => { state.contextClosed++; } };
+  const browser = { defaultBrowserContext: () => context, createBrowserContext: async () => { throw Error('不应在全新进程中再次创建隔离上下文'); }, close: async () => { state.browserClosed++; } };
   state.api = load('../lib/video-firefox.ts', {
     './video-options': options, './video-public-pages': publicPages,
-    './video-proxy': { openVideoProxy: async () => ({ server: 'http://127.0.0.1:12345', username: 'video', password: 'temporary', close: async () => { state.proxyClosed++; } }) },
-    'puppeteer-core': { __esModule: true, default: { launch: async config => { state.launch = config; if (launchError) throw Error('launch failed'); if (coldStart && config.protocolTimeout <= 10000) throw Error('session.new timed out'); return browser; } } },
-    'node:fs/promises': { mkdir: async () => {}, mkdtemp: async prefix => `${prefix}123456`, chmod: async () => {}, chown: async (...args) => { state.owner = args; }, realpath: async value => value, rm: async path => { state.removed.push(path); } },
+    './video-proxy': { openVideoProxy: async config => { state.proxyConfig = config; return { server: 'http://127.0.0.1:12345', username: 'video', password: 'temporary', authenticationUrl: 'http://video-proxy.invalid/random-handshake', close: async () => { state.proxyClosed++; } }; } },
+    'puppeteer-core': { __esModule: true, default: { launch: async config => { state.launch = config; state.launches++; if (launchError) throw Error('launch failed'); if (coldStart && config.protocolTimeout <= 10000) throw Error('session.new timed out'); return browser; } } },
+    'node:fs/promises': realProfiles ? { ...fileSystem, rm: async (path, options) => { state.removed.push(path); await fileSystem.rm(path, options); } } : { mkdir: async () => {}, mkdtemp: async prefix => `${prefix}123456`, chmod: async () => {}, chown: async (...args) => { state.owner = args; }, realpath: async value => value, rm: async path => { state.removed.push(path); } },
   }, { ...process, platform: root ? 'linux' : 'win32', getuid: () => root ? 0 : 1000, env: { MOZ_DISABLE_CONTENT_SANDBOX: '1' } }, {
     AbortSignal: { timeout: value => { state.budgets.push(value); return AbortSignal.timeout(value); } },
     console: { ...console, error: value => state.diagnostics.push(value) },
@@ -49,7 +50,7 @@ test('CentOS Firefox 解析匹配视频，代理无本机豁免、禁止直接�
   assert.equal(state.launch.extraPrefsFirefox['media.peerconnection.enabled'], false);
   assert.equal(state.launch.extraPrefsFirefox['security.sandbox.content.level'], undefined);
   assert.equal(state.launch.env.MOZ_DISABLE_CONTENT_SANDBOX, undefined);
-  assert.equal(state.credentials.password, 'temporary'); assert.equal(state.proxyClosed, 1); assert.equal(state.contextClosed, 1); assert.equal(state.browserClosed, 1); assert.equal(state.removed.length, 1);
+  assert.equal(state.credentials.password, 'temporary'); assert.equal(state.proxyClosed, 1); assert.equal(state.contextClosed, 0); assert.equal(state.browserClosed, 1); assert.equal(state.removed.length, 1);
   let aborted = false, continued = false;
   state.request({ url: () => 'file:///etc/passwd', resourceType: () => 'document', abort: async () => { aborted = true; }, continue: async () => { continued = true; } });
   await Promise.resolve(); assert.ok(aborted); assert.equal(continued, false);
@@ -74,9 +75,17 @@ test('Firefox 启动失败或作品仅好友可见时仍释放浏览器、代理
   await assert.rejects(restricted.api.inspectFirefoxVideo(source, { executable: '/project/firefox' }, 15000), error => error.status === 403 && /好友/.test(error.message));
   assert.equal(restricted.browserClosed, 1); assert.equal(restricted.proxyClosed, 1); assert.equal(restricted.removed.length, 1);
 });
-test('启动自检只访问 about:blank，不连接业务库或请求真实网站', async () => {
+test('启动自检只进行本机代理握手和 about:blank，不连接业务库或真实网站', async () => {
   const state = harness(); const result = await state.api.inspectFirefoxVideo(source, { executable: '/project/firefox' }, 10000, true);
-  assert.equal(result.referer, 'about:blank'); assert.deepEqual(state.navigations, ['about:blank']); assert.equal(state.proxyClosed, 1);
+  assert.equal(result.referer, 'about:blank'); assert.deepEqual(state.navigations, ['http://video-proxy.invalid/random-handshake', 'about:blank']); assert.equal(state.proxyClosed, 1);
+  assert.equal(state.proxyConfig.browserAuthentication, true);
+});
+
+test('代理握手失败不访问视频源站，释放本次进程、代理及档案', async () => {
+  const state = harness({ authenticationStatus: 403 });
+  await assert.rejects(state.api.inspectFirefoxVideo(source, { executable: '/project/firefox' }, 24000), /代理认证失败/);
+  assert.deepEqual(state.navigations, ['http://video-proxy.invalid/random-handshake']);
+  assert.equal(state.browserClosed, 1); assert.equal(state.proxyClosed, 1); assert.equal(state.removed.length, 1);
 });
 
 test('冷启动自检不再用10秒会话限制，允许60秒握手且总预算90秒', async () => {
@@ -101,6 +110,33 @@ test('诊断仅在自检显式开启，输出阶段与浏览器stderr，启动�
   await assert.rejects(failed.api.inspectFirefoxVideo(source, { executable: '/project/firefox' }, 12000, true, true), /launch failed/);
   assert.equal(failed.proxyClosed, 1); assert.equal(failed.removed.length, 1);
   assert.ok(failed.diagnostics.some(value => value.includes('清理匿名档案')));
+});
+
+test('自检和真实解析都使用各自新进程的初始空白页，不触发额外页面创建', async () => {
+  for (const probe of [true, false]) {
+    const state = harness({ createError: true });
+    const result = await state.api.inspectFirefoxVideo(source, { executable: '/project/firefox' }, 24000, probe);
+    assert.ok(result); assert.equal(state.newPageCalls, 0); assert.equal(state.launches, 1);
+    assert.equal(state.browserClosed, 1); assert.equal(state.removed.length, 1);
+  }
+});
+
+test('只有启动时没有空白页才新建页面，创建失败仍关闭本次进程和代理', async () => {
+  const fallback = harness({ initialPage: false }); await fallback.api.inspectFirefoxVideo(source, { executable: '/project/firefox' }, 24000, true);
+  assert.equal(fallback.newPageCalls, 1); assert.equal(fallback.browserClosed, 1);
+  const failed = harness({ initialPage: false, createError: true });
+  await assert.rejects(failed.api.inspectFirefoxVideo(source, { executable: '/project/firefox' }, 24000, true), /browsingContext.create/);
+  assert.equal(failed.browserClosed, 1); assert.equal(failed.proxyClosed, 1); assert.equal(failed.removed.length, 1);
+});
+
+test('同时解析各有独立真实临时档案和浏览器生命周期，结束只删除各自档案', async () => {
+  const first = harness({ realProfiles: true }), second = harness({ realProfiles: true });
+  await Promise.all([first, second].map(state => state.api.inspectFirefoxVideo(source, { executable: '/project/firefox' }, 24000, true)));
+  assert.notEqual(first.launch.userDataDir, second.launch.userDataDir);
+  for (const state of [first, second]) {
+    assert.equal(state.launches, 1); assert.equal(state.browserClosed, 1); assert.equal(state.removed.length, 1);
+    await assert.rejects(fileSystem.stat(state.launch.userDataDir), { code: 'ENOENT' });
+  }
 });
 test('浏览器配置识别 Firefox，拒绝跨操作系统路径记录，保留旧 Chromium 记录兼容', async () => {
   function runtime(record, env = {}) { return load('../lib/video-browser.ts', { './video-options': options, './video-public-pages': publicPages, './video-network': {}, './video-proxy': {}, 'node:fs/promises': { readFile: async () => JSON.stringify(record), access: async () => {} } }, { ...process, platform: 'linux', env }); }

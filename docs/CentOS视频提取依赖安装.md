@@ -104,6 +104,30 @@ node --env-file=.env.mysql scripts/check-video-link.mjs --runtime --diagnostic
 
 57项Firefox / 视频解析 / 权益与OSS业务检查、修改文件ESLint及生产构建通过。全项目TypeScript仍报原有20项错误，本轮修改文件没有新增错误；还原本轮类型检查生成的tsconfig.tsbuildinfo，不混入提交。未启动商城、未运行真实浏览器或连接服务器 / 数据库；本地模拟冷启动通过不能称为CentOS启动已修好。按约定提交并合并本地main，不自动推送。
 
+## Firefox 页面创建超时与代理认证
+
+后续完整日志已确认BiDi会话及额外上下文均建立，卡在`browsingContext.create`；同时出现`PromptListener`没有browsingContext和`promptAuth`堆栈。这与项目启动代理立即返回407、页面创建后才调用`authenticate`的顺序冲突一致，但尚不能断言它是这台CentOS的唯一故障。另有用户命名空间不可用及`crashreporter`要求GLIBC_2.18的真实限制；后者属于崩溃报告子程序，不能据此把已建立的主浏览器会话说成完全无法启动。IndexedDB和RemoteSettings的Shutdown信息属于关闭阶段。
+
+本轮改动同时应用于真实提取与启动自检：
+
+- 每次任务仍启动全新进程、使用独立mkdtemp档案，只复用该新进程已有的about:blank，避免再创建上下文 / 页面；结束关闭整个进程并清理档案，不与其他用户共享状态。
+- Firefox代理模式对普通未认证HTTP / CONNECT直接返回403，避免后台请求触发密码弹窗；仅每个任务随机生成的握手地址发407。页面认证处理器就绪后访问该地址，由本机代理直接响应200，不解析DNS、不访问外网；随后使用同一代理的认证缓存。其他解析引擎保持原认证流程，所有真实请求继续检查并固定公网IP，不允许未认证流量通行。
+- 动态库诊断仅为ldd子进程补充Firefox同目录的私有库搜索路径，并单独检查crashreporter，避免将已随包提供的libmoz等文件误报为缺少系统包。参考[Mozilla库路径说明](https://firefox-source-docs.mozilla.org/tools/fuzzing/fuzzing_interface.html)和[Mozilla代理认证源码](https://github.com/mozilla-firefox/firefox/blob/main/netwerk/protocol/http/nsHttpChannelAuthProvider.cpp)。不修改系统库、沙箱或sysctl。
+
+新的忽略产物`vendor/video-engine/offline-bundles/video-firefox-proxy-startup-20261024.tar.gz`为7954字节，SHA256为`20b25fe10d695a9a668d950fdb4466f739ddb76ce551bc65ab999c973808b071`。只包含`lib/video-firefox.ts`、`lib/video-proxy.ts`、`scripts/check-video-link.mjs`，不含密钥、二进制、数据库或生成产物，也不替换前一包的名字。上传服务器项目根目录后：
+
+```bash
+cd /home/www/yxshop/yxshopdev
+tar -xzf video-firefox-proxy-startup-20261024.tar.gz
+node --env-file=.env.mysql scripts/check-video-link.mjs --runtime --diagnostic
+```
+
+用户当前诊断已能读到本机运行记录，通常不需要重新登记；只有提示没有运行记录时才执行`node scripts/setup-video-engine.mjs --browser --firefox`，复用已安装的相同版本。这里不重跑upgrade、不重装Firefox / yt-dlp或重编译FFmpeg。CLI自检直接加载源码，能验证实际代理握手、页面脚本和关闭清理。若仍超时，保留最早错误与卡住阶段，不以继续加超时或关闭沙箱代替定位。
+
+只有自检明确输出“Firefox启动检查通过”后，才继续独立sh的`--check`以及商城的生产构建 / 重启、真实公开视频与OSS下载验收。在线运行的旧dist不会因解压源码立即更新；完成后还须将修复同步至服务器实际使用的origin/master，再恢复日常upgrade，避免reset将补丁覆盖。
+
+本轮62项相关检查及ESLint、生产构建通过，包含真实本机HTTP / CONNECT握手拒绝策略、并发档案隔离及失败清理；没有运行真实浏览器、连接用户服务器或业务数据库。全项目类型检查仍为原有20项问题，修改文件无新增错误。包内容与源码逐字节核对，未将模拟通过称为CentOS已修好。
+
 ## 自动处理的内容
 
 1. 检测系统、x86_64 架构及 Node >=22.13，保留现有 Node 和 pnpm。脚本目标为 CentOS 7 与 Stream 9/10；其他架构和退役的 CentOS Linux 8 暂不自动安装。

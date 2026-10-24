@@ -5,9 +5,12 @@ import { videoUrlAddress } from './video-network';
 
 // 解析子进程的所有 HTTP(S) 请求均经过本机临时代理；DNS 检查后固定公网 IP。
 // 代理仅绑定回环地址，随机凭据只交给当前解析进程，不接受浏览器用户指定代理。
-export async function openVideoProxy() {
+export async function openVideoProxy({ browserAuthentication = false } = {}) {
   const password = randomBytes(24).toString('hex');
   const expected = Buffer.from(`Basic ${Buffer.from(`video:${password}`).toString('base64')}`);
+  // Firefox 在页面的认证处理器就绪前也会发后台请求；这些请求不能触发无界面密码弹窗。
+  // 仅当前任务的随机本地握手地址返回407，其他未认证请求一律拒绝；不放宽公网校验。
+  const authenticationUrl = browserAuthentication ? `http://video-proxy.invalid/${randomBytes(24).toString('hex')}` : '';
   const sockets = new Set<Socket>();
   let requests = 0, transferred = 0, uploaded = 0, closed = false;
   const authenticated = (headers: IncomingHttpHeaders) => {
@@ -20,8 +23,15 @@ export async function openVideoProxy() {
     else { transferred += data.length; if (transferred > 48 * 1024 ** 2) socket.destroy(); }
   });
   const server = createServer(async (req, res) => {
-    if (!authenticated(req.headers)) { res.writeHead(407, { 'Proxy-Authenticate': 'Basic realm="video"' }).end(); return; }
+    if (!authenticated(req.headers)) {
+      if (browserAuthentication && req.url !== authenticationUrl) res.writeHead(403).end();
+      else res.writeHead(407, { 'Proxy-Authenticate': 'Basic realm="video"' }).end();
+      return;
+    }
     if (++requests > 400 || closed || !['GET', 'POST', 'HEAD', 'OPTIONS'].includes(req.method || '')) { res.writeHead(429).end(); return; }
+    if (authenticationUrl && req.url === authenticationUrl) {
+      res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' }).end('video-proxy-ready'); return;
+    }
     try {
       const { url, address } = await videoUrlAddress(req.url || '');
       if (url.protocol !== 'http:') throw new Error('CONNECT required');
@@ -35,7 +45,9 @@ export async function openVideoProxy() {
   });
   server.on('connection', socket => { track(socket); socket.setTimeout(20000, () => socket.destroy()); });
   server.on('connect', async (req, socket, head) => {
-    if (!authenticated(req.headers)) { socket.end('HTTP/1.1 407 Proxy Authentication Required\r\nProxy-Authenticate: Basic realm="video"\r\n\r\n'); return; }
+    if (!authenticated(req.headers)) {
+      socket.end(browserAuthentication ? 'HTTP/1.1 403 Forbidden\r\n\r\n' : 'HTTP/1.1 407 Proxy Authentication Required\r\nProxy-Authenticate: Basic realm="video"\r\n\r\n'); return;
+    }
     if (++requests > 400 || closed) { socket.destroy(); return; }
     try {
       const target = req.url || '';
@@ -53,7 +65,7 @@ export async function openVideoProxy() {
   const address = server.address();
   if (!address || typeof address === 'string') { server.close(); throw new Error('视频网络通道无法启动'); }
   return {
-    server: `http://127.0.0.1:${address.port}`, username: 'video', password,
+    server: `http://127.0.0.1:${address.port}`, username: 'video', password, authenticationUrl,
     url: `http://video:${password}@127.0.0.1:${address.port}`,
     async close() { closed = true; for (const socket of sockets) socket.destroy(); await new Promise<void>(resolve => server.close(() => resolve())); },
   };

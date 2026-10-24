@@ -126,3 +126,37 @@ test('临时代理拒绝无凭据及内网 CONNECT，合法连接固定到校验
     assert.match(await tunnel('example.com:443'), /200/); assert.equal(targets[0].host, '8.8.8.8'); assert.equal(targets[0].port, 443);
   } finally { await proxy.close(); }
 });
+
+test('Firefox后台未认证流量直接拒绝，只有本任务握手发407且不访问外网', async () => {
+  const checks = [], targets = [];
+  const proxyApi = load('../lib/video-proxy.ts', {
+    './video-network': { videoUrlAddress: async url => { checks.push(url); if (url === 'https://example.com:443/') return { url: new URL(url), address: { address: '8.8.8.8', family: 4 } }; throw Error('blocked'); } },
+    'node:net': { connect(config) { targets.push(config); const socket = new PassThrough(); socket.setTimeout = () => socket; queueMicrotask(() => socket.emit('connect')); return socket; } },
+  });
+  const proxy = await proxyApi.openVideoProxy({ browserAuthentication: true });
+  const other = await proxyApi.openVideoProxy({ browserAuthentication: true });
+  const auth = `Basic ${Buffer.from(`${proxy.username}:${proxy.password}`).toString('base64')}`;
+  const http = (path, authorization = '') => new Promise((resolve, reject) => {
+    const request = httpRequest(proxy.server, { path, headers: authorization ? { 'Proxy-Authorization': authorization } : {} }, response => {
+      const chunks = []; response.on('data', chunk => chunks.push(chunk));
+      response.on('end', () => resolve({ status: response.statusCode, headers: response.headers, body: Buffer.concat(chunks).toString() }));
+    }); request.on('error', reject); request.end();
+  });
+  const tunnel = (target, authorization = '') => new Promise((resolve, reject) => {
+    const socket = tcpConnect(Number(new URL(proxy.server).port), '127.0.0.1');
+    socket.on('error', reject); socket.on('data', chunk => { socket.destroy(); resolve(chunk.toString()); });
+    socket.on('connect', () => socket.write(`CONNECT ${target} HTTP/1.1\r\nHost: ${target}\r\n${authorization ? `Proxy-Authorization: ${authorization}\r\n` : ''}\r\n`));
+  });
+  try {
+    for (const url of ['http://firefox-background.example/', other.authenticationUrl]) {
+      const denied = await http(url); assert.equal(denied.status, 403); assert.equal(denied.headers['proxy-authenticate'], undefined);
+    }
+    assert.match(await tunnel('example.com:443'), /403/); assert.deepEqual(checks, []);
+    const challenge = await http(proxy.authenticationUrl); assert.equal(challenge.status, 407); assert.match(challenge.headers['proxy-authenticate'], /Basic/);
+    const accepted = await http(proxy.authenticationUrl, auth); assert.equal(accepted.status, 200); assert.equal(accepted.body, 'video-proxy-ready');
+    assert.equal(accepted.headers['cache-control'], 'no-store'); assert.deepEqual(checks, []);
+    assert.match(await tunnel('127.0.0.1:443', auth), /403/); assert.deepEqual(targets, []);
+    assert.match(await tunnel('example.com:443', auth), /200/); assert.equal(targets[0].host, '8.8.8.8');
+    assert.notEqual(proxy.authenticationUrl, other.authenticationUrl); assert.notEqual(proxy.password, other.password);
+  } finally { await proxy.close(); await other.close(); }
+});

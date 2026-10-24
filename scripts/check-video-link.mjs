@@ -31,9 +31,13 @@ async function runtimeDiagnostics(runtime) {
       console.error('[Firefox诊断] 专用账号可以创建用户命名空间。');
     } catch (error) { console.error(`[Firefox诊断] 专用账号无法创建用户命名空间：${(error.stderr || error.message).trim()}`); }
   }
-  for (const name of ['firefox', 'libxul.so']) {
+  for (const name of ['firefox', 'libxul.so', 'crashreporter']) {
+    const target = join(dirname(runtime.executable), name);
+    if (!existsSync(target)) continue;
     try {
-      const { stdout } = await execute('ldd', [join(dirname(runtime.executable), name)], { timeout: 10000, maxBuffer: 64000 });
+      // Firefox 启动器会加载同目录的私有库；直接ldd libxul会把这些库误报为缺失。
+      const env = { ...process.env, LD_LIBRARY_PATH: [dirname(runtime.executable), process.env.LD_LIBRARY_PATH].filter(Boolean).join(':') };
+      const { stdout } = await execute('ldd', [target], { env, timeout: 10000, maxBuffer: 64000 });
       const missing = stdout.split(/\r?\n/).filter(line => /not found|version .* not found/i.test(line));
       console.error(`[Firefox诊断] ${name} 动态库：${missing.length ? missing.join('; ') : '未发现缺失项'}`);
     } catch (error) { console.error(`[Firefox诊断] ${name} 动态库检查失败：${(error.stderr || error.stdout || error.message).trim().slice(0, 2000)}`); }
