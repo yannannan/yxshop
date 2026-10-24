@@ -13,15 +13,31 @@ echo '======================================'
 echo ' 宇星商城 yxshop 自动升级'
 echo '======================================'
 
-echo '[1/7] 停止服务...'
+echo '[1/7] 获取最新代码并检查同步分支...'
+CURRENT_BRANCH="$(git symbolic-ref --quiet --short HEAD || true)"
+if [[ -z "$CURRENT_BRANCH" ]]; then
+    echo '当前处于游离 HEAD，请先切换到要发布的分支。商城尚未停止。' >&2
+    exit 1
+fi
+UPGRADE_REF="$(git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null || true)"
+UPGRADE_REF="${UPGRADE_REF:-origin/$CURRENT_BRANCH}"
+if [[ "$UPGRADE_REF" != origin/* ]]; then
+    echo "当前分支跟踪 $UPGRADE_REF，升级脚本只从 origin 更新。请先确认分支配置。商城尚未停止。" >&2
+    exit 1
+fi
+git fetch origin
+if ! git rev-parse --verify --quiet "refs/remotes/$UPGRADE_REF^{commit}" >/dev/null; then
+    echo "未找到远程分支 $UPGRADE_REF，请检查当前分支和 origin 配置。商城尚未停止。" >&2
+    exit 1
+fi
+echo "本次同步目标：$UPGRADE_REF"
+
+echo '[2/7] 停止服务...'
 bash ./stop.sh
 
-echo '[2/7] 获取最新代码...'
-git fetch origin
-
-echo '[3/7] 同步 origin/main...'
+echo "[3/7] 同步 $UPGRADE_REF..."
 # 沿用原有强制同步方式：会覆盖已跟踪文件的本地修改。
-git reset --hard origin/main
+git reset --hard "$UPGRADE_REF"
 
 echo '[4/7] 安装项目依赖...'
 pnpm install --frozen-lockfile --prod=false

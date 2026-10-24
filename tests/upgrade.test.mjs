@@ -14,7 +14,7 @@ const quote = value => `'${slashes(value).replaceAll("'", "'\\''")}'`;
 const upgrade = readFileSync(new URL('../upgrade.sh', import.meta.url), 'utf8').replaceAll('\r\n', '\n');
 const videoInstaller = readFileSync(new URL('../scripts/install-video-deps-centos.sh', import.meta.url), 'utf8').replaceAll('\r\n', '\n');
 
-async function fixture(t) {
+async function fixture(t, branch = 'main') {
   const root = await mkdtemp(join(process.cwd(), '.upgrade-test-'));
   t.after(async () => {
     const actual = await realpath(root), child = relative(process.cwd(), actual);
@@ -39,15 +39,15 @@ async function fixture(t) {
   for (const key of Object.keys(env)) if (key.toUpperCase() === 'PATH') delete env[key];
   Object.assign(env, { PATH: `${bin}${delimiter}${process.env.PATH || process.env.Path}`, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: join(root, 'git-config'), UPGRADE_TRACE: slashes(trace), NODE_BIN: slashes(process.execPath) });
   const git = async (cwd, ...args) => execute('git', args, { cwd, env, windowsHide: true });
-  await git(root, 'init', '--bare', remote); await git(seed, 'init', '-b', 'main');
+  await git(root, 'init', '--bare', remote); await git(seed, 'init', '-b', branch);
   await git(seed, 'config', 'user.name', 'Upgrade test'); await git(seed, 'config', 'user.email', 'upgrade@example.invalid'); await git(seed, 'config', 'core.autocrlf', 'false');
-  await git(seed, 'add', '.'); await git(seed, 'commit', '-m', 'base'); await git(seed, 'remote', 'add', 'origin', remote); await git(seed, 'push', 'origin', 'main');
-  await git(root, 'clone', '-b', 'main', remote, client); await git(client, 'config', 'core.autocrlf', 'false');
+  await git(seed, 'add', '.'); await git(seed, 'commit', '-m', 'base'); await git(seed, 'remote', 'add', 'origin', remote); await git(seed, 'push', 'origin', branch);
+  await git(root, 'clone', '-b', branch, remote, client); await git(client, 'config', 'core.autocrlf', 'false');
   await writeFile(join(client, '.env.mysql'), 'keep-server-environment'); await mkdir(join(client, 'uploads')); await writeFile(join(client, 'uploads/keep.txt'), 'keep-user-upload');
   async function publish(extra) {
     await writeFile(join(seed, 'app.txt'), 'v2\n'); await writeFile(join(seed, '.next/routes.d.ts'), 'types-v2\n');
     if (extra) await extra(seed);
-    await git(seed, 'add', '.'); await git(seed, 'commit', '-m', 'new release'); await git(seed, 'push', 'origin', 'main');
+    await git(seed, 'add', '.'); await git(seed, 'commit', '-m', 'new release'); await git(seed, 'push', 'origin', branch);
   }
   async function run(args = [], overrides = {}) {
     try { const result = await execute(bash, [slashes(join(client, 'upgrade.sh')), ...args], { cwd: root, env: { ...env, ...overrides }, timeout: 30000, windowsHide: true }); return { ...result, code: 0 }; }
@@ -66,16 +66,65 @@ async function fixture(t) {
   return { root, client, seed, trace, git, publish, run, runVideo, events: async () => (await readFile(trace, 'utf8')).trim().split(/\r?\n/).filter(Boolean).map(line => line.trim()) };
 }
 
-test('恢复单一升级流程，强制同步 main 后只调用一次独立 video 脚本，保留环境与上传文件', async t => {
+test('main 分支按现有跟踪关系升级，只调用一次独立 video 脚本，保留环境与上传文件', async t => {
   const f = await fixture(t); await f.publish();
   await writeFile(join(f.client, '.next/routes.d.ts'), 'local-generated-draft\n');
   await writeFile(join(f.client, 'app.txt'), 'server-local-edit\n');
   const result = await f.run(); assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stdout, /本次同步目标：origin\/main/);
   assert.equal(await readFile(join(f.client, 'app.txt'), 'utf8'), 'v2\n');
   assert.equal(await readFile(join(f.client, '.env.mysql'), 'utf8'), 'keep-server-environment');
   assert.equal(await readFile(join(f.client, 'uploads/keep.txt'), 'utf8'), 'keep-user-upload');
   assert.equal(await readFile(join(f.client, '.next/routes.d.ts'), 'utf8'), 'types-v2\n');
   assert.deepEqual(await f.events(), ['stop', 'pnpm install --frozen-lockfile --prod=false', 'video-script', 'pnpm build', 'start']);
+});
+
+test('服务器只有 master 时同步 origin/master，不依赖不存在的 origin/main', async t => {
+  const f = await fixture(t, 'master'); await f.publish();
+  const result = await f.run(); assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stdout, /本次同步目标：origin\/master/);
+  assert.equal(await readFile(join(f.client, 'app.txt'), 'utf8'), 'v2\n');
+  assert.deepEqual(await f.events(), ['stop', 'pnpm install --frozen-lockfile --prod=false', 'video-script', 'pnpm build', 'start']);
+});
+
+test('master 已跟踪 origin/master 时不被缓存的 main 或 origin/HEAD 改变目标', async t => {
+  const f = await fixture(t, 'master');
+  const { stdout: base } = await f.git(f.client, 'rev-parse', 'HEAD');
+  await f.git(f.client, 'update-ref', 'refs/remotes/origin/main', base.trim());
+  await f.git(f.client, 'symbolic-ref', 'refs/remotes/origin/HEAD', 'refs/remotes/origin/main');
+  await f.git(f.client, 'branch', '-m', 'deploy');
+  await f.publish();
+  const result = await f.run(); assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stdout, /本次同步目标：origin\/master/);
+  assert.equal(await readFile(join(f.client, 'app.txt'), 'utf8'), 'v2\n');
+});
+
+test('未配置上游时使用当前分支的 origin 同名分支', async t => {
+  const f = await fixture(t, 'master'); await f.publish();
+  await f.git(f.client, 'branch', '--unset-upstream');
+  const result = await f.run(); assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stdout, /本次同步目标：origin\/master/);
+  assert.equal(await readFile(join(f.client, 'app.txt'), 'utf8'), 'v2\n');
+});
+
+test('远程分支缺失或处于游离 HEAD 时提前退出，不停止现有商城', async t => {
+  const f = await fixture(t);
+  await f.git(f.client, 'switch', '-c', 'missing');
+  const missing = await f.run(); assert.notEqual(missing.code, 0);
+  assert.match(missing.stderr, /未找到远程分支 origin\/missing/); assert.match(missing.stderr, /商城尚未停止/);
+  assert.deepEqual(await f.events(), []);
+  await f.git(f.client, 'checkout', '--detach');
+  const detached = await f.run(); assert.notEqual(detached.code, 0); assert.match(detached.stderr, /游离 HEAD/);
+  assert.deepEqual(await f.events(), []);
+});
+
+test('当前分支跟踪其他远程时拒绝混用 origin，不停止现有商城', async t => {
+  const f = await fixture(t);
+  await f.git(f.client, 'remote', 'add', 'other', join(f.root, 'remote.git'));
+  await f.git(f.client, 'fetch', 'other');
+  await f.git(f.client, 'branch', '--set-upstream-to=other/main');
+  const result = await f.run(); assert.notEqual(result.code, 0);
+  assert.match(result.stderr, /当前分支跟踪 other\/main/); assert.deepEqual(await f.events(), []);
 });
 test('video 脚本失败单独提示，仍继续构建和启动商城，不误报视频安装成功', async t => {
   const f = await fixture(t); await f.publish();
@@ -89,10 +138,10 @@ test('不再保留 pull-only 第二种升级模式，错误参数不触发部署
   const result = await f.run(['--pull-only']); assert.equal(result.code, 2); assert.match(result.stderr, /不需要参数/);
   assert.deepEqual(await f.events(), []);
 });
-test('拉取失败按原流程报错退出，不继续执行依赖安装、构建和启动', async t => {
+test('拉取失败在停服前报错退出，不执行依赖安装、构建和启动', async t => {
   const f = await fixture(t);
   await f.git(f.client, 'remote', 'set-url', 'origin', join(f.root, 'missing.git'));
-  const result = await f.run(); assert.notEqual(result.code, 0); assert.deepEqual(await f.events(), ['stop']);
+  const result = await f.run(); assert.notEqual(result.code, 0); assert.deepEqual(await f.events(), []);
 });
 test('项目依赖或构建失败仍中断升级，不将项目失败当作 video 失败忽略', async t => {
   const f = await fixture(t); await f.publish();
