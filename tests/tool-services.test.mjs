@@ -10,6 +10,9 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import * as helpers from '../lib/tool-services.ts';
 import * as points from '../lib/points.ts';
 import * as homepageHelpers from '../lib/homepage-display.ts';
+import * as stampOptions from '../lib/stamp-options.ts';
+import * as videoOptions from '../lib/video-options.ts';
+import * as catalogHelpers from '../lib/catalog.ts';
 
 const require = createRequire(import.meta.url);
 function load(file, mocks, globals = {}) {
@@ -173,6 +176,43 @@ test('客户端路由不可用时，工具卡片、更多和独立目录翻页�
   assert.match(paged, /<a[^>]+href="\/tools\/tool-13.html"/);
   assert.match(paged, /<a href="\/tools\?page=1">上一页<\/a>/);
   assert.equal((paged.match(/class="tool-entry-card"/g) || []).length, 1);
+});
+
+test('跨页客户端路由不可用时，工具工作台、积分及购买页仍能返回工具目录或操作页', async t => {
+  const Link = ({ href, children, ...props }) => {
+    if (href === '/' || /^\/tools(?:[/?]|$)/.test(href)) throw new Error(`工具导航仍依赖客户端路由：${href}`);
+    return React.createElement('a', { href, ...props }, children);
+  };
+  const Image = ({ src, alt }) => React.createElement('img', { src, alt });
+  for (const [file, name, mocks, props, count] of [
+    ['stamp-maker', 'StampMaker', { '../lib/stamp-options': stampOptions, '../lib/tool-services': helpers }, { tool }, 2],
+    ['video-extractor', 'VideoExtractor', { '../lib/video-options': videoOptions, '../lib/tool-services': helpers }, { tool }, 2],
+    ['points-center', 'PointsCenter', { '../lib/points': points }, {}, 1],
+  ]) await t.test(file, () => {
+    const component = load(`../components/${file}.tsx`, { 'next/link': Link, 'next/image': Image, ...mocks });
+    const html = renderToStaticMarkup(React.createElement(component[name], props));
+    assert.equal((html.match(/<a\b[^>]*href="\/tools"/g) || []).length, count);
+  });
+  await t.test('tool-detail', async () => {
+    const page = load('../app/tools/[slug]/page.tsx', {
+      'next/link': Link, 'next/image': Image,
+      'next/navigation': { notFound() { throw Error('404'); }, permanentRedirect() { throw Error('redirect'); } },
+      '@/components/tool-launch': { ToolLaunch: () => null }, '@/components/storefront-header': { StorefrontHeader: () => null },
+      '@/components/stamp-maker': { StampMaker: () => null }, '@/lib/tool-services': helpers, '@/lib/tool-service-data': data,
+    });
+    const html = renderToStaticMarkup(await page.default({ params: Promise.resolve({ slug: 'sample-tool.html' }) }));
+    assert.equal((html.match(/<a\b[^>]*href="\/tools"/g) || []).length, 2);
+  });
+  await t.test('tool-purchase', () => {
+    const product = { ...tool, productType: 'tool', toolSlug: tool.slug, attributesJson: '[]', billingCycle: 'once' };
+    const react = { ...React, useState(initial) { return [initial === null ? product : initial, () => {}]; } };
+    const page = load('../app/product/[id]/page.tsx', {
+      react, 'next/link': Link, 'next/image': Image, 'next/navigation': { useParams: () => ({ id: String(tool.id) }) },
+      '../../../lib/tool-services': helpers, '../../../lib/catalog': catalogHelpers,
+    });
+    const html = renderToStaticMarkup(React.createElement(page.default));
+    assert.match(html, /<a\b[^>]*href="\/tools\/sample-tool.html"/);
+  });
 });
 
 test('商城订单仅允许购买已配置入口的收费工具，金额以服务端配置为准', async () => {

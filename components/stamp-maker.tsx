@@ -137,7 +137,8 @@ export function StampMaker({ tool }: { tool: ToolService }) {
   </section>;
 
   return <main className="stamp-page">
-    <nav className="stamp-breadcrumb" aria-label="面包屑"><Link href="/">商城首页</Link><span>／</span><Link href="/tools">工具服务</Link><span>／</span><span>{tool.name}</span></nav>
+    {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- 工具跨页入口使用原生导航，避免客户端路由异常时点击无反应。 */}
+    <nav className="stamp-breadcrumb" aria-label="面包屑"><a href="/">商城首页</a><span>／</span><a href="/tools">工具服务</a><span>／</span><span>{tool.name}</span></nav>
     <header className="stamp-heading"><div><span className="stamp-kicker">YXSTAR CREATIVE TOOLS</span><h1>{tool.name}</h1><p>选一个样式，写下你的文字。让每一枚印章，都有自己的表达。</p></div><div className="stamp-help"><span>简单三步，完成制作</span><ol><li><b>选择样式</b><p>从经典圆章、椭圆、方章或姓名章开始。</p></li><li><b>调整文字</b><p>编辑文字、配色与排版，查看实时效果。</p></li><li><b>制作并下载</b><p>生成高清 PNG，透明背景便于使用。</p></li></ol></div><div className="stamp-feature-pills"><span>PNG · JPG · SVG</span><span>最高 4096 像素</span><span>预览不扣次</span></div></header>
 
     <div className="stamp-workspace">
@@ -163,7 +164,8 @@ export function StampMaker({ tool }: { tool: ToolService }) {
         {tool.chargeType === 'points' && <section className="stamp-panel stamp-plan-panel"><h2>全工具通用积分</h2><p>本工具每次成功制作消耗 {access?.pointsCost ?? tool.pointsCost} 积分；预览和重复下载免费。</p><p>当前余额：{access?.signedIn ? `${access.pointsBalance} 积分` : '登录后领取 100 积分'}</p>{access?.cycle && <p>优先使用已有本工具会员 / 次数权益。</p>}<Link href={buyHref}>我的积分与充值 →</Link></section>}
         {tool.chargeType === 'paid' && <section className="stamp-panel stamp-plan-panel"><h2>选择工具套餐</h2><p>支付核验后，回到本页刷新权益。</p><div className="stamp-plan-options">{tool.plans.map(plan => <label key={toolPlanKey(plan)} className={selectedPlan === toolPlanKey(plan) ? 'selected' : ''}><input type="radio" name="stamp-plan" checked={selectedPlan === toolPlanKey(plan)} onChange={() => setSelectedPlan(toolPlanKey(plan))} /><span>{toolPlanLabel(plan)}</span><b>{toolPlanPrice(plan)}</b></label>)}</div><Link href={buyHref}>查看套餐与支付方式 →</Link></section>}
         {Boolean(access?.recent.length) && <section className="stamp-panel stamp-recent"><h2>最近制作</h2><p>已生成的成品可以再次下载。</p>{access?.recent.map(item => <button type="button" disabled={busy} key={item.id} onClick={() => void restore(item.id)}><span><b>{item.size} px 印章</b><small>{time(item.createdAt)}</small></span><span>打开 ↗</span></button>)}</section>}
-        <Link className="stamp-back-tools" href="/tools">← 发现更多实用工具</Link>
+        {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- 工具跨页入口使用原生导航，避免客户端路由异常时点击无反应。 */}
+        <a className="stamp-back-tools" href="/tools">← 发现更多实用工具</a>
       </aside>
     </div>
     <section className="stamp-about"><h2>关于印章在线制作</h2><p>在浏览器中设计印章图片，支持圆形、椭圆形、方形和个人姓名章。调整名称、辅助文字、边框与颜色，导出 PNG、JPG 图片或文字已转为轮廓的 SVG 矢量文件。</p>{tool.detail && !tool.detail.includes('实际工具入口') && <p>{tool.detail}</p>}<div><article><h3>预览会消耗积分吗？</h3><p>不会。修改文字、颜色和样式可以免费预览；成功生成成品后才消耗积分或按次权益。</p></article><article><h3>包月、包年如何使用？</h3><p>沿用本工具后台配置的套餐及价格，在有效期内使用；有效时长权益优先于按次权益。</p></article><article><h3>下载失败怎么办？</h3><p>付费制作的成品会保留在最近制作中，同一成品可以重新打开和下载，不会重复扣次。</p></article></div></section>

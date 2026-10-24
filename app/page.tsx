@@ -658,7 +658,8 @@ export default function StorePage() {
         </div>
         <div>
           <b>商城信息</b>
-          <Link href="/tools">工具服务</Link>
+          {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- 工具跨页入口使用原生导航，避免客户端路由异常时点击无反应。 */}
+          <a href="/tools">工具服务</a>
           {isAdmin && <a href="/admin">管理后台</a>}
           <span>© 2026 宇星商城</span>
         </div>

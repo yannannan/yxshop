@@ -345,7 +345,7 @@ test('首页工具翻页按钮确实切换到后 6 个工具，数据缩减不�
   assert.ok(html.includes('/tools/tool-1.html'));
 });
 
-function storefrontHost(globals = {}) {
+function storefrontHost(globals = {}, mocks = {}) {
   const fixtures = Array.from({ length: 26 }, (_, i) => ({ ...products[0], id: i + 1 }));
   const services = Array.from({ length: 26 }, (_, i) => ({ ...technicalHelpers.technicalServices[0], slug: `service-${i + 1}`, title: `技术服务${i + 1}`, homepageFeatured: i < 14 }));
   return hookHost('../app/page.tsx', 'default', {
@@ -360,8 +360,22 @@ function storefrontHost(globals = {}) {
     '../lib/catalog': { ...catalogHelpers, catalog: fixtures },
     '../lib/categories': { ...categoryHelpers, categoryTree: [{ name: '账号服务', children: [{ name: '会员', children: [] }] }, { name: '工具服务', children: [] }] },
     '../lib/technical-services': { ...technicalHelpers, technicalServices: services },
+    ...mocks,
   }, globals);
 }
+
+test('首页页脚的工具入口不依赖客户端路由，工具分类仍可原地切换', () => {
+  const host = storefrontHost({}, { 'next/link': props => {
+    if (props.href === '/tools') throw Error('工具入口仍依赖客户端路由');
+    return React.createElement(Link, props);
+  } });
+  let tree = host.render();
+  assert.match(markup(tree), /<a href="\/tools">工具服务<\/a>/);
+  elements(tree).find(node => node.type === 'button' && textOf(node) === '工具服务').props.onClick();
+  tree = host.render();
+  assert.ok(elements(tree).some(node => node.type === 'button' && textOf(node) === '工具服务' && node.props['aria-pressed'] === true));
+  assert.ok(elements(tree).some(node => node.type === directory.ToolDirectory));
+});
 
 test('首页有有效管理员 Cookie 即显示入口，无需 localStorage 手机号；全部同时保留工具和普通商品',async()=>{
   const host=storefrontHost({window:{localStorage:{getItem:()=>null},location:{search:'',hash:''}},fetch:async url=>Response.json(url==='/api/auth/session'?{authenticated:true,phone:'13800000000',isAdmin:true,isTechnician:false}:url==='/api/products'?products:url==='/api/tools'?tools:url==='/api/homepage-display'?{mode:'grouped',sectionOrder:['tools'],itemOrder:[]}:[])});
