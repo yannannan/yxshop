@@ -128,6 +128,13 @@ FFMPEG_VERSION=9.0.2
 if [[ -x "$ENGINE/ffmpeg" ]] && "$ENGINE/ffmpeg" -version >/dev/null 2>&1; then
     echo '保留项目中已经可运行的 FFmpeg。'
 else
+    FFMPEG_CACHE="$ENGINE/downloads/ffmpeg/$FFMPEG_VERSION"
+    mkdir -p "$FFMPEG_CACHE"
+    [[ "$(readlink -f "$FFMPEG_CACHE")" == "$ENGINE/downloads/ffmpeg/$FFMPEG_VERSION" ]] || fail 'FFmpeg 缓存必须是项目内实际目录，不能使用链接'
+    . "$APP_DIR/scripts/lib/video-download.sh"
+    video_download "https://ffmpeg.org/releases/ffmpeg-$FFMPEG_VERSION.tar.xz" "$FFMPEG_CACHE/ffmpeg-$FFMPEG_VERSION.tar.xz" 104857600
+    video_download "https://ffmpeg.org/releases/ffmpeg-$FFMPEG_VERSION.tar.xz.asc" "$FFMPEG_CACHE/ffmpeg-$FFMPEG_VERSION.tar.xz.asc" 1048576
+    video_download 'https://ffmpeg.org/ffmpeg-devel.asc' "$FFMPEG_CACHE/ffmpeg-devel.asc" 1048576
     BUILD_DIR="$(mktemp -d "$ENGINE/.ffmpeg-build.XXXXXX")"
     cleanup_build() {
         [[ -n "$BUILD_DIR" && -d "$BUILD_DIR" ]] || return 0
@@ -136,14 +143,16 @@ else
         case "$actual" in "$ENGINE"/.ffmpeg-build.*) rm -rf -- "$actual" ;; *) echo '跳过不安全的临时目录清理' >&2 ;; esac
     }
     trap cleanup_build EXIT
-    download() { curl --fail --location --show-error --retry 3 --connect-timeout 20 --max-time 600 --proto '=https' --proto-redir '=https' "$1" -o "$2"; }
-    download "https://ffmpeg.org/releases/ffmpeg-$FFMPEG_VERSION.tar.xz" "$BUILD_DIR/source.tar.xz"
-    download "https://ffmpeg.org/releases/ffmpeg-$FFMPEG_VERSION.tar.xz.asc" "$BUILD_DIR/source.tar.xz.asc"
-    download 'https://ffmpeg.org/ffmpeg-devel.asc' "$BUILD_DIR/release-key.asc"
+    cp -- "$FFMPEG_CACHE/ffmpeg-$FFMPEG_VERSION.tar.xz" "$BUILD_DIR/source.tar.xz"
+    cp -- "$FFMPEG_CACHE/ffmpeg-$FFMPEG_VERSION.tar.xz.asc" "$BUILD_DIR/source.tar.xz.asc"
+    cp -- "$FFMPEG_CACHE/ffmpeg-devel.asc" "$BUILD_DIR/release-key.asc"
     mkdir -m 700 "$BUILD_DIR/gnupg"
-    gpg --batch --homedir "$BUILD_DIR/gnupg" --import "$BUILD_DIR/release-key.asc"
-    gpg --batch --homedir "$BUILD_DIR/gnupg" --status-fd 1 --verify "$BUILD_DIR/source.tar.xz.asc" "$BUILD_DIR/source.tar.xz" >"$BUILD_DIR/signature.txt"
-    grep -q '^\[GNUPG:\] VALIDSIG FCF986EA15E6E293A5644F10B4322F04D67658D8 ' "$BUILD_DIR/signature.txt" || fail 'FFmpeg 官方签名指纹不匹配'
+    if ! gpg --batch --homedir "$BUILD_DIR/gnupg" --import "$BUILD_DIR/release-key.asc" \
+        || ! gpg --batch --homedir "$BUILD_DIR/gnupg" --status-fd 1 --verify "$BUILD_DIR/source.tar.xz.asc" "$BUILD_DIR/source.tar.xz" >"$BUILD_DIR/signature.txt" \
+        || ! grep -q '^\[GNUPG:\] VALIDSIG FCF986EA15E6E293A5644F10B4322F04D67658D8 ' "$BUILD_DIR/signature.txt"; then
+        rm -f -- "$FFMPEG_CACHE/ffmpeg-$FFMPEG_VERSION.tar.xz" "$FFMPEG_CACHE/ffmpeg-$FFMPEG_VERSION.tar.xz.asc" "$FFMPEG_CACHE/ffmpeg-devel.asc"
+        fail 'FFmpeg 官方签名校验失败，未编译 / 安装，已清除未通过校验的下载缓存；请重新下载或上传同版本离线包'
+    fi
     tar -xJf "$BUILD_DIR/source.tar.xz" --no-same-owner -C "$BUILD_DIR"
     (
         cd "$BUILD_DIR/ffmpeg-$FFMPEG_VERSION"

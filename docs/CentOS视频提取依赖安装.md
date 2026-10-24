@@ -42,6 +42,32 @@ bash scripts/install-video-deps-centos.sh --check
 
 脚本失败会返回非零状态，不输出“已完成”，也不会以禁用沙箱或 TLS 校验来掩盖问题。需要能够连接 CentOS 归档源、npm、GitHub、Mozilla 和 FFmpeg 官网。网络受限时保留具体失败输出，以便针对实际来源处理，不是重新执行数据库初始化。
 
+## FFmpeg 慢速下载补装
+
+2026-10-24 用户进一步贴出 curl 日志：11.4MiB 文件平均约14KiB/s，下载到72%时满600秒中断，提示 `Throwing away 8719802 bytes`，之后从头下载。这对应独立sh第4/6步的FFmpeg源码，不是已经修复的yt-dlp下载；按该速度下载完整源码约需14分钟，旧600秒上限不足。
+
+最新sh通过 `scripts/lib/video-download.sh` 下载FFmpeg三份文件，移除600秒总时长和旧curl内建retry；使用CentOS 7 curl 7.29已有的 `--continue-at -`，每轮重试按实际磁盘长度续传，连接超时20秒，连续120秒低于1字节/秒才中断。每次最多3轮，网络失败保留 `.part`，成功缓存源文件；编译临时目录另行清理，不删除下载进度或完整源码。HTTPS / 证书校验继续开启，续传被源站拒绝时安全重下，空响应 / 大小超限不会当成成功。所有缓存、离线文件在编译前都要通过GPG签名和固定官方指纹 `FCF986EA15E6E293A5644F10B4322F04D67658D8`；验证失败停止编译，清除未通过的三份下载缓存，保留原FFmpeg程序。
+
+本机准备了被Git忽略的 `vendor/video-engine/offline-bundles/ffmpeg-centos-source-9.0.2.tar.gz`。先将本次完整代码同步到服务器（包括新helper文件），结束仍在运行的旧安装，再把包上传到服务器项目根目录，执行：
+
+```bash
+cd /home/www/yxshop/yxshopdev
+tar -xzf ffmpeg-centos-source-9.0.2.tar.gz
+bash upgrade.sh
+```
+
+`upgrade.sh`仍仅调用一次原独立video sh，之后继续构建并启动商城；只需补装且商城已正常运行时，继续使用 `bash scripts/install-video-deps-centos.sh`。解包后文件为：
+
+```text
+vendor/video-engine/downloads/ffmpeg/9.0.2/ffmpeg-9.0.2.tar.xz
+vendor/video-engine/downloads/ffmpeg/9.0.2/ffmpeg-9.0.2.tar.xz.asc
+vendor/video-engine/downloads/ffmpeg/9.0.2/ffmpeg-devel.asc
+```
+
+压缩包SHA256：`adfc22343248c7a83ec9fb15c54e19ee5acf56fdd3c696c892da8829f4180bd3`；源码12040788字节，SHA256：`8c3850283eb25fa026482078a04051e0be17347b09ef81a0849bec15a96e002e`。包内仅上述三个普通文件，重新读包核对路径与摘要。本机访问FFmpeg官网时，系统DNS返回172.29.0.67，两个公共DNS均返回另一公网地址；不据此推断用户服务器DNS有问题，不修改系统DNS。此次源码通过MacPorts分发镜像获取，签名和公钥取自FFmpeg官方网站，再由本机GPG实际验证源码并匹配脚本固定指纹；未替换为其他版本或未经验证的构建。验证方法参见 [FFmpeg官方说明](https://www.ffmpeg.org/download.html)，curl兼容选项参见 [curl 7.29官方手册](https://github.com/curl/curl/blob/curl-7_29_0/docs/curl.1)。安装脚本本身仍从FFmpeg官网获取新下载文件，离线包可绕过这次源码下载。
+
+本次53项下载 / 升级 / CentOS回归、修改测试ESLint和两份Bash脚本语法检查通过，新增检查覆盖中断重试、跨进程续传、缓存复用、源站拒绝续传、空文件 / 大小限制、签名 / 指纹失败不编译及编译失败缓存保留。测试使用替身网络 / 编译器，不安装系统包、不运行真实业务或SQL；实际PGP验证单独完成。此包仅含源码 / 签名 / 公钥，仍需在用户CentOS上编译，后续Firefox安装和实际启动仍以服务器验收为准。修复按约定提交并合并本地main，不自动推送。
+
 ## 自动处理的内容
 
 1. 检测系统、x86_64 架构及 Node >=22.13，保留现有 Node 和 pnpm。脚本目标为 CentOS 7 与 Stream 9/10；其他架构和退役的 CentOS Linux 8 暂不自动安装。
