@@ -56,6 +56,29 @@ bash scripts/install-video-deps-centos.sh --check
 
 ## 验收与边界
 
+2026-10-24 用户最新完整日志进一步确认：系统库和 devtoolset 已安装，当前失败发生在第3/6步下载 yt-dlp 2026.10.21，原脚本超过120秒中断；FFmpeg / Firefox 后续步骤尚未执行。商城仍完成构建并启动（PID14682），所以反复进入补装的原因是依赖安装未完成。日志中的 `No package libX11-xcb available` 未使本轮 yum 退出，不是本次中止位置。
+
+下载逻辑已修复：已可运行的 yt-dlp 直接保留，不下载或自动更新；缺失时流式下载，单次最多600秒、最多尝试3次，优先使用 GitHub 官方资产 API 的二进制接口，官方发行地址作为回退，不使用第三方下载代理或关闭 TLS 校验。下载必须通过同一发行版本 SHA256 / 长度校验，并验证版本命令能运行后，才原子替换目标。小型元数据 / 校验清单也重试。
+
+版本、清单和已校验下载保存在 `vendor/video-engine/downloads/yt-dlp/`；重跑复用完整缓存，失败残片清理，旧引擎保留。版本自检超时提高至30秒，失败会显示检查路径及错误代码，便于区分缺文件和启动异常。FFmpeg 继续保留现有可运行文件，Firefox 安装器复用本机对应版本缓存。
+
+同步本次完整代码后，可只执行下面命令补装，不需要再次停止已经启动的商城：
+
+```bash
+bash scripts/install-video-deps-centos.sh
+```
+
+如果服务器始终无法下载 GitHub 文件，可在能访问官方发行页的电脑取得**同一版本**的 Linux x64 `yt-dlp_linux` 和 `SHA2-256SUMS`，上传至服务器以下目录，再重跑相同 sh，无需新安装模式或 Docker：
+
+```text
+vendor/video-engine/downloads/yt-dlp/offline/yt-dlp_linux
+vendor/video-engine/downloads/yt-dlp/offline/SHA2-256SUMS
+```
+
+离线包仍逐字节验证 SHA256，错误清单或不匹配文件拒绝安装。当前日志版本为 [官方2026.10.21发行页](https://github.com/yt-dlp/yt-dlp/releases/tag/2026.10.21)，不能拿 Windows 的 yt-dlp.exe 放到 Linux。官方 API 下载方式见 [GitHub 文档](https://docs.github.com/en/rest/releases/assets#get-a-release-asset)。
+
+本次34项安装 / 下载 / CentOS后端回归、修改脚本ESLint和Bash语法检查通过；当前Windows机器实际通过新官方API下载对应Windows版本、核对摘要并运行版本命令成功，临时验证目录已删除。这不等于用户CentOS服务器上的网络、FFmpeg编译或Firefox启动已验收；仍以服务器最后显示“视频提取依赖安装及启动检查通过”为准。
+
 本轮在 Windows 上通过新 Firefox 后端实际提取并下载抖音公开作品 `7692515320217407402`，无需抖音登录。另有模拟 CentOS / root 账号、代理、失败清理、权限限制和跨系统路径的回归检查，以及 Bash 语法检查。
 
 助手没有连接用户服务器执行系统安装，尚未在用户这台 CentOS 7 / 3.10 内核上实机验收。最终以脚本在服务器上的系统库安装、FFmpeg 编译和实际 Firefox 启动检查结果为准；不能将本地下载成功说成服务器部署已经成功。

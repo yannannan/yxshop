@@ -121,7 +121,7 @@ if [[ "$MAJOR" == 7 ]]; then
 fi
 echo '[2/6] 按项目锁文件安装 JavaScript 依赖'
 pnpm install --frozen-lockfile --prod=false
-echo '[3/6] 安装官方 yt-dlp（校验 SHA256）'
+echo '[3/6] 检查 / 安装官方 yt-dlp（已可用则保留，下载校验 SHA256）'
 "$NODE_BIN" scripts/setup-video-engine.mjs
 echo '[4/6] 准备 Linux FFmpeg（从签名源码本机编译，兼容当前 glibc）'
 FFMPEG_VERSION=9.0.2
@@ -162,7 +162,7 @@ else
     cleanup_build
     BUILD_DIR=""
 fi
-echo '[5/6] 安装 Mozilla Firefox 原生兼容引擎'
+echo '[5/6] 准备 Mozilla Firefox 原生兼容引擎（复用已安装版本缓存）'
 export YX_VIDEO_WORKER=yxshop-video
 if ! id "$YX_VIDEO_WORKER" >/dev/null 2>&1; then
     useradd --system --no-create-home --home-dir /nonexistent --shell /sbin/nologin "$YX_VIDEO_WORKER"
