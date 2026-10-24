@@ -402,13 +402,14 @@ test('独立页面输出商场导航、SEO、三步流程及真实操作入口',
   const metadata=await page.generateMetadata({params:Promise.resolve({slug:'video-extractor.html'})});assert.ok(metadata.description.includes('B站'));assert.match(metadata.alternates.canonical,/video-extractor\.html$/);
   assert.equal(tools.builtInToolEntry('video-extractor'),'/tools/video-extractor.html');
 });
-test('页面解析不发提取请求，连点不重复提交，网络失败重试沿用原任务编号',async()=>{
-  const slots=[],effects=[],requests=[];let cursor=0,fail=true;
+test('页面解析保持等待且不发提取请求，连点不重复提交，网关超时明确提示且可重试',async()=>{
+  const slots=[],effects=[],requests=[];let cursor=0,fail=true,gateway=false,finishParsing;
+  const pendingParsing=new Promise(resolve=>{finishParsing=resolve;});
   const react={...React,useState(initial){const i=cursor++;if(!(i in slots))slots[i]=typeof initial==='function'?initial():initial;return[slots[i],value=>{slots[i]=typeof value==='function'?value(slots[i]):value;}];},useRef(initial){const i=cursor++;return slots[i]??={current:initial};},useCallback:fn=>fn,useEffect:fn=>effects.push(fn)};
   const access={signedIn:true,canExtract:true,chargeType:'points',pointsBalance:100,pointsCost:10,history:[],page:1,total:0,engineReady:true,mergeReady:true,maxSizeMb:200};
   const preview={id:previewId,title:'测试视频',source:'www.bilibili.com',sourceUrl:'https://www.bilibili.com/video/BVabc',duration:20,expiresAt:future(),coverUrl:'',formats:[{id:'direct',label:'720p MP4',height:720,extension:'mp4',size:1000}]};
   const component=load('../components/video-extractor.tsx',{react,'next/link':()=>null,'next/image':()=>null,'../lib/tool-services':tools,'../lib/video-options':options},{fetch:async(url,config)=>{
-    if(config?.method==='POST'){const body=JSON.parse(config.body);requests.push(body);if(body.action==='analyze')return Response.json({preview});if(fail)throw Error('网络中断');return Response.json({task:{...taskRow(),id:body.id,title:'测试视频',status:'ready',downloadUrl:'/api/tools/video-extractor/download?id='+body.id,expiresAt:future(),format:'720p',size:1000,pointsSpent:10}});}
+    if(config?.method==='POST'){const body=JSON.parse(config.body);requests.push(body);if(body.action==='analyze')return gateway?new Response('<html>Gateway Timeout</html>',{status:504}):pendingParsing;if(fail)throw Error('网络中断');return Response.json({task:{...taskRow(),id:body.id,title:'测试视频',status:'ready',downloadUrl:'/api/tools/video-extractor/download?id='+body.id,expiresAt:future(),format:'720p',size:1000,pointsSpent:10}});}
     if(url.includes('?task='))return Response.json({message:'尚未找到任务'},{status:404});return Response.json(access);
   }});
   const render=()=>{cursor=0;effects.length=0;return component.VideoExtractor({tool:{id:4,name:'链接视频提取工具',plans:[],chargeType:'points'}});};
@@ -418,11 +419,16 @@ test('页面解析不发提取请求，连点不重复提交，网络失败重�
   const flush=()=>new Promise(resolve=>setImmediate(resolve));
   render();effects[0]();await flush();
   all(render()).find(node=>node.type==='textarea').props.onChange({target:{value:'https://www.bilibili.com/video/BVabc'}});
-  button(render(),'开始解析').props.onClick();await flush();assert.deepEqual(requests.map(r=>r.action),['analyze']);
+  const analyze=button(render(),'开始解析');analyze.props.onClick();analyze.props.onClick();await flush();assert.deepEqual(requests.map(r=>r.action),['analyze']);
+  assert.match(text(render()),/1–2 分钟/);assert.equal(button(render(),'正在解析').props.disabled,true);
+  finishParsing(Response.json({preview}));await flush();
   let extract=button(render(),'提取视频');extract.props.onClick();extract.props.onClick();await flush();
   assert.equal(requests.filter(r=>r.action==='extract').length,1);const previous=requests.at(-1).id;
   fail=false;button(render(),'提取视频').props.onClick();await flush();assert.equal(requests.at(-1).id,previous);
   assert.ok(all(render()).some(node=>node.type==='a'&&node.props.href==='/api/tools/video-extractor/download?id='+previous));
+  gateway=true;button(render(),'开始解析').props.onClick();await flush();
+  assert.match(text(render()),/服务响应超时或连接中断/);assert.doesNotMatch(text(render()),/Unexpected token|Gateway Timeout/);
+  assert.equal(button(render(),'开始解析').props.disabled,false);
 });
 
 test('超过旧 24 小时期限的 OSS 历史仍显示下载和长期保存，本地旧记录保持过期提示',()=>{

@@ -18,8 +18,8 @@ function load(file, mocks, processMock = process, globals = {}) {
 const publicPages = load('../lib/video-public-pages.ts', {});
 const source = 'https://www.douyin.com/video/7692515320217407402';
 const video = { aweme_id: '7692515320217407402', desc: '匿名公开视频', video: { duration: 5000, play_addr: { url_list: ['https://cdn.example/public.mp4'] } } };
-function harness({ data = { aweme_detail: video }, root = false, launchError = false, coldStart = false, initialPage = true, createError = false, authenticationStatus = 200, realProfiles = false, bodyError = false, timing } = {}) {
-  const state = { browserClosed: 0, contextClosed: 0, proxyClosed: 0, removed: [], navigations: [], budgets: [], diagnostics: [], newPageCalls: 0, launches: 0 };
+function harness({ data = { aweme_detail: video }, root = false, launchError = false, coldStart = false, initialPage = true, createError = false, authenticationStatus = 200, realProfiles = false, bodyError = false, timing, scriptHtml = '' } = {}) {
+  const state = { browserClosed: 0, contextClosed: 0, proxyClosed: 0, removed: [], navigations: [], budgets: [], diagnostics: [], newPageCalls: 0, launches: 0, fullPageReads: 0, dataScriptReads: 0 };
   const timers = new Map(); let now = 0, sequence = 0, readyAt = Infinity, emitted = false, requestAt = Infinity;
   function advance(ms) {
     now += ms;
@@ -36,8 +36,8 @@ function harness({ data = { aweme_detail: video }, root = false, launchError = f
     on(name, handler) { if (name === 'response') responseHandler = handler; else if (name === 'request') state.request = handler; },
     async goto(url) { state.navigations.push(url); if (timing) { if (url.includes('video-proxy.invalid')) advance(800); else { readyAt = now + timing.detailAfter; if (Number.isFinite(readyAt)) requestAt = now + 500; advance(1200); } } else emitResponse(); await Promise.resolve(); return { status: () => authenticationStatus }; },
     async reload() { state.reloads = (state.reloads || 0) + 1; if (timing) { readyAt = now + timing.detailAfter; advance(1200); } return { status: () => 200 }; },
-    content: async () => '', isClosed: () => Boolean(state.pageClosed), url: () => state.navigations.at(-1) || 'about:blank',
-    evaluate: async fn => fn.toString().includes('verificationPrompt') ? { titleLength: 2, videoCount: 0, verificationPrompt: true, loginPrompt: false } : fn.toString().includes('document.title') ? { title: '标题', urls: [], userAgent: 'Firefox/158' } : 'Firefox/158',
+    content: async () => { state.fullPageReads++; return ''; }, isClosed: () => Boolean(state.pageClosed), url: () => state.navigations.at(-1) || 'about:blank',
+    evaluate: async fn => { if (fn.toString().includes('scripts.join')) { state.dataScriptReads++; return scriptHtml; } return fn.toString().includes('verificationPrompt') ? { titleLength: 2, videoCount: 0, verificationPrompt: true, loginPrompt: false } : fn.toString().includes('document.title') ? { title: '标题', urls: [], userAgent: 'Firefox/158' } : 'Firefox/158'; },
   };
   const context = { pages: async () => initialPage ? [page] : [], newPage: async () => { state.newPageCalls++; if (createError) throw Error('browsingContext.create timed out'); return page; }, close: async () => { state.contextClosed++; } };
   const browser = { defaultBrowserContext: () => context, createBrowserContext: async () => { throw Error('不应在全新进程中再次创建隔离上下文'); }, close: async () => { state.browserClosed++; if (timing) state.pageClosed = true; } };
@@ -109,17 +109,17 @@ test('冷启动自检不再用10秒会话限制，允许60秒握手且总预算9
   assert.equal(state.launch.dumpio, false); assert.deepEqual(state.diagnostics, []);
 });
 
-test('实际解析仍受请求总预算约束，不跟随安装自检放大到90秒', async () => {
+test('实际解析遵守调用方传入的预算，协议操作不超过该预算', async () => {
   const state = harness({ coldStart: true }); await state.api.inspectFirefoxVideo(source, { executable: '/project/firefox' }, 24000);
-  assert.equal(state.launch.timeout, 20000); assert.equal(state.launch.protocolTimeout, 20000); assert.deepEqual(state.budgets, [24000]);
+  assert.equal(state.launch.timeout, 24000); assert.equal(state.launch.protocolTimeout, 24000); assert.deepEqual(state.budgets, [24000]);
   assert.equal(state.launch.dumpio, false); assert.deepEqual(state.diagnostics, []);
 });
 
-test('复现Linux冷启动15秒：原24秒漏掉延迟作品数据，新完整解析在55秒窗口内成功', async () => {
+test('复现Linux冷启动15秒：原24秒漏掉作品，新两分钟窗口可等到65秒后作品数据', async () => {
   const old = harness({ timing: { detailAfter: 10000 } });
   assert.equal(await old.api.inspectFirefoxVideo(source, { executable: '/project/firefox' }, 24000, false, true), null);
   assert.ok(old.clock.now() < 25000); assert.equal(old.proxyClosed, 1); assert.equal(old.removed.length, 1);
-  const state = harness({ timing: { detailAfter: 10000 } }), calls = [], probes = [];
+  const state = harness({ timing: { detailAfter: 65000 } }), calls = [], probes = [];
   const api = load('../lib/video-engine.ts', {
     './video-options': options, './video-public-pages': publicPages, './video-kuaishou': {}, './video-hls': {}, './video-proxy': {},
     './video-network': {
@@ -135,17 +135,25 @@ test('复现Linux冷启动15秒：原24秒漏掉延迟作品数据，新完整�
     './video-browser': { videoBrowserExecutable: async () => '/project/firefox', inspectBrowserVideo: async (...args) => { calls.push(args); return state.api.inspectFirefoxVideo(args[0], { executable: '/project/firefox' }, args[1], false, args[2]); } },
   }, process, { Date: { now: state.clock.now }, console: { error() {} } });
   const result = await api.inspectVideo(source, false, true);
-  assert.equal(result.title, '匿名公开视频'); assert.equal(result.formats.length, 1); assert.equal(calls[0][1], 42000);
-  assert.equal(probes[0], Math.min(55000, state.clock.now() - 2000 + 20000)); assert.ok(state.clock.now() < 55000);
-  assert.ok(state.clock.now() > 24000); assert.equal(state.reloads || 0, 0);
-  assert.match(state.diagnostics.join('\n'), /页面解析剩余 26200ms/); assert.match(state.diagnostics.join('\n'), /匹配媒体 1 个/);
+  assert.equal(result.title, '匿名公开视频'); assert.equal(result.formats.length, 1); assert.equal(calls[0][1], 105000);
+  assert.equal(probes[0], Math.min(120000, state.clock.now() - 2000 + 20000)); assert.ok(state.clock.now() < 120000);
+  assert.ok(state.clock.now() > 80000); assert.equal(state.reloads || 0, 0);
+  assert.equal(state.fullPageReads, 0); assert.ok(state.dataScriptReads < 40);
+  assert.match(state.diagnostics.join('\n'), /页面解析剩余 89200ms/); assert.match(state.diagnostics.join('\n'), /匹配媒体 1 个/);
   assert.equal(state.browserClosed, 1); assert.equal(state.proxyClosed, 1); assert.equal(state.removed.length, 1);
 });
 
-test('冷启动后始终没有作品数据时按预算退出，一次延迟刷新且保留结果诊断并清理', async () => {
+test('Firefox只读取数据脚本也能匹配当前作品，无需反复序列化整个动态页面', async () => {
+  const state = harness({ data: {}, scriptHtml: `<script>window._ROUTER_DATA=${JSON.stringify({ aweme_detail: video })};</script>` });
+  const result = await state.api.inspectFirefoxVideo(source, { executable: '/project/firefox' }, 105000);
+  assert.equal(result.page.title, '匿名公开视频'); assert.equal(result.page.media.length, 1);
+  assert.equal(state.fullPageReads, 0); assert.equal(state.dataScriptReads, 1); assert.equal(state.browserClosed, 1);
+});
+
+test('两分钟配置下无作品数据仍按105秒浏览器预算退出，刷新一次并清理', async () => {
   const state = harness({ timing: { detailAfter: Infinity } });
-  assert.equal(await state.api.inspectFirefoxVideo(source, { executable: '/project/firefox' }, 42000, false, true), null);
-  assert.ok(state.clock.now() >= 40000 && state.clock.now() <= 42000); assert.equal(state.reloads, 1);
+  assert.equal(await state.api.inspectFirefoxVideo(source, { executable: '/project/firefox' }, 105000, false, true), null);
+  assert.ok(state.clock.now() >= 103000 && state.clock.now() <= 105000); assert.equal(state.reloads, 1);
   assert.match(state.diagnostics.join('\n'), /页面解析耗时.*作品接口 0 次/);
   assert.equal(state.proxyClosed, 1); assert.equal(state.removed.length, 1); assert.equal(state.browserClosed, 1);
 });

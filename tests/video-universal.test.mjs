@@ -80,14 +80,14 @@ test('抖音完整解析将显式诊断传给网页引擎，媒体日志只输�
     ...base,
     './video-network': { ...network, videoUrlAddress: async () => ({}), videoResponse: async url => ({ url, response: stream(url.includes('douyin.com') ? Buffer.from('<html>公开壳页</html>') : media, url.includes('douyin.com') ? { 'content-type': 'text/html' } : {}) }) },
     './video-browser': { videoBrowserExecutable: async () => '/unused', inspectBrowserVideo: async (...args) => { calls.push(args); return { page: publicPages.douyinDataVideo({ aweme_detail: video }, source), referer: source, userAgent: 'Firefox/158', urls: [] }; } },
-  }, { console: { error: (...args) => logs.push(args.join(' ')) } });
+  }, { Date: { now: () => 0 }, console: { error: (...args) => logs.push(args.join(' ')) } });
   const result = await api.inspectVideo(source, false, true);
-  assert.equal(result.formats.length, 1); assert.equal(calls[0][2], true); assert.equal(calls[0][1], 42000);
+  assert.equal(result.formats.length, 1); assert.equal(calls[0][2], true); assert.equal(calls[0][1], 105000);
   assert.match(logs.join('\n'), /公开页.*媒体 0 个/); assert.match(logs.join('\n'), /网页引擎返回 媒体候选 1 个/);
   assert.doesNotMatch(logs.join('\n'), /cdn\.example|temporary|User-Agent/);
 });
 
-test('前段读取耗时后缩短浏览器预算，媒体多候选仍共享原55秒截止时间', async () => {
+test('前段读取耗时后缩短浏览器预算，媒体多候选共享两分钟截止时间', async () => {
   let now = 0; const calls = [], probes = [];
   const api = load('../lib/video-engine.ts', {
     ...base,
@@ -103,7 +103,28 @@ test('前段读取耗时后缩短浏览器预算，媒体多候选仍共享原55
     } },
   }, { Date: { now: () => now } });
   const result = await api.inspectVideo(source);
-  assert.deepEqual(calls, [15000]); assert.deepEqual(probes, [55000, 55000]); assert.equal(now, 55000); assert.equal(result.formats.length, 2);
+  assert.deepEqual(calls, [75000]); assert.deepEqual(probes, [120000, 120000]); assert.equal(now, 120000); assert.equal(result.formats.length, 2);
+});
+
+test('解析窗口默认120秒，60至120秒可配置，非法值回退且不能无限占用浏览器', () => {
+  for (const [value, expected] of [[undefined, 120000], ['', 120000], ['bad', 120000], ['Infinity', 120000], ['-1', 120000], ['0', 120000], ['30', 60000], ['60', 60000], ['90', 90000], ['120', 120000], ['999', 120000]]) {
+    const api = load('../lib/video-engine.ts', base, { process: { ...process, env: { VIDEO_ANALYSIS_TIMEOUT_SECONDS: value } } });
+    assert.equal(api.videoAnalysisTimeout(), expected, String(value));
+  }
+});
+
+test('浏览器已耗时105秒后平台回退仍可运行，但只使用剩余13秒并释放代理', async () => {
+  let now = 0, closed = 0; const timeouts = [];
+  const api = load('../lib/video-engine.ts', {
+    ...base,
+    './video-network': { ...network, videoUrlAddress: async () => ({}), videoResponse: async url => ({ url, response: stream(Buffer.from('<html>公开壳页</html>')) }) },
+    './video-browser': { videoBrowserExecutable: async () => '/unused', inspectBrowserVideo: async (_url, budget) => { now += budget; return null; } },
+    './video-proxy': { openVideoProxy: async () => ({ url: 'http://protected-proxy', close: async () => { closed++; } }) },
+    'node:fs/promises': { access: async () => {}, stat: async () => ({ isFile: () => true }) },
+    'node:child_process': { execFile(_file, _args, config, callback) { timeouts.push(config.timeout); now += 10000; callback(null, { stdout: JSON.stringify({ title: '平台回退成功', formats: [{ url: 'https://cdn.example/video', ext: 'mp4', vcodec: 'avc1', acodec: 'aac' }] }) }); } },
+  }, { Date: { now: () => now }, process: { ...process, env: {} } });
+  const result = await api.inspectVideo(source);
+  assert.equal(result.title, '平台回退成功'); assert.deepEqual(timeouts, [13000]); assert.equal(now, 115000); assert.equal(closed, 1);
 });
 
 test('HLS 多画质及独立音轨按实际地址解析，支持相对路径', () => {

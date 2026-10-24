@@ -41,7 +41,7 @@ export async function inspectFirefoxVideo(source: string, runtime: FirefoxRuntim
     for (const name of Object.keys(environment)) if (/^MOZ_DISABLE_.*SANDBOX$/.test(name)) delete environment[name];
     report(`准备浏览器进程和 BiDi 会话；本次总预算 ${budget}ms。`);
     browser = await puppeteer.launch({ browser: 'firefox', protocol: 'webDriverBiDi', executablePath: worker ? runtime.launcher : runtime.executable,
-      headless: true, userDataDir: profile, timeout: probe ? 60000 : Math.min(20000, budget), protocolTimeout: probe ? 60000 : Math.min(20000, budget), env: environment,
+      headless: true, userDataDir: profile, timeout: probe ? 60000 : Math.min(30000, budget), protocolTimeout: probe ? 60000 : Math.min(30000, budget), env: environment,
       signal: AbortSignal.timeout(Math.max(1, deadline - Date.now())), dumpio: probe && diagnostics,
       extraPrefsFirefox: {
         'network.proxy.type': 1, 'network.proxy.http': proxyUrl.hostname, 'network.proxy.http_port': Number(proxyUrl.port),
@@ -73,7 +73,7 @@ export async function inspectFirefoxVideo(source: string, runtime: FirefoxRuntim
     }
     report(`浏览器与代理已就绪；页面解析剩余 ${Math.max(0, deadline - Date.now())}ms。`);
     await page.setRequestInterception(true);
-    let detail: PublicVideoPage | null = null, restriction = '', reloaded = false, apiRequests = 0, apiResponses = 0, bodyFailures = 0;
+    let detail: PublicVideoPage | null = null, restriction = '', reloaded = false, apiRequests = 0, apiResponses = 0, bodyFailures = 0, nextPageRead = 0;
     const started = Date.now();
     timer = setTimeout(() => { report(`解析总预算已用尽；作品接口 ${apiResponses} 次，响应体失败 ${bodyFailures} 次，匹配媒体 ${detail ? (detail as PublicVideoPage).media.length : 0} 个。`); finished = true; void browser?.close().catch(() => {}); }, Math.max(1, deadline - Date.now()));
     page.on('request', request => {
@@ -114,8 +114,29 @@ export async function inspectFirefoxVideo(source: string, runtime: FirefoxRuntim
     await page.goto(douyin ? douyinCanonicalUrl(source) || source : source, { waitUntil: 'domcontentloaded', timeout: Math.min(14000, Math.max(1000, deadline - Date.now())) }).then(response => { report(`视频页面导航响应 ${response?.status() || 0}。`); }).catch(error => { report(`视频页面导航未完成：${failureType(error)}。`); });
     while (!finished && !page.isClosed() && Date.now() < deadline - 1000 && !detail && !restriction && !urls.size) {
       // 慢机器先等待首次加载；过早刷新会中断尚未返回的作品请求。
-      if (douyin && !reloaded && !apiRequests && !apiResponses && Date.now() - started > 12000 && deadline - Date.now() > 8000) { reloaded = true; report('首次加载12秒仍无作品接口请求，尝试一次刷新。'); await page.reload({ waitUntil: 'domcontentloaded', timeout: Math.min(8000, deadline - Date.now()) }).catch(() => {}); }
-      if (douyin) { const found = douyinPageVideo(await page.content().catch(() => ''), source); if (found.media.length || found.imagePost) detail = found; }
+      if (douyin && !reloaded && !apiRequests && !apiResponses && Date.now() - started > 12000 && deadline - Date.now() > 8000) {
+        reloaded = true; const reloadStarted = Date.now(); report('首次加载12秒仍无作品接口请求，尝试一次刷新。');
+        await page.reload({ waitUntil: 'domcontentloaded', timeout: Math.min(8000, deadline - Date.now()) }).then(response => report(`刷新完成，响应 ${response?.status() || 0}，耗时 ${Date.now() - reloadStarted}ms。`)).catch(error => report(`刷新未完成：${failureType(error)}，耗时 ${Date.now() - reloadStarted}ms。`));
+      }
+      if (douyin && !finished && !page.isClosed() && Date.now() < deadline - 1000 && Date.now() >= nextPageRead) {
+        const readStarted = Date.now();
+        // 只取受支持的数据脚本，限制文本量且每2秒读取一次，避免反复序列化整个动态页面。
+        const html = await page.evaluate(() => {
+          const scripts: string[] = []; let characters = 0;
+          for (const script of Array.from(document.querySelectorAll('script')).slice(0, 500)) {
+            const text = script.textContent || '';
+            if (!['RENDER_DATA', 'SIGI_STATE'].includes(script.id) && !/_ROUTER_DATA|__INITIAL_STATE__|SIGI_STATE/.test(text)) continue;
+            if (characters + text.length > 2 * 1024 ** 2) continue;
+            const html = script.outerHTML;
+            if (characters + html.length <= 2 * 1024 ** 2) { scripts.push(html); characters += html.length; }
+          }
+          return scripts.join('');
+        }).catch(() => '');
+        const readFinished = Date.now();
+        const found = douyinPageVideo(html, source); if (found.media.length || found.imagePost) detail = found;
+        if (readFinished - readStarted > 2000 || Date.now() - readFinished > 1000) report(`数据脚本 ${html.length} 字符，浏览器读取 ${readFinished - readStarted}ms，本机解析 ${Date.now() - readFinished}ms。`);
+        nextPageRead = Date.now() + 2000;
+      }
       await page.evaluate(() => { for (const video of document.querySelectorAll('video')) { video.muted = true; void video.play().catch(() => {}); } }).catch(() => {});
       await new Promise(resolve => setTimeout(resolve, 350));
     }

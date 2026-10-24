@@ -190,6 +190,42 @@ bash stop.sh && pnpm build && bash start.sh
 
 当前服务器origin/master尚未确认包含补丁，直接upgrade可能重置掉手动补丁，应在同步代码源后再恢复日常升级。本轮没有修改upgrade、安装脚本、依赖、收费配置或Nginx，无需SQL。70项视频回归及3项严格生产检查、ESLint、构建通过；虚拟时钟复现15秒冷启动后旧24秒失败、新预算成功，以及18秒作品慢响应不刷新、永不返回时退出清理、候选和跳转共用截止时间。未运行真实浏览器或连接服务器 / Bucket / 业务库；全项目类型检查仍为既有20项错误，本轮文件无新增错误，用户原有生成文件改动已保留。
 
+## 2026-10-25 两分钟解析配置与资源快照
+
+用户随后明确提出延长至1–2分钟，并补齐42秒补丁的完整日志：导航200后作品接口始终0次，31321ms开始刷新，69411ms才执行解析总预算用尽回调，70229ms开始清理。回调执行明显晚于设定截止时间，不能简单断言仅等待时间不足，也不能仅据此认定CPU、内存或磁盘是根因。新补丁保留诊断，进一步输出刷新完成 / 失败类型和耗时，以及数据读取 / 本机解析过慢时的耗时；不输出敏感页面内容或媒体签名地址。
+
+等待分配窗口现在默认120秒，可在服务器环境中选填`VIDEO_ANALYSIS_TIMEOUT_SECONDS=60`至`120`，未填或非法值按120秒，超过范围会限制到60–120秒。浏览器最多使用剩余时间减去15秒，默认105秒，给媒体校验或平台程序回退预留时间；平台程序也不再在原53秒截止。Firefox启动及单次协议最多30秒，自检仍独立采用60秒 / 90秒。为减少低配服务器的页面读取开销，每2秒仅读取受支持的数据脚本，文本总量上限为2097152个字符，不再在350ms循环中反复序列化整个动态页面；目标作品匹配、访问限制、代理、专用账号与沙箱保留。
+
+前端原本未设置60秒的Abort超时，现增加1–2分钟的等待说明，继续禁止重复点击解析，并将网关502/504的HTML错误转成清晰提示。实际Nginx原参考配置的`proxy_read_timeout 60s;`会先于两分钟解析结束，项目模板已改为`150s`。解压项目模板不等于修改实际Nginx，请只合并实际`/etc/nginx/conf.d/yxshophttps.conf`的这一项，不用覆盖整站：
+
+```nginx
+proxy_read_timeout 150s;
+```
+
+修改前备份实际站点文件，修改后检查并平滑重新加载：
+
+```bash
+cp -p /etc/nginx/conf.d/yxshophttps.conf "/etc/nginx/conf.d/yxshophttps.conf.video-timeout.$(date +%Y%m%d%H%M%S).bak"
+# 用编辑器在实际反代location中将proxy_read_timeout改为150s，保留其他配置。
+nginx -t && systemctl reload nginx
+```
+
+新包`vendor/video-engine/offline-bundles/video-douyin-two-minute-20261025.tar.gz`，28187字节，SHA256 `db33536ef51dc4aae6413a46a053ffed32b968a61bc72ccd9d5585cfd1e2990d`，含8份源码和示例配置：lib/video-engine.ts、lib/video-browser.ts、lib/video-firefox.ts、lib/video-network.ts、scripts/check-video-link.mjs、components/video-extractor.tsx、.env.mysql.example、deploy/nginx/yxshophttps.conf。真实.env.mysql / .env.local及/etc/nginx不会被覆盖。上传项目根目录后先直接检查同一链接：
+
+```bash
+cd /home/www/yxshop/yxshopdev
+tar -xzf video-douyin-two-minute-20261025.tar.gz &&
+node --env-file=.env.mysql scripts/check-video-link.mjs 'https://v.douyin.com/hxrtY8U4YKo/' --diagnostic
+```
+
+CLI不经过Nginx且直接读源码，这一步无需停服、安装或构建，也不请求业务数据库 / 扣费。成功后再`bash stop.sh && pnpm build && bash start.sh`应用至商城，网页测试前同步实际Nginx等待时间。远程master尚未确认包含手动补丁，暂不使用会reset源码的upgrade。73项视频回归和3项严格生产检查、ESLint / 构建通过，类型检查仍原20项、无本轮文件错误；未运行真实浏览器 / 连接服务器或Bucket，真实抖音提取仍须用户验证，不能仅凭延时配置宣称已打通。
+
+用户资源快照显示内存1756MiB、available719MiB、Swap未使用；vmstat首行是累计平均值，后续4次采样CPU idle99–100%、si/so为0、I/O等待为0；根分区40G、剩725MiB、已用99%，/dev/shm879MiB全空。因此采样时没有CPU或内存耗尽证据，磁盘空间明显不足，但日志未显示ENOSPC，不能将磁盘定为本次提取根因。若快照取于提取退出后，也不能代表提取运行时的峰值。没有自动清理服务器文件或改变内核 / Swap；可先只读查看占用，再依据明确目录决定清理范围：
+
+```bash
+du -xhd1 /home/www/yxshop/yxshopdev /var/log /tmp 2>/dev/null
+```
+
 ## 自动处理的内容
 
 1. 检测系统、x86_64 架构及 Node >=22.13，保留现有 Node 和 pnpm。脚本目标为 CentOS 7 与 Stream 9/10；其他架构和退役的 CentOS Linux 8 暂不自动安装。

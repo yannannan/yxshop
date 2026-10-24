@@ -14,6 +14,10 @@ import { inspectBrowserVideo, videoBrowserExecutable } from './video-browser';
 import { hlsVariants, hlsSegments, hlsMediaHeader } from './video-hls';
 
 const execute = promisify(execFile);
+export function videoAnalysisTimeout() {
+  const seconds = Number(process.env.VIDEO_ANALYSIS_TIMEOUT_SECONDS);
+  return (Number.isFinite(seconds) && seconds > 0 ? Math.max(60, Math.min(120, Math.floor(seconds))) : 120) * 1000;
+}
 export const videoMaxBytes = () => Math.max(20, Math.min(1024, Number(process.env.VIDEO_MAX_FILE_MB) || 200)) * 1024 ** 2;
 const enginePath = () => resolve(process.env.VIDEO_YTDLP_PATH || join(process.cwd(), 'vendor/video-engine', process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp'));
 const mergePath = () => resolve(process.env.VIDEO_FFMPEG_PATH || join(process.cwd(), 'vendor/video-engine', process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg'));
@@ -111,10 +115,10 @@ async function hlsFormats(text: string, url: string, headers: Record<string, str
   return variants.map((variant, index) => ({ id: `hls-${index}`, label: variant.label, extension: 'mp4', height: variant.height, size: 0, parts: [{ url: variant.url, headers, extension: 'mp4', playlist: 'hls' }, ...(variant.audio ? [{ url: variant.audio, headers, extension: 'm4a', playlist: 'hls' as const }] : [])] }));
 }
 async function browserVideo(source: string, started: number, diagnostics = false): Promise<VideoInfo | null> {
-  const deadline = started + 55000, remaining = deadline - Date.now();
+  const deadline = started + videoAnalysisTimeout(), remaining = deadline - Date.now();
   if (diagnostics) console.error(`[视频解析诊断] 网页引擎剩余总预算 ${Math.max(0, remaining)}ms，作品编号 ${douyinVideoId(source) || '非抖音编号链接'}`);
-  // 冷启动 Firefox 可能占用约16秒；在原请求窗口内给页面留出加载时间，另留10秒校验媒体。
-  const browserBudget = Math.min(42000, remaining - 10000);
+  // 默认两分钟分配窗口，包含冷启动；另留15秒校验媒体或回退平台程序。
+  const browserBudget = remaining - 15000;
   if (browserBudget < 3000) return null;
   const result = await inspectBrowserVideo(source, browserBudget, diagnostics);
   if (diagnostics) console.error(`[视频解析诊断] 网页引擎返回 ${result ? `媒体候选 ${result.page.media.length} 个，请求候选 ${result.urls.length} 个` : '空结果'}`);
@@ -136,7 +140,9 @@ async function nativeVideo(source: string, platformUrl: string, started: number,
   if (!health.engineReady) throw new VideoError('平台解析引擎尚未安装，请管理员完成视频引擎安装', 503);
   const proxy = await openVideoProxy();
   try {
-    const { stdout } = await execute(enginePath(), ['--ignore-config', '--no-plugin-dirs', '--no-cache-dir', '--no-remote-components', '--no-js-runtimes', '--js-runtimes', `node:${process.execPath}`, '--proxy', proxy.url, '--geo-verification-proxy', proxy.url, '--no-playlist', '--playlist-items', '1', '--dump-single-json', '--skip-download', '--no-warnings', '--socket-timeout', '10', '--retries', '0', '--extractor-retries', '0', '--use-extractors', 'default', '--', platformUrl], { timeout: Math.min(fast ? 18000 : 40000, Math.max(1000, 53000 - (Date.now() - started))), maxBuffer: 2 * 1024 ** 2, windowsHide: true, cwd: process.cwd() });
+    const remaining = started + videoAnalysisTimeout() - 2000 - Date.now();
+    if (remaining <= 0) throw new VideoError('视频解析等待超时，请稍后重试，解析不扣费', 504);
+    const { stdout } = await execute(enginePath(), ['--ignore-config', '--no-plugin-dirs', '--no-cache-dir', '--no-remote-components', '--no-js-runtimes', '--js-runtimes', `node:${process.execPath}`, '--proxy', proxy.url, '--geo-verification-proxy', proxy.url, '--no-playlist', '--playlist-items', '1', '--dump-single-json', '--skip-download', '--no-warnings', '--socket-timeout', '10', '--retries', '0', '--extractor-retries', '0', '--use-extractors', 'default', '--', platformUrl], { timeout: Math.min(fast ? 18000 : 40000, remaining), maxBuffer: 2 * 1024 ** 2, windowsHide: true, cwd: process.cwd() });
     const metadata = JSON.parse(stdout) as Record<string, unknown>;
     if (metadata.is_live || metadata.live_status === 'is_live' || number(metadata.duration) > 3600 || metadata._type === 'playlist') throw new VideoError('暂不支持直播、合集或超过 60 分钟的视频', 422);
     const formats = engineFormats(metadata, health.mergeReady);
@@ -173,6 +179,7 @@ async function pageVideo(info: PublicVideoPage, sourceUrl: string, referer: stri
 }
 export async function inspectVideo(sourceUrl: string, embedded = false, diagnostics = false): Promise<VideoInfo> {
   const started = Date.now();
+  if (diagnostics) console.error(`[视频解析诊断] 解析总预算 ${videoAnalysisTimeout()}ms（含浏览器冷启动及媒体校验）`);
   await videoUrlAddress(sourceUrl);
   const haokan = isHaokanPage(new URL(sourceUrl).hostname), douyin = isDouyinPage(new URL(sourceUrl).hostname);
   let publicSource = sourceUrl;
@@ -201,7 +208,8 @@ export async function inspectVideo(sourceUrl: string, embedded = false, diagnost
       return await nativeVideo(sourceUrl, platformUrl, started, Boolean(await videoBrowserExecutable()));
     } catch (error) {
       if (diagnostics) console.error('[视频解析诊断] 平台程序未返回结果', (error as Error).name || 'Error');
-      if (error instanceof VideoError && /FFmpeg|直播|60 分钟/.test(error.message)) throw error;
+      if (error instanceof VideoError && (error.status === 504 || /FFmpeg|直播|60 分钟/.test(error.message))) throw error;
+      if (Date.now() - started >= videoAnalysisTimeout() - 2000) throw new VideoError('视频解析等待超时，请稍后重试，解析不扣费', 504);
       if (!douyin) { const found = await browserVideo(sourceUrl, started); if (found) return found; }
       const reason = String((error as { stderr?: string }).stderr || '');
       if (douyin) throw new VideoError(/Unsupported URL/i.test(reason) ? '抖音分享链接未识别到视频编号，请重新复制完整分享链接' : '抖音当前未返回可读取的视频源，请确认作品公开；管理员可检查网页解析引擎是否就绪', 422);
