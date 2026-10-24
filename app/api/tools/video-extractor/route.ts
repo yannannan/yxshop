@@ -3,6 +3,7 @@ import { videoResponse, videoResponseBytes } from '@/lib/video-network';
 import { VideoError, sharedVideoUrl, videoTaskId, type VideoInfo } from '@/lib/video-options';
 import { beginVideoAnalysis, getVideoTool, queueVideoTask, readVideoTask, saveVideoPreview, videoAccess, videoPreviewLimit, videoPreviewRecord, videoUser } from '@/lib/video-service';
 import { PointsError } from '@/lib/points-service';
+import { VideoStorageError } from '@/lib/video-object-storage.mjs';
 
 export const runtime = 'nodejs';
 const headers = { 'Cache-Control': 'private, no-store' };
@@ -16,7 +17,7 @@ async function requestText(request: Request) {
   return Buffer.concat(chunks).toString('utf8');
 }
 function failure(error: unknown) {
-  if (error instanceof VideoError || error instanceof PointsError) return Response.json({ message: error.message }, { status: error.status, headers });
+  if (error instanceof VideoError || error instanceof PointsError || error instanceof VideoStorageError) return Response.json({ message: error.message }, { status: error.status, headers });
   if (error instanceof SyntaxError) return Response.json({ message: '请求参数格式不正确' }, { status: 400, headers });
   const missing = ['ER_NO_SUCH_TABLE', 'ER_BAD_FIELD_ERROR'].includes((error as { code?: string }).code || '');
   console.error('视频提取服务失败', (error as { code?: string }).code || (error as Error).name);

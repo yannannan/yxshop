@@ -2,6 +2,7 @@ import { createReadStream } from 'node:fs';
 import { Readable } from 'node:stream';
 import { VideoError, videoTaskId } from '@/lib/video-options';
 import { videoDownloadFile, videoUser } from '@/lib/video-service';
+import { videoObjectStorage, VideoStorageError } from '@/lib/video-object-storage.mjs';
 
 export const runtime = 'nodejs';
 export async function GET(request: Request) {
@@ -9,7 +10,11 @@ export async function GET(request: Request) {
     const user = await videoUser(request), params = new URL(request.url).searchParams, id = params.get('id');
     if (!user) throw new VideoError('请登录后下载自己的视频', 401);
     if (!videoTaskId(id)) throw new VideoError('视频记录不存在', 404);
-    const { path, size, task } = await videoDownloadFile(user.id, id.toLowerCase());
+    const { path, size, task, storage } = await videoDownloadFile(user.id, id.toLowerCase());
+    if (storage) {
+      const url = await videoObjectStorage.downloadUrl(storage, { userId: user.id, id: id.toLowerCase(), extension: task.file_extension, title: task.title, inline: params.get('inline') === '1' });
+      return new Response(null, { status: 302, headers: { Location: url, 'Cache-Control': 'private, no-store', 'Referrer-Policy': 'no-referrer' } });
+    }
     let start = 0, end = size - 1;
     const range = request.headers.get('range');
     if (range) {
@@ -25,6 +30,7 @@ export async function GET(request: Request) {
     const stream = createReadStream(path, { start, end });
     return new Response(Readable.toWeb(stream) as ReadableStream<Uint8Array>, { status: range ? 206 : 200, headers });
   } catch (error) {
-    return Response.json({ message: error instanceof VideoError ? error.message : '视频读取失败，请稍后重试' }, { status: error instanceof VideoError ? error.status : 503, headers: { 'Cache-Control': 'private, no-store' } });
+    const known = error instanceof VideoError || error instanceof VideoStorageError;
+    return Response.json({ message: known ? error.message : '视频读取失败，请稍后重试' }, { status: known ? error.status : 503, headers: { 'Cache-Control': 'private, no-store' } });
   }
 }

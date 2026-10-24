@@ -85,3 +85,8 @@ test('严格解析拦截缺失 ipaddr.js，真实生产渲染重现页面 500，
   assert.equal(result.pages[0].status, 500); assert.equal(result.pages[0].failed, true);
   assert.ok(result.errors.some(error => error.includes('ipaddr.js')), JSON.stringify(result));
 });
+
+test('生产云视频下载路由可在严格依赖下加载官方 OSS SDK，匿名请求返回 401', { skip: needsBuild }, async () => {
+  const result = await renderPages(['/api/tools/video-extractor/download?id=11111111-1111-4111-8111-111111111111']);
+  assert.equal(result.pages[0].status, 401); assert.equal(result.pages[0].failed, false); assert.deepEqual(result.errors, []);
+});

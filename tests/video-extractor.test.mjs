@@ -14,6 +14,9 @@ import ts from 'typescript';
 import * as options from '../lib/video-options.ts';
 import * as tools from '../lib/tool-services.ts';
 import * as points from '../lib/points.ts';
+import { createVideoObjectStorage, VideoStorageError } from '../lib/video-object-storage.mjs';
+const localStorage = { readiness: () => ({ provider: 'local', ready: true, message: '' }), upload: async () => null, readRecord: () => null };
+const recordReader = createVideoObjectStorage();
 
 const require = createRequire(import.meta.url);
 function load(file, mocks = {}, globals = {}) {
@@ -212,7 +215,7 @@ test('项目内 FFmpeg 可用时，真实合成测试音视频并通过应用合
 
 const entitlement = load('../lib/tool-entitlements.ts', { './tool-services':tools, '@/db/mysql-runtime':{env:{}} });
 function taskRow(patch={}) { return { id,user_id:1,product_id:4,request_hash:'hash',title:'视频',format_label:'720p MP4',format_json:'{}',billing_mode:'points',points_cost:10,status:'processing',progress:90,file_extension:'mp4',file_size:0,charged:0,points_spent:0,error_message:'',created_at:now(),updated_at:now(),expires_at:future(),...patch }; }
-function database({ balance=100, tasks=[taskRow()], mode='points', cost=10, orders=[], fail='', materializeVideo=async()=>{throw new Error('not expected');} }={}) {
+function database({ balance=100, tasks=[taskRow()], mode='points', cost=10, orders=[], fail='', materializeVideo=async()=>{throw new Error('not expected');}, storage=localStorage, removeLocalCopy=async()=>false, commitLoss=false }={}) {
   let state={balance,tasks:structuredClone(tasks),ledger:[],orders:structuredClone(orders),events:[],previews:[]}; const log=[]; let serial=Promise.resolve();
   const query=async(sql,args,connection)=>{
     log.push({sql,args});
@@ -238,7 +241,8 @@ function database({ balance=100, tasks=[taskRow()], mode='points', cost=10, orde
       return [state.tasks.filter(row=>row.id===args[0]&&(args.length===1||row.user_id===args[1]))];
     }
     if(sql.startsWith('UPDATE video_extraction_tasks')){
-      if(sql.includes("status='ready'")){if(fail==='ready')throw Error('ready failed');const row=state.tasks.find(row=>row.id===args[5]);Object.assign(row,{status:'ready',file_size:args[0],charged:args[1],points_spent:args[2]});return [{affectedRows:1}];}
+      if(sql.includes('JSON_SET')){const row=state.tasks.find(row=>row.id===args[1]);const format=JSON.parse(row.format_json);format.storage.localDeletedAt=args[0];row.format_json=JSON.stringify(format);return [{affectedRows:1}];}
+      if(sql.includes("status='ready'")){if(fail==='ready')throw Error('ready failed');const row=state.tasks.find(row=>row.id===args.at(-1));Object.assign(row,{status:'ready',file_size:args[0],charged:args[1],points_spent:args[2]});if(sql.includes('format_json=?'))row.format_json=args[5];return [{affectedRows:1}];}
       if(sql.includes("SET status='processing'")){const row=state.tasks.find(row=>row.id===args[1]&&row.user_id===args[2]&&row.status==='queued');if(row)Object.assign(row,{status:'processing',updated_at:args[0]});return [{affectedRows:row?1:0}];}
       if(sql.includes("SET status='failed'")){const row=state.tasks.find(row=>row.id===args[2]&&row.status!=='ready');if(row)Object.assign(row,{status:'failed',error_message:args[0]});return [{affectedRows:row?1:0}];}
       return [{affectedRows:1}];
@@ -246,9 +250,9 @@ function database({ balance=100, tasks=[taskRow()], mode='points', cost=10, orde
     if(sql.startsWith('DELETE FROM video_extraction_previews'))return [{affectedRows:0}];
     throw Error(`Unexpected SQL ${sql}`);
   };
-  const runtime=load('../db/mysql-runtime.ts',{'mysql2/promise':{createPool:()=>({execute:(sql,args)=>query(sql,args),getConnection:async()=>{const connection={beginTransaction:async()=>{},execute:(sql,args)=>query(sql,args,connection),commit:async()=>{},rollback:async()=>{if(connection.snapshot)state=connection.snapshot;},release:()=>connection.unlock?.()};return connection;}})}},{process:{env:{MYSQL_HOST:'mock',MYSQL_USER:'mock',MYSQL_PASSWORD:'mock',MYSQL_DATABASE:'mock'}}});
+  const runtime=load('../db/mysql-runtime.ts',{'mysql2/promise':{createPool:()=>({execute:(sql,args)=>query(sql,args),getConnection:async()=>{const connection={beginTransaction:async()=>{},execute:(sql,args)=>query(sql,args,connection),commit:async()=>{if(commitLoss){connection.snapshot=null;throw Error('commit response lost');}},rollback:async()=>{if(connection.snapshot)state=connection.snapshot;},release:()=>connection.unlock?.()};return connection;}})}},{process:{env:{MYSQL_HOST:'mock',MYSQL_USER:'mock',MYSQL_PASSWORD:'mock',MYSQL_DATABASE:'mock'}}});
   const pointService=load('../lib/points-service.ts',{'@/db/mysql-runtime':runtime,'@/db/setup':{getVerifiedSessionPhone:()=>null},'./points':points});
-  const service=load('../lib/video-service.ts',{'@/db/mysql-runtime':runtime,'@/db/setup':{getVerifiedSessionPhone:()=>null},'./points-service':pointService,'./tool-entitlements':entitlement,'./video-options':options,'./video-engine':{materializeVideo,videoEngineHealth:async()=>({engineReady:true,mergeReady:true,maxSizeMb:200}),videoStorage:()=>join(process.cwd(),'.video-nonexistent-test'),videoTaskDirectory:()=>join(process.cwd(),'.video-nonexistent-test',id)}});
+  const service=load('../lib/video-service.ts',{'@/db/mysql-runtime':runtime,'@/db/setup':{getVerifiedSessionPhone:()=>null},'./points-service':pointService,'./video-object-storage.mjs':{videoObjectStorage:storage,VideoStorageError},'./video-storage-cleanup.mjs':{cleanVideoStorage:async()=>({localDeleted:0,failed:0}),removeLocalVideoCopy:removeLocalCopy},'./tool-entitlements':entitlement,'./video-options':options,'./video-engine':{materializeVideo,videoEngineHealth:async()=>({engineReady:true,mergeReady:true,maxSizeMb:200}),videoStorage:()=>join(process.cwd(),'.video-nonexistent-test'),videoTaskDirectory:()=>join(process.cwd(),'.video-nonexistent-test',id)}});
   return {service,get state(){return state;},log};
 }
 test('文件成功后才原子扣积分；同任务重复完成不重复扣费，其他账号不可访问',async()=>{
@@ -295,6 +299,44 @@ test('从保存解析、创建任务到文件生成后扣费完整衔接，排�
   complete();for(let i=0;i<30&&db.state.tasks[0].status!=='ready';i++)await new Promise(resolve=>setTimeout(resolve,10));
   assert.equal(db.state.tasks[0].status,'ready');assert.equal(db.state.balance,90);assert.equal(db.state.ledger.length,1);
 });
+
+const storedObject = () => ({provider:'oss',retention:'permanent',bucket:'yxstarshop',region:'oss-cn-shanghai',key:`yxshop/video-extractions/users/1/${id}/result.mp4`,size:1200,sha256:'a'.repeat(64)});
+const cloudStorage = (patch={}) => ({readiness:()=>({provider:'oss',ready:true,message:''}),upload:async()=>storedObject(),readRecord:recordReader.readRecord,remove:async()=>{},...patch});
+async function settled(predicate) { for(let i=0;i<60&&!predicate();i++)await new Promise(resolve=>setTimeout(resolve,10));assert.ok(predicate(),'任务未在预期时间完成'); }
+
+test('OSS 上传和校验期间不扣费；写入云记录及扣费提交之后才删本地，下载无需本地文件',async()=>{
+  let complete,deleted=0;const waiting=new Promise(resolve=>{complete=resolve;});let db;
+  db=database({tasks:[taskRow({status:'queued'})],storage:cloudStorage({upload:async()=>{await waiting;return storedObject();}}),materializeVideo:async()=>({path:'mock-local-video',size:1200}),removeLocalCopy:async()=>{assert.equal(db.state.tasks[0].status,'ready');assert.equal(db.state.balance,90);assert.equal(JSON.parse(db.state.tasks[0].format_json).storage.key,storedObject().key);deleted++;}});
+  db.service.startVideoTask(id,1);await new Promise(resolve=>setTimeout(resolve,10));assert.equal(db.state.balance,100);assert.equal(deleted,0);
+  complete();await settled(()=>deleted===1);assert.equal(db.state.balance,90);assert.equal(db.state.ledger.length,1);
+  db.state.tasks[0].expires_at='2000-01-01T00:00:00Z';
+  const task=await db.service.readVideoTask(1,id);assert.equal(task.permanent,true);assert.ok(!JSON.stringify(task).includes('sha256'));assert.ok(!JSON.stringify(task).includes('bucket'));
+  const file=await db.service.videoDownloadFile(1,id);assert.equal(file.path,'');assert.equal(file.storage.key,storedObject().key);
+  await db.service.finishVideoTask(1,id,1200,storedObject());assert.equal(db.state.ledger.length,1);assert.equal(db.state.balance,90);
+});
+
+test('OSS 上传失败不扣分或扣次，并回收失败任务本地临时文件',async()=>{
+  let deleted=0,remoteDeleted=0;
+  const db=database({tasks:[taskRow({status:'queued'})],storage:cloudStorage({upload:async()=>{throw new VideoStorageError('视频上传 OSS 失败，本次未扣费');},remove:async()=>{remoteDeleted++;}}),materializeVideo:async()=>({path:'mock-local-video',size:1200}),removeLocalCopy:async()=>{deleted++;}});
+  db.service.startVideoTask(id,1);await settled(()=>deleted===1);assert.equal(db.state.tasks[0].status,'failed');assert.equal(db.state.balance,100);assert.equal(db.state.ledger.length,0);assert.equal(remoteDeleted,0);
+});
+
+test('OSS 成品状态写入失败回滚积分并补偿云文件；提交响应丢失保留已付费云文件',async()=>{
+  for(const commitLoss of [false,true]){
+    let localDeleted=0,remoteDeleted=0;
+    const db=database({tasks:[taskRow({status:'queued'})],fail:commitLoss?'':'ready',commitLoss,storage:cloudStorage({remove:async()=>{remoteDeleted++;}}),materializeVideo:async()=>({path:'mock-local-video',size:1200}),removeLocalCopy:async()=>{localDeleted++;}});
+    db.service.startVideoTask(id,1);await settled(()=>localDeleted===1);
+    assert.equal(db.state.tasks[0].status,commitLoss?'ready':'failed');assert.equal(db.state.balance,commitLoss?90:100);assert.equal(db.state.ledger.length,commitLoss?1:0);assert.equal(remoteDeleted,commitLoss?0:1);
+  }
+});
+
+test('本地副本删除失败不撤销已成功任务或重复收费；OSS 未配置时阻止新提取',async()=>{
+  let attempts=0;
+  const db=database({tasks:[taskRow({status:'queued'})],storage:cloudStorage(),materializeVideo:async()=>({path:'mock-local-video',size:1200}),removeLocalCopy:async()=>{attempts++;throw Error('busy file');}});
+  db.service.startVideoTask(id,1);await settled(()=>attempts>0);assert.equal(db.state.tasks[0].status,'ready');assert.equal(db.state.balance,90);
+  const disabled=database({tasks:[],storage:cloudStorage({readiness:()=>({provider:'oss',ready:false,message:'视频云存储暂不可用'})})});
+  await assert.rejects(disabled.service.queueVideoTask(1,{id:4,tool_charge_type:'points',tool_points_cost:10},id,previewId,'direct'),/云存储/);assert.equal(disabled.state.tasks.length,0);assert.equal(disabled.state.balance,100);
+});
 test('解析限流包含失败尝试，释放可重入但不重置小时额度；过期成品不提供下载',async()=>{
   const db=database({tasks:[taskRow({status:'ready',expires_at:'2000-01-01T00:00:00Z'})]});
   const a=db.service.beginVideoAnalysis(1),b=db.service.beginVideoAnalysis(1);assert.throws(()=>db.service.beginVideoAnalysis(1),/较多/);a();a();b();
@@ -304,7 +346,7 @@ test('解析限流包含失败尝试，释放可重入但不重置小时额度�
 
 test('API 解析需真实登录，参数错误和依赖缺失清晰返回且不创建提取任务',async()=>{
   let signedIn=false,queued=0,analyzed=0;
-  const route=load('../app/api/tools/video-extractor/route.ts',{'@/lib/video-options':options,'@/lib/video-engine':{inspectVideo:async()=>{analyzed++;throw new options.VideoError('平台解析引擎尚未安装',503);}},'@/lib/video-network':network,'@/lib/points-service':{PointsError:class extends Error{}},'@/lib/video-service':{videoUser:async()=>signedIn?{id:1}:null,getVideoTool:async()=>({id:4}),videoPreviewLimit:async()=>{},beginVideoAnalysis:()=>()=>{},queueVideoTask:async()=>{queued++;}}});
+  const route=load('../app/api/tools/video-extractor/route.ts',{'@/lib/video-object-storage.mjs':{VideoStorageError},'@/lib/video-options':options,'@/lib/video-engine':{inspectVideo:async()=>{analyzed++;throw new options.VideoError('平台解析引擎尚未安装',503);}},'@/lib/video-network':network,'@/lib/points-service':{PointsError:class extends Error{}},'@/lib/video-service':{videoUser:async()=>signedIn?{id:1}:null,getVideoTool:async()=>({id:4}),videoPreviewLimit:async()=>{},beginVideoAnalysis:()=>()=>{},queueVideoTask:async()=>{queued++;}}});
   const post=body=>route.POST(new Request('https://shop.example/api/tools/video-extractor',{method:'POST',body:JSON.stringify(body)}));
   assert.equal((await post({action:'analyze',input:'https://b23.tv/test'})).status,401);signedIn=true;
   assert.equal((await post({action:'analyze',input:'file:///etc/passwd'})).status,400);assert.equal((await post({action:'analyze',input:'https://b23.tv/test'})).status,503);assert.equal(analyzed,1);assert.equal(queued,0);
@@ -312,10 +354,18 @@ test('API 解析需真实登录，参数错误和依赖缺失清晰返回且不�
 });
 test('成品下载鉴权、Range 和文件名编码；下载不触发任何扣费',async t=>{
   const root=await scratch(t),path=join(root,'video.mp4');await writeFile(path,media);let signedIn=true;const calls=[];
-  const route=load('../app/api/tools/video-extractor/download/route.ts',{'@/lib/video-options':options,'@/lib/video-service':{videoUser:async()=>signedIn?{id:1}:null,videoDownloadFile:async(user,uuid)=>{calls.push([user,uuid]);return{path,size:media.length,task:{title:'中文视频',file_extension:'mp4'}};}}});
+  const route=load('../app/api/tools/video-extractor/download/route.ts',{'@/lib/video-object-storage.mjs':{videoObjectStorage:localStorage,VideoStorageError},'@/lib/video-options':options,'@/lib/video-service':{videoUser:async()=>signedIn?{id:1}:null,videoDownloadFile:async(user,uuid)=>{calls.push([user,uuid]);return{path,size:media.length,task:{title:'中文视频',file_extension:'mp4'}};}}});
   const range=await route.GET(new Request(`https://shop.example/api?id=${id}`,{headers:{Range:'bytes=4-11'}}));assert.equal(range.status,206);assert.deepEqual(Buffer.from(await range.arrayBuffer()),media.subarray(4,12));assert.equal(range.headers.get('cache-control'),'private, no-store');assert.match(range.headers.get('content-disposition'),/UTF-8''%/);
   assert.equal((await route.GET(new Request(`https://shop.example/api?id=${id}`,{headers:{Range:'bytes=10000-20000'}}))).status,416);
   signedIn=false;assert.equal((await route.GET(new Request(`https://shop.example/api?id=${id}`))).status,401);assert.equal(calls.length,2);
+});
+
+test('OSS 下载先鉴权和归属校验再 302 到临时云地址；视频字节不经过项目',async()=>{
+  let signedIn=true,owner=true,signed=0;const object=storedObject();
+  const route=load('../app/api/tools/video-extractor/download/route.ts',{'node:fs':{createReadStream:()=>{throw Error('不能读取本地视频');}},'@/lib/video-options':options,'@/lib/video-object-storage.mjs':{VideoStorageError,videoObjectStorage:{downloadUrl:async(value,settings)=>{signed++;assert.equal(value,object);assert.equal(settings.inline,true);return'https://yxstarshop.oss-cn-shanghai.aliyuncs.com/video?signature=temporary';}}},'@/lib/video-service':{videoUser:async()=>signedIn?{id:1}:null,videoDownloadFile:async()=>{if(!owner)throw new options.VideoError('不属于当前账号',404);return{path:'',size:1200,storage:object,task:{title:'中文视频',file_extension:'mp4'}};}}});
+  const request=()=>new Request(`https://shop.example/api?id=${id}&inline=1`,{headers:{Range:'bytes=0-100'}});
+  const response=await route.GET(request());assert.equal(response.status,302);assert.match(response.headers.get('location'),/^https:\/\/yxstarshop\.oss-cn-shanghai/);assert.equal(response.headers.get('cache-control'),'private, no-store');assert.equal(await response.text(),'');
+  owner=false;assert.equal((await route.GET(request())).status,404);signedIn=false;assert.equal((await route.GET(request())).status,401);assert.equal(signed,1);
 });
 test('商品图片接口拒绝通过父路径读取私有视频与项目文件',async()=>{
   let reads=0;const route=load('../app/api/product-images/route.ts',{'node:fs/promises':{readFile:async()=>{reads++;return Buffer.from('private');}},'../../../lib/admin-auth':{}});
@@ -353,4 +403,15 @@ test('页面解析不发提取请求，连点不重复提交，网络失败重�
   assert.equal(requests.filter(r=>r.action==='extract').length,1);const previous=requests.at(-1).id;
   fail=false;button(render(),'提取视频').props.onClick();await flush();assert.equal(requests.at(-1).id,previous);
   assert.ok(all(render()).some(node=>node.type==='a'&&node.props.href==='/api/tools/video-extractor/download?id='+previous));
+});
+
+test('超过旧 24 小时期限的 OSS 历史仍显示下载和长期保存，本地旧记录保持过期提示',()=>{
+  const permanent={id,title:'云端旧视频',status:'ready',format:'MP4',extension:'mp4',size:1200,createdAt:'2026-01-01T00:00:00Z',expiresAt:'2026-01-02T00:00:00Z',permanent:true,downloadUrl:`/api/tools/video-extractor/download?id=${id}`};
+  const local={...permanent,id:id2,title:'旧本地视频',permanent:false,downloadUrl:`/api/tools/video-extractor/download?id=${id2}`};
+  const access={signedIn:true,canExtract:true,chargeType:'free',history:[permanent,local],page:1,total:2,engineReady:true,mergeReady:true,maxSizeMb:200,storageProvider:'oss'};
+  let index=0;
+  const react={...React,useState(initial){const position=index++;return[position===3?access:position===4?permanent:position===12?Date.now():initial,()=>{}];},useRef:initial=>({current:initial}),useCallback:fn=>fn,useEffect:()=>{}};
+  const component=load('../components/video-extractor.tsx',{react,'next/link':()=>null,'next/image':()=>null,'../lib/tool-services':tools,'../lib/video-options':options});
+  const html=renderToStaticMarkup(component.VideoExtractor({tool:{name:'链接视频提取工具',plans:[]}}));
+  assert.ok(html.includes('长期保存'));assert.ok(html.includes('视频已云端保存，可随时下载'));assert.ok(html.includes(permanent.downloadUrl));assert.ok(!html.includes(local.downloadUrl));assert.ok(html.includes('已过期'));
 });

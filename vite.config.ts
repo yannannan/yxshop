@@ -4,6 +4,6 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
   css: { postcss: { plugins: [tailwindcss()] } },
-  ssr: { external: ['mysql2', 'mysql2/promise', 'nodemailer', '@resvg/resvg-wasm'] },
+  ssr: { external: ['mysql2', 'mysql2/promise', 'nodemailer', '@resvg/resvg-wasm', 'ali-oss'] },
   plugins: [vinext()],
 });

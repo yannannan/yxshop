@@ -11,8 +11,8 @@ export type VideoPart = { url: string; headers: Record<string, string>; extensio
 export type VideoFormat = { id: string; label: string; extension: 'mp4' | 'webm' | 'mov'; height: number; size: number; parts: VideoPart[] };
 export type VideoInfo = { title: string; source: string; sourceUrl: string; duration: number; thumbnail: string; formats: VideoFormat[] };
 export type VideoPreview = Omit<VideoInfo, 'formats' | 'thumbnail'> & { id: string; expiresAt: string; formats: Omit<VideoFormat, 'parts'>[]; coverUrl: string };
-export type VideoTask = { id: string; title: string; status: 'queued' | 'processing' | 'ready' | 'failed'; format: string; extension: string; size: number; progress: number; error: string; createdAt: string; expiresAt: string; charged: boolean; pointsSpent: number; downloadUrl: string };
-export type VideoAccess = { signedIn: boolean; canExtract: boolean; chargeType: string; pointsBalance: number; pointsCost: number; remaining: number; membershipName: string; purchaseUrl: string; engineReady: boolean; mergeReady: boolean; browserReady?: boolean; maxSizeMb: number; history: VideoTask[]; page: number; total: number };
+export type VideoTask = { id: string; title: string; status: 'queued' | 'processing' | 'ready' | 'failed'; format: string; extension: string; size: number; progress: number; error: string; createdAt: string; expiresAt: string; permanent?: boolean; charged: boolean; pointsSpent: number; downloadUrl: string };
+export type VideoAccess = { signedIn: boolean; canExtract: boolean; chargeType: string; pointsBalance: number; pointsCost: number; remaining: number; membershipName: string; purchaseUrl: string; engineReady: boolean; mergeReady: boolean; browserReady?: boolean; storageProvider?: 'local' | 'oss'; storageReady?: boolean; storageMessage?: string; maxSizeMb: number; history: VideoTask[]; page: number; total: number };
 
 export function sharedVideoUrl(value: unknown) {
   if (typeof value !== 'string' || value.length > 8192) throw new VideoError('请粘贴视频链接或分享文字，最多 8000 字符');
