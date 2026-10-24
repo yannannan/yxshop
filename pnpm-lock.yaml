@@ -17,6 +17,9 @@ importers:
       drizzle-orm:
         specifier: 0.45.2
         version: 0.45.2(@cloudflare/workers-types@4.20260515.1)(mysql2@3.24.4(@types/node@22.19.19))
+      ipaddr.js:
+        specifier: 2.5.0
+        version: 2.5.0
       jpeg-js:
         specifier: 0.4.4
         version: 0.4.4

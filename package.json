@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "vinext dev",
     "build": "vinext build",
+    "test:production": "pnpm build && node --test tests/production-pages.test.mjs",
     "start": "vinext start",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate",
@@ -19,6 +20,7 @@
     "@puppeteer/browsers": "3.2.6",
     "@resvg/resvg-wasm": "^2.6.2",
     "drizzle-orm": "0.45.2",
+    "ipaddr.js": "2.5.0",
     "jpeg-js": "0.4.4",
     "mysql2": "^3.24.4",
     "next": "16.2.6",
