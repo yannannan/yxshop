@@ -1,6 +1,23 @@
 # CentOS 视频提取依赖安装（2026-10-25）
 
-> 当前日常升级策略已改为只检查已有视频依赖：`upgrade.sh` 仅调用独立脚本的 `--check`，检查失败不进入安装、下载或编译。抖音解析按用户要求暂时搁置。首次切换入口、Git源码与离线引擎的区别见 [升级部署与视频依赖策略](升级部署与视频依赖策略.md)。后文平台解析和安装故障记录保留历史事实。
+## 最新抖音日志：页面200，但没有目标作品数据
+
+用户当前链接 `https://v.douyin.com/D3zARTkF6H0/` 对应作品 `7699706767060405233`。实际Linux日志确认Firefox会话、代理握手与页面导航成功，浏览器得到过203348字符数据脚本，但作品接口0次、匹配媒体0，最终总预算120秒超时。此结果未证明必须登录、资源不足或网站已返回可提取视频；不再根据这份日志重装引擎或单纯延长等待。
+
+旧日志的最终页面状态在超时关页后无法读取。本轮补充在每轮既有数据脚本读取时同步取得摘要，保存最近一次状态，截止关页前和结束输出；`--diagnostic`同时统计脚本 / XHR的请求、响应、失败，限量输出失败主机、HTTP状态、已知错误码及页面异常类型。摘要包含验证 / 登录提示信号、目标编号及媒体字段线索，信号不是根因定论；没有正文、原始脚本、Cookie、完整源地址或代理密码。
+
+诊断包 `video-douyin-page-diagnostics-20261025.tar.gz` 仅含 `lib/video-firefox.ts`，6518字节，SHA256为`3b45490241c2d961b89fcbf8e081b6b25e3920e5bc5908042b639dd1f0634aef`，旁边提供`.sha256`。上传两份文件到服务器项目目录后：
+
+```bash
+cd /home/www/yxshop/yxshopdev
+sha256sum -c video-douyin-page-diagnostics-20261025.tar.gz.sha256 &&
+tar -xzf video-douyin-page-diagnostics-20261025.tar.gz &&
+node --env-file=.env.mysql scripts/check-video-link.mjs 'https://v.douyin.com/D3zARTkF6H0/' --diagnostic 2>&1 | tee douyin-extract-check.log
+```
+
+CLI直接读取项目源码，不需要停止商城、重装依赖、修改SQL或增加`--download`。若已同步本轮完整源码，可直接运行最后一条命令。这个包补充取证，不代表Linux抖音提取已修复；完整源码仍需同步实际发布分支，避免后续upgrade的reset覆盖手工补丁。后文为此前安装及排查历史。
+
+> 当前日常升级策略已改为只检查已有视频依赖：`upgrade.sh` 仅调用独立脚本的 `--check`，检查失败不进入安装、下载或编译。抖音解析已按用户后续失败日志恢复排查，当前仍未通过Linux实机验收。首次切换入口、Git源码与离线引擎的区别见 [升级部署与视频依赖策略](升级部署与视频依赖策略.md)。后文平台解析和安装故障记录保留历史事实。
 
 用户现有服务器：CentOS 7.9、x86_64、Linux 3.10、glibc 2.17、Node 22.22.3（`/usr/local/bin/node`）、pnpm 10.32.0。按用户要求保留原生部署，不安装 Docker；本脚本只准备链接视频提取依赖，不发布 / 启停商城，不执行 SQL，不修改 Nginx、系统 Git、现有 Node 或系统 glibc。
 

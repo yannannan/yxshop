@@ -18,7 +18,7 @@ function load(file, mocks, processMock = process, globals = {}) {
 const publicPages = load('../lib/video-public-pages.ts', {});
 const source = 'https://www.douyin.com/video/7692515320217407402';
 const video = { aweme_id: '7692515320217407402', desc: '匿名公开视频', video: { duration: 5000, play_addr: { url_list: ['https://cdn.example/public.mp4'] } } };
-function harness({ data = { aweme_detail: video }, root = false, launchError = false, coldStart = false, initialPage = true, createError = false, authenticationStatus = 200, realProfiles = false, bodyError = false, timing, scriptHtml = '' } = {}) {
+function harness({ data = { aweme_detail: video }, root = false, launchError = false, coldStart = false, initialPage = true, createError = false, authenticationStatus = 200, realProfiles = false, bodyError = false, timing, scriptHtml = '', pageState = {}, networkErrors = false, snapshotLatency = 0 } = {}) {
   const state = { browserClosed: 0, contextClosed: 0, proxyClosed: 0, removed: [], navigations: [], budgets: [], diagnostics: [], newPageCalls: 0, launches: 0, fullPageReads: 0, dataScriptReads: 0 };
   const timers = new Map(); let now = 0, sequence = 0, readyAt = Infinity, emitted = false, requestAt = Infinity;
   function advance(ms) {
@@ -30,14 +30,27 @@ function harness({ data = { aweme_detail: video }, root = false, launchError = f
   const fakeTimeout = (callback, ms) => { const id = ++sequence; if (ms <= 350) { advance(ms); queueMicrotask(callback); } else timers.set(id, { at: now + ms, callback }); return id; };
   state.clock = { now: () => now, advance };
   let responseHandler;
-  function emitResponse() { responseHandler?.({ url: () => 'https://www.douyin.com/aweme/v1/web/aweme/detail/?token=never-log-this', headers: () => ({}), status: () => 200, content: async () => { if (bodyError) { state.pageClosed = true; throw Object.assign(Error('network.getData failed secret-cookie proxy-password'), { name: 'ProtocolError' }); } return Buffer.from(JSON.stringify(data)); } }); }
+  function emitResponse() { responseHandler?.({ request: () => ({ resourceType: () => 'xhr', headers: () => ({}) }), url: () => 'https://www.douyin.com/aweme/v1/web/aweme/detail/?token=never-log-this', headers: () => ({}), status: () => 200, content: async () => { if (bodyError) { state.pageClosed = true; throw Object.assign(Error('network.getData failed secret-cookie proxy-password'), { name: 'ProtocolError' }); } return Buffer.from(JSON.stringify(data)); } }); }
   const page = {
     authenticate: async credentials => { state.credentials = credentials; }, setViewport: async () => {}, setRequestInterception: async value => { state.intercept = value; },
-    on(name, handler) { if (name === 'response') responseHandler = handler; else if (name === 'request') state.request = handler; },
-    async goto(url) { state.navigations.push(url); if (timing) { if (url.includes('video-proxy.invalid')) advance(800); else { readyAt = now + timing.detailAfter; if (Number.isFinite(readyAt)) requestAt = now + 500; advance(1200); } } else emitResponse(); await Promise.resolve(); return { status: () => authenticationStatus }; },
+    on(name, handler) { if (name === 'response') responseHandler = handler; else if (name === 'request') state.request = handler; else if (name === 'requestfailed') state.requestFailed = handler; else if (name === 'pageerror') state.pageError = handler; },
+    async goto(url) { state.navigations.push(url); if (networkErrors && !url.includes('video-proxy.invalid')) {
+      for (const type of ['script', 'fetch', 'image']) {
+        const request = { resourceType: () => type, headers: () => ({}), url: () => 'https://scripts.example/runtime.js?secret-cookie=never-log-this', failure: () => ({ errorText: 'NS_ERROR_CONNECTION_REFUSED proxy-password never-log-this' }), continue: async () => {}, abort: async () => {} };
+        state.request(request); state.requestFailed?.(request);
+        responseHandler?.({ request: () => request, url: request.url, status: () => 403, headers: () => ({}) });
+      }
+      state.pageError?.(Object.assign(Error('script failed proxy-password'), { name: 'TypeError' }));
+    } if (timing) { if (url.includes('video-proxy.invalid')) advance(800); else { readyAt = now + timing.detailAfter; if (Number.isFinite(readyAt)) requestAt = now + 500; advance(1200); } } else emitResponse(); await Promise.resolve(); return { status: () => authenticationStatus }; },
     async reload() { state.reloads = (state.reloads || 0) + 1; if (timing) { readyAt = now + timing.detailAfter; advance(1200); } return { status: () => 200 }; },
     content: async () => { state.fullPageReads++; return ''; }, isClosed: () => Boolean(state.pageClosed), url: () => state.navigations.at(-1) || 'about:blank',
-    evaluate: async fn => { if (fn.toString().includes('scripts.join')) { state.dataScriptReads++; return scriptHtml; } return fn.toString().includes('verificationPrompt') ? { titleLength: 2, videoCount: 0, verificationPrompt: true, loginPrompt: false } : fn.toString().includes('document.title') ? { title: '标题', urls: [], userAgent: 'Firefox/158' } : 'Firefox/158'; },
+    evaluate: async (fn, expectedId) => { if (fn.toString().includes('scripts.join')) {
+      state.dataScriptReads++;
+      if (timing) advance(snapshotLatency);
+      const scripts = [...scriptHtml.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)].map(match => ({ id: match[1].match(/id=["']([^"']*)["']/)?.[1] || '', textContent: match[2], outerHTML: match[0] }));
+      const document = { readyState: 'complete', title: pageState.title || '标题', body: { textContent: pageState.text || '' }, querySelectorAll: selector => selector === 'script' ? scripts : [] };
+      return vm.runInNewContext(`(${fn.toString()})(expectedId)`, { document, location: new URL(source), expectedId });
+    } return fn.toString().includes('verificationPrompt') ? { titleLength: 2, videoCount: 0, verificationPrompt: true, loginPrompt: false } : fn.toString().includes('document.title') ? { title: '标题', urls: [], userAgent: 'Firefox/158' } : 'Firefox/158'; },
   };
   const context = { pages: async () => initialPage ? [page] : [], newPage: async () => { state.newPageCalls++; if (createError) throw Error('browsingContext.create timed out'); return page; }, close: async () => { state.contextClosed++; } };
   const browser = { defaultBrowserContext: () => context, createBrowserContext: async () => { throw Error('不应在全新进程中再次创建隔离上下文'); }, close: async () => { state.browserClosed++; if (timing) state.pageClosed = true; } };
@@ -158,6 +171,26 @@ test('两分钟配置下无作品数据仍按105秒浏览器预算退出，刷�
   assert.equal(state.proxyClosed, 1); assert.equal(state.removed.length, 1); assert.equal(state.browserClosed, 1);
 });
 
+test('超时关页前保留最近页面摘要，识别验证提示和字段线索，不输出正文或视频地址', async () => {
+  const state = harness({ timing: { detailAfter: Infinity }, snapshotLatency: 11000, scriptHtml: `<script>window._ROUTER_DATA=${JSON.stringify({ item: video.aweme_id, playAddr: ['https://cdn.example/never-log-this.mp4'] })};</script>`, pageState: { title: '安全验证', text: '请完成验证，正文含有 proxy-password 和 secret-cookie' } });
+  assert.equal(await state.api.inspectFirefoxVideo(source, { executable: '/project/firefox' }, 105000, false, true), null);
+  const output = state.diagnostics.join('\n'), timeoutAt = output.indexOf('解析总预算已用尽'), closeAt = output.indexOf('关闭本次浏览器');
+  assert.ok(timeoutAt >= 0 && closeAt > timeoutAt);
+  const beforeClose = output.slice(timeoutAt, closeAt);
+  for (const text of ['最后已采集页面状态', '"verificationPrompt":true', '"requestedIdInData":true', '"camelMediaFields":true', '"capturedAfterMs":', '网络统计']) assert.ok(beforeClose.includes(text), text);
+  assert.doesNotMatch(output, /never-log-this|proxy-password|secret-cookie|cdn\.example|请完成验证/);
+  assert.ok(state.browserClosed >= 1); assert.equal(state.proxyClosed, 1);
+});
+
+test('诊断统计脚本和接口的网络失败及页面异常，主动拦截图片不计为故障', async () => {
+  const state = harness({ networkErrors: true, scriptHtml: `<script>window._ROUTER_DATA=${JSON.stringify({ aweme_detail: video })};</script>` });
+  const result = await state.api.inspectFirefoxVideo(source, { executable: '/project/firefox' }, 105000, false, true);
+  assert.equal(result.page.media.length, 1);
+  const output = state.diagnostics.join('\n');
+  for (const text of ['script 请求失败；主机 scripts.example；状态 NS_ERROR_CONNECTION_REFUSED', 'fetch 请求返回错误；主机 scripts.example；状态 403', '页面脚本异常：TypeError', '"scriptRequests":1', '"scriptFailures":1', '"xhrRequests":1', '"xhrFailures":1', '"pageErrors":1']) assert.ok(output.includes(text), text);
+  assert.doesNotMatch(output, /never-log-this|proxy-password|secret-cookie|image 请求/);
+});
+
 test('作品接口已发出但响应慢于12秒时不刷新中断，仍可在预算内取得原作品', async () => {
   const state = harness({ timing: { detailAfter: 18000 } });
   const result = await state.api.inspectFirefoxVideo(source, { executable: '/project/firefox' }, 42000, false, true);
@@ -169,7 +202,7 @@ test('显式真实解析诊断显示作品接口与阶段，不启用原始stder
   const state = harness(); await state.api.inspectFirefoxVideo(source, { executable: '/project/firefox' }, 24000, false, true);
   assert.equal(state.launch.dumpio, false); assert.deepEqual(state.budgets, [24000]);
   const output = state.diagnostics.join('\n');
-  assert.match(output, /Firefox解析诊断/); assert.match(output, /视频页面导航响应 200/); assert.match(output, /匹配媒体 1 个/); assert.match(output, /verificationPrompt/);
+  assert.match(output, /Firefox解析诊断/); assert.match(output, /视频页面导航响应 200/); assert.match(output, /匹配媒体 1 个/); assert.match(output, /最后已采集页面状态/);
   assert.doesNotMatch(output, /never-log-this|secret-cookie|proxy-password|cdn\.example|random-handshake/);
   assert.equal(state.proxyClosed, 1); assert.equal(state.removed.length, 1);
   const failure = harness({ bodyError: true }); assert.equal(await failure.api.inspectFirefoxVideo(source, { executable: '/project/firefox' }, 24000, false, true), null);

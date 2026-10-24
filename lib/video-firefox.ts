@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, chmod, chown, realpath, rm } from 'node:fs/promises';
 import { resolve, join, relative, isAbsolute } from 'node:path';
 import type { Browser } from 'puppeteer-core';
 import { openVideoProxy } from './video-proxy';
-import { douyinCanonicalUrl, douyinDataVideo, douyinPageVideo, douyinRestriction, isDouyinPage, type PublicVideoPage } from './video-public-pages';
+import { douyinCanonicalUrl, douyinDataVideo, douyinPageVideo, douyinRestriction, douyinVideoId, isDouyinPage, type PublicVideoPage } from './video-public-pages';
 import { VideoError } from './video-options';
 import type { BrowserVideo } from './video-browser';
 
@@ -23,7 +23,8 @@ export async function inspectFirefoxVideo(source: string, runtime: FirefoxRuntim
     const message = String((error as Error)?.message || '');
     const command = message.match(/\b(?:network|browsingContext|session|script)\.[a-zA-Z]+\b/)?.[0] || '';
     const code = message.match(/\b(?:NS_ERROR_|ERR_|SEC_ERROR_|SSL_ERROR_|MOZILLA_PKIX_ERROR_)[A-Z0-9_]+\b/)?.[0] || '';
-    return [(error as Error)?.name || 'Error', command, code].filter(Boolean).join(' ');
+    const name = String((error as Error)?.name || 'Error');
+    return [/^[A-Za-z][A-Za-z0-9]{0,39}$/.test(name) ? name : 'Error', command, code].filter(Boolean).join(' ');
   };
   try {
     const worker = process.getuid?.() === 0 ? runtime.worker : undefined;
@@ -74,14 +75,29 @@ export async function inspectFirefoxVideo(source: string, runtime: FirefoxRuntim
     report(`浏览器与代理已就绪；页面解析剩余 ${Math.max(0, deadline - Date.now())}ms。`);
     await page.setRequestInterception(true);
     let detail: PublicVideoPage | null = null, restriction = '', reloaded = false, apiRequests = 0, apiResponses = 0, bodyFailures = 0, nextPageRead = 0;
+    let lastPageState: Record<string, unknown> | null = null;
+    const network = { scriptRequests: 0, scriptResponses: 0, scriptFailures: 0, xhrRequests: 0, xhrResponses: 0, xhrFailures: 0, pageErrors: 0 };
+    let reportedNetworkErrors = 0;
+    const resourceType = (request: { resourceType(): string; headers(): Record<string, string> }) => {
+      let type = ''; try { type = request.resourceType(); } catch { /* 使用 Fetch Metadata 兜底。 */ }
+      if (type) return type;
+      try { return request.headers()['sec-fetch-dest'] || ''; } catch { return ''; }
+    };
+    const reportNetwork = (kind: string, url: string, status: string | number) => {
+      if (!diagnostics || reportedNetworkErrors >= 8) return;
+      let host = ''; try { host = new URL(url).hostname; } catch { /* 不输出原始地址。 */ }
+      reportedNetworkErrors++; report(`${kind}；主机 ${host}；状态 ${status}。`);
+    };
+    const reportState = () => report(`最后已采集页面状态 ${JSON.stringify(lastPageState)}；网络统计 ${JSON.stringify(network)}。`);
     const started = Date.now();
-    timer = setTimeout(() => { report(`解析总预算已用尽；作品接口 ${apiResponses} 次，响应体失败 ${bodyFailures} 次，匹配媒体 ${detail ? (detail as PublicVideoPage).media.length : 0} 个。`); finished = true; void browser?.close().catch(() => {}); }, Math.max(1, deadline - Date.now()));
+    timer = setTimeout(() => { report(`解析总预算已用尽；作品接口 ${apiResponses} 次，响应体失败 ${bodyFailures} 次，匹配媒体 ${detail ? (detail as PublicVideoPage).media.length : 0} 个。`); reportState(); finished = true; void browser?.close().catch(() => {}); }, Math.max(1, deadline - Date.now()));
     page.on('request', request => {
       void (async () => {
         const url = request.url();
         if (douyin && /^https?:\/\//i.test(url) && isDouyinPage(new URL(url).hostname) && url.includes('/aweme/')) apiRequests++;
-        let type = ''; try { type = request.resourceType(); } catch { /* Firefox 按请求头兜底。 */ }
-        if (!type) type = request.headers()['sec-fetch-dest'] || '';
+        const type = resourceType(request);
+        if (diagnostics && type === 'script') network.scriptRequests++;
+        if (diagnostics && ['xhr', 'fetch'].includes(type)) network.xhrRequests++;
         if (!/^https?:\/\//i.test(url) || ['image', 'font'].includes(type)) { await request.abort(); return; }
         if (['media', 'video', 'audio'].includes(type) || /\.(?:m3u8|mp4|webm|mov)(?:[?#]|$)/i.test(url)) {
           if (!douyin && urls.size < 12) urls.add(url);
@@ -90,8 +106,27 @@ export async function inspectFirefoxVideo(source: string, runtime: FirefoxRuntim
         await request.continue();
       })().catch(() => request.abort().catch(() => {}));
     });
+    if (diagnostics) {
+      page.on('requestfailed', request => {
+        if (finished) return;
+        const type = resourceType(request);
+        if (type === 'script') network.scriptFailures++;
+        else if (['xhr', 'fetch'].includes(type)) network.xhrFailures++;
+        else return; // 不将主动拦截的图片 / 字体 / 媒体报告为异常。
+        const raw = request.failure()?.errorText || '';
+        const code = raw.match(/\b(?:NS_ERROR_|ERR_|SEC_ERROR_|SSL_ERROR_|MOZILLA_PKIX_ERROR_)[A-Z0-9_]+\b/)?.[0] || 'requestfailed';
+        reportNetwork(`${type} 请求失败`, request.url(), code);
+      });
+      page.on('pageerror', error => { if (!finished) { network.pageErrors++; if (network.pageErrors <= 4) report(`页面脚本异常：${failureType(error)}。`); } });
+    }
     page.on('response', response => {
       if (finished) return;
+      if (diagnostics) {
+        const type = resourceType(response.request());
+        if (type === 'script') network.scriptResponses++;
+        if (['xhr', 'fetch'].includes(type)) network.xhrResponses++;
+        if (['script', 'xhr', 'fetch', 'document'].includes(type) && response.status() >= 400) reportNetwork(`${type} 请求返回错误`, response.url(), response.status());
+      }
       if (!douyin) {
         if (response.ok() && /^(?:video\/|application\/(?:vnd\.apple\.mpegurl|x-mpegurl))/i.test(response.headers()['content-type'] || '') && urls.size < 12) urls.add(response.url());
         return;
@@ -121,27 +156,39 @@ export async function inspectFirefoxVideo(source: string, runtime: FirefoxRuntim
       if (douyin && !finished && !page.isClosed() && Date.now() < deadline - 1000 && Date.now() >= nextPageRead) {
         const readStarted = Date.now();
         // 只取受支持的数据脚本，限制文本量且每2秒读取一次，避免反复序列化整个动态页面。
-        const html = await page.evaluate(() => {
+        const snapshot = await page.evaluate(expectedId => {
           const scripts: string[] = []; let characters = 0;
-          for (const script of Array.from(document.querySelectorAll('script')).slice(0, 500)) {
+          const nodes = Array.from(document.querySelectorAll('script')).slice(0, 500);
+          for (const script of nodes) {
             const text = script.textContent || '';
             if (!['RENDER_DATA', 'SIGI_STATE'].includes(script.id) && !/_ROUTER_DATA|__INITIAL_STATE__|SIGI_STATE/.test(text)) continue;
             if (characters + text.length > 2 * 1024 ** 2) continue;
             const html = script.outerHTML;
             if (characters + html.length <= 2 * 1024 ** 2) { scripts.push(html); characters += html.length; }
           }
-          return scripts.join('');
-        }).catch(() => '');
+          const html = scripts.join(''), text = (document.body?.textContent || '').slice(0, 12000);
+          // 摘要与数据在同一轮读取，避免额外布局计算或在超时关页后才尝试取证。
+          for (const video of document.querySelectorAll('video')) { video.muted = true; void video.play().catch(() => {}); }
+          return { html, state: { capturedAt: Date.now(), readyState: document.readyState, host: location.hostname,
+            onRequestedPage: Boolean(expectedId && location.pathname.includes(expectedId)), titleLength: document.title.length,
+            scriptCount: nodes.length, dataScriptCount: scripts.length, videoCount: document.querySelectorAll('video').length,
+            verificationPrompt: /安全验证|请完成验证|拖动滑块|验证码/.test(document.title + text), loginPrompt: /登录后观看|请先登录/.test(text),
+            requestedIdInData: Boolean(expectedId && html.includes(expectedId)), snakeMediaFields: /\bplay_addr\b|\bbit_rate\b/.test(html), camelMediaFields: /\bplayAddr\b|\bbitRateList\b/.test(html) } };
+        }, douyinVideoId(source)).catch(() => null);
         const readFinished = Date.now();
+        const html = snapshot?.html || '';
+        if (snapshot) lastPageState = { ...snapshot.state, capturedAfterMs: readFinished - began };
         const found = douyinPageVideo(html, source); if (found.media.length || found.imagePost) detail = found;
+        if (snapshot && diagnostics) reportState();
         if (readFinished - readStarted > 2000 || Date.now() - readFinished > 1000) report(`数据脚本 ${html.length} 字符，浏览器读取 ${readFinished - readStarted}ms，本机解析 ${Date.now() - readFinished}ms。`);
         nextPageRead = Date.now() + 2000;
       }
-      await page.evaluate(() => { for (const video of document.querySelectorAll('video')) { video.muted = true; void video.play().catch(() => {}); } }).catch(() => {});
+      if (!douyin) await page.evaluate(() => { for (const video of document.querySelectorAll('video')) { video.muted = true; void video.play().catch(() => {}); } }).catch(() => {});
       await new Promise(resolve => setTimeout(resolve, 350));
     }
     report(`页面解析耗时 ${Date.now() - started}ms；作品接口 ${apiResponses} 次，响应体失败 ${bodyFailures} 次，匹配媒体 ${detail ? (detail as PublicVideoPage).media.length : 0} 个，剩余 ${Math.max(0, deadline - Date.now())}ms。`);
-    if (diagnostics && !page.isClosed()) {
+    if (diagnostics) reportState();
+    if (diagnostics && !douyin && !page.isClosed()) {
       const state = await page.evaluate(() => {
         const text = document.body?.innerText || '';
         return { titleLength: document.title.length, videoCount: document.querySelectorAll('video').length, verificationPrompt: /安全验证|请完成验证|拖动滑块|验证码/.test(text), loginPrompt: /登录后观看|请先登录/.test(text) };
