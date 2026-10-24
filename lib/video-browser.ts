@@ -5,20 +5,30 @@ import { openVideoProxy } from './video-proxy';
 import { videoUrlAddress } from './video-network';
 import { douyinCanonicalUrl, douyinDataVideo, douyinPageVideo, douyinRestriction, isDouyinPage, type PublicVideoPage } from './video-public-pages';
 import { VideoError } from './video-options';
+import type { FirefoxRuntime } from './video-firefox';
 
 let active = 0;
-export async function videoBrowserExecutable() {
+export async function videoBrowserRuntime(): Promise<(FirefoxRuntime & { engine: 'chromium' | 'firefox' }) | null> {
   try {
-    const path = process.env.VIDEO_BROWSER_PATH || JSON.parse(await readFile(resolve('vendor/video-engine/browser-runtime.json'), 'utf8')).executable;
-    if (typeof path !== 'string' || !path) return '';
-    await access(path); return path;
-  } catch { return ''; }
+    const configured = process.env.VIDEO_BROWSER_PATH;
+    let recorded;
+    try { recorded = JSON.parse(await readFile(resolve('vendor/video-engine/browser-runtime.json'), 'utf8')); } catch { recorded = {}; }
+    const runtime = configured ? { ...(recorded.platform === process.platform ? recorded : {}), executable: configured, engine: process.env.VIDEO_BROWSER_ENGINE || 'chromium' } : recorded;
+    if (runtime.platform && runtime.platform !== process.platform) return null;
+    const path = runtime.executable;
+    if (typeof path !== 'string' || !path) return null;
+    if (runtime.engine && !['chromium', 'firefox'].includes(runtime.engine)) return null;
+    await access(path); return { ...runtime, engine: runtime.engine || 'chromium' };
+  } catch { return null; }
+}
+export async function videoBrowserExecutable() {
+  return (await videoBrowserRuntime())?.executable || '';
 }
 export type BrowserVideo = { page: PublicVideoPage; referer: string; userAgent: string; urls: string[] };
 
 // 后端解析引擎：全新匿名上下文，不读取用户浏览器、账号或本地 Cookie。
 export async function inspectBrowserVideo(source: string, timeout = 22000): Promise<BrowserVideo | null> {
-  const executablePath = await videoBrowserExecutable();
+  const runtime = await videoBrowserRuntime(), executablePath = runtime?.executable;
   if (!executablePath || process.env.VIDEO_BROWSER_ENABLED === '0') return null;
   if (active >= 2) throw new VideoError('网页解析正在处理中，请稍后重试', 429);
   await videoUrlAddress(source);
@@ -27,6 +37,10 @@ export async function inspectBrowserVideo(source: string, timeout = 22000): Prom
   let browser: Browser | undefined, context: BrowserContext | undefined;
   let proxy: Awaited<ReturnType<typeof openVideoProxy>> | undefined, timer: ReturnType<typeof setTimeout> | undefined;
   try {
+    if (runtime.engine === 'firefox') {
+      const { inspectFirefoxVideo } = await import('./video-firefox');
+      return await inspectFirefoxVideo(source, runtime, timeout);
+    }
     proxy = await openVideoProxy();
     const { chromium } = await import('playwright-core');
     const temporary = resolve('vendor/video-engine/browser-temporary'); await mkdir(temporary, { recursive: true });

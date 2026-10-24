@@ -18,6 +18,14 @@ function local(name) {
   return exports;
 }
 try {
+  if (process.argv.includes('--runtime')) {
+    const runtime = await local('video-browser').videoBrowserRuntime();
+    if (!runtime) throw new Error('没有当前系统的视频浏览器运行记录，请先运行依赖安装脚本');
+    if (runtime.engine !== 'firefox') throw new Error('--runtime 当前用于 CentOS Firefox 启动检查');
+    const result = await local('video-firefox').inspectFirefoxVideo('https://example.com/', runtime, 12000, true);
+    console.log(`${result.page.title}：${result.userAgent}`);
+    process.exit(0);
+  }
   const input = process.argv.slice(2).find(value => !value.startsWith('--'));
   if (!input) throw new Error('用法：node scripts/check-video-link.mjs "视频链接或分享文字" [--download]');
   const engine = local('video-engine'), source = local('video-options').sharedVideoUrl(input), started = Date.now();

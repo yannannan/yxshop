@@ -27,13 +27,40 @@ try {
       catch { console.error(`${name} 未就绪，请按 docs/链接视频提取与部署.md 配置。`); process.exitCode = 1; }
     }
     try {
-      const runtime = JSON.parse(await readFile(join(directory, 'browser-runtime.json'), 'utf8'));
+      const runtime = await readFile(join(directory, 'browser-runtime.json'), 'utf8').then(JSON.parse).catch(() => ({}));
+      if (!process.env.VIDEO_BROWSER_PATH && runtime.platform !== process.platform) throw new Error('浏览器运行记录不属于当前系统');
       const { stdout } = await execute(process.env.VIDEO_BROWSER_PATH || runtime.executable, ['--version'], { timeout: 10000, windowsHide: true });
       console.log(`网页解析：${stdout.trim()}`);
-    } catch { console.error('网页解析未就绪，抖音等动态页面请先执行 node scripts/setup-video-engine.mjs --browser'); process.exitCode = 1; }
+    } catch { console.error('网页解析未就绪；CentOS 请运行 bash scripts/install-video-deps-centos.sh，其他系统请执行 node scripts/setup-video-engine.mjs --browser'); process.exitCode = 1; }
   } else if (process.argv.includes('--browser')) {
     await mkdir(directory, { recursive: true });
     if (await realpath(directory) !== directory) throw new Error('安装目标不是项目内的实际目录');
+    if (process.argv.includes('--firefox')) {
+      const { install, Browser } = await import('@puppeteer/browsers');
+      const { PUPPETEER_REVISIONS } = await import('puppeteer-core');
+      console.log(`安装 Mozilla 官方 Firefox ${PUPPETEER_REVISIONS.firefox}（项目目录，CentOS 使用 WebDriver BiDi）…`);
+      const cacheDir = join(directory, 'firefox'); await mkdir(cacheDir, { recursive: true });
+      if (await realpath(cacheDir) !== cacheDir) throw new Error('Firefox 安装目录不能使用链接');
+      const result = await install({ browser: Browser.FIREFOX, buildId: PUPPETEER_REVISIONS.firefox, cacheDir });
+      const { stdout } = await execute(result.executablePath, ['--version'], { timeout: 15000, windowsHide: true });
+      const runtime = { engine: 'firefox', executable: result.executablePath, platform: process.platform, revision: PUPPETEER_REVISIONS.firefox };
+      if (process.platform === 'linux' && process.getuid?.() === 0) {
+        const user = process.env.YX_VIDEO_WORKER || 'yxshop-video';
+        if (!/^[a-z_][a-z0-9_-]{0,30}$/.test(user)) throw new Error('网页解析账号名称无效');
+        const uid = Number((await execute('id', ['-u', user])).stdout.trim()), gid = Number((await execute('id', ['-g', user])).stdout.trim());
+        if (!Number.isSafeInteger(uid) || uid < 1 || !Number.isSafeInteger(gid) || gid < 1) throw new Error('请先用安装 sh 创建非 root 解析账号');
+        let runuser = '';
+        for (const path of ['/usr/sbin/runuser', '/sbin/runuser']) try { await access(path); runuser = path; break; } catch { /* 不同发行版位置不同。 */ }
+        if (!runuser) throw new Error('缺少 runuser，请安装 util-linux');
+        const launcher = join(directory, 'firefox-launch.sh');
+        await writeFile(launcher, `#!/bin/sh\nset -eu\nexec '${runuser}' -u '${user}' -- env HOME="$HOME" TMPDIR="$HOME" TMP="$HOME" TEMP="$HOME" "$YX_VIDEO_FIREFOX_BINARY" "$@"\n`, { mode: 0o755 }); await chmod(launcher, 0o755);
+        Object.assign(runtime, { worker: { uid, gid }, launcher });
+      }
+      await writeFile(join(directory, 'browser-runtime.json'), JSON.stringify(runtime, null, 2));
+      console.log(stdout.trim());
+      console.log('Firefox 已安装；请继续执行 scripts/check-video-link.mjs --runtime 检查实际启动。');
+      process.exit(0);
+    }
     const browserDirectory = join(directory, 'browser');
     await mkdir(browserDirectory, { recursive: true });
     if (await realpath(browserDirectory) !== browserDirectory) throw new Error('浏览器安装目录不能使用链接');
@@ -47,7 +74,7 @@ try {
     let executable = '';
     for (const candidate of candidates) try { await access(candidate); executable = candidate; break; } catch { /* 当前平台的文件名不同。 */ }
     if (!executable) throw new Error('网页解析程序文件缺失');
-    await writeFile(join(directory, 'browser-runtime.json'), JSON.stringify({ executable, revision, platform: process.platform }, null, 2));
+    await writeFile(join(directory, 'browser-runtime.json'), JSON.stringify({ engine: 'chromium', executable, revision, platform: process.platform }, null, 2));
     console.log('网页解析引擎已就绪；Linux 需使用支持 Chromium 的系统和非 root 服务账号。');
   } else if (process.argv.includes('--ffmpeg')) {
     if (process.platform !== 'win32' || process.arch !== 'x64') throw new Error('--ffmpeg 当前支持 Windows x64；其他系统请配置兼容系统的 FFmpeg 路径。');
