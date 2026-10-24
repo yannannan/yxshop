@@ -68,6 +68,22 @@ vendor/video-engine/downloads/ffmpeg/9.0.2/ffmpeg-devel.asc
 
 本次53项下载 / 升级 / CentOS回归、修改测试ESLint和两份Bash脚本语法检查通过，新增检查覆盖中断重试、跨进程续传、缓存复用、源站拒绝续传、空文件 / 大小限制、签名 / 指纹失败不编译及编译失败缓存保留。测试使用替身网络 / 编译器，不安装系统包、不运行真实业务或SQL；实际PGP验证单独完成。此包仅含源码 / 签名 / 公钥，仍需在用户CentOS上编译，后续Firefox安装和实际启动仍以服务器验收为准。修复按约定提交并合并本地main，不自动推送。
 
+### 已解压仍下载：核对升级覆盖
+
+用户已贴出两个离线包在服务器项目根目录并分别解压成功，后续不能继续当成“没上传 / 没解压”。本地源码核对确认，`upgrade.sh`会先fetch再reset远程发布分支，随后执行工作区的video sh。如果服务器远程master未包含6aaeb51，即便手动覆盖本地新版sh，也可能在升级时被旧远程代码覆盖；忽略目录vendor中的离线文件仍在，但旧脚本不读取该缓存。本次没有服务器远程文件输出，不能把“远程仍旧”表述为已实机证实。
+
+为在同步发布分支前先完成补装，已准备本机忽略产物 `vendor/video-engine/offline-bundles/video-installer-fix-6aaeb51.tar.gz`（5860字节），只含最新 `scripts/install-video-deps-centos.sh` 和 `scripts/lib/video-download.sh`，LF换行。两个脚本逐字节与本地对应版本一致（只规范换行），Bash语法检查通过，不含环境文件或业务代码。SHA256：`e0b869d847b0e5fa4e386a2e2bafc340a33732fa15b10afec94ef78a5306f320`。
+
+先结束仍运行的旧安装。把脚本更新包上传到服务器项目根目录，然后执行；此时不经过Git拉取 / reset：
+
+```bash
+cd /home/www/yxshop/yxshopdev
+tar -xzf video-installer-fix-6aaeb51.tar.gz
+bash scripts/install-video-deps-centos.sh
+```
+
+FFmpeg阶段应复用此前已解压的三个文件，然后签名验证、编译；不需重新传或解压源码包。Firefox首次未安装时仍需下载，这是另一阶段。之后应将6aaeb51及后续修复同步到服务器实际使用的远程master，再恢复日常 `bash upgrade.sh`。独立补装不构建 / 启停商城；若之前中断升级停了商城，完成补装后按原构建 / 启动流程恢复。本包只为解决本次旧脚本补装，不增加新的upgrade参数或入口。
+
 ## 自动处理的内容
 
 1. 检测系统、x86_64 架构及 Node >=22.13，保留现有 Node 和 pnpm。脚本目标为 CentOS 7 与 Stream 9/10；其他架构和退役的 CentOS Linux 8 暂不自动安装。
