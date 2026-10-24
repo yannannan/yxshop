@@ -2,7 +2,7 @@
 
 用户现有服务器：CentOS 7.9、x86_64、Linux 3.10、glibc 2.17、Node 22.22.3（`/usr/local/bin/node`）、pnpm 10.32.0。按用户要求保留原生部署，不安装 Docker；本脚本只准备链接视频提取依赖，不发布 / 启停商城，不执行 SQL，不修改 Nginx、系统 Git、现有 Node 或系统 glibc。
 
-2026-10-24 用户最新服务器日志已确认 `origin/master` 同步、pnpm 安装、生产构建和商城启动成功（PID 13365、端口 3000）；视频安装尚未完成，停在官方归档源 `vault.centos.org` 返回 403。pnpm 的依赖脚本警告与构建耗时提示没有阻止本次构建，不将它们当作本次安装失败原因。
+2026-10-24 用户最新服务器日志明确返回“Firefox 启动检查通过”，此前yt-dlp及FFmpeg版本检查也已通过。当前浏览器启动阻塞已解除；手动源码补丁仍需商城重新构建 / 重启，真实平台提取及OSS下载尚待用户验证。暂不重跑upgrade覆盖手动补丁，先同步修复到服务器实际origin/master。后文保留各阶段故障和处理记录，最新验收步骤见“最新服务器启动验收结果”。
 
 ## 部署时执行
 
@@ -128,6 +128,24 @@ node --env-file=.env.mysql scripts/check-video-link.mjs --runtime --diagnostic
 
 本轮62项相关检查及ESLint、生产构建通过，包含真实本机HTTP / CONNECT握手拒绝策略、并发档案隔离及失败清理；没有运行真实浏览器、连接用户服务器或业务数据库。全项目类型检查仍为原有20项问题，修改文件无新增错误。包内容与源码逐字节核对，未将模拟通过称为CentOS已修好。
 
+## 最新服务器启动验收结果
+
+用户在同一台CentOS服务器应用代理启动补丁后，诊断最终返回：
+
+```text
+Firefox 启动检查通过：Mozilla/5.0 (X11; Linux x86_64; rv:158.0) Gecko/20100101 Firefox/158.0
+```
+
+这确认该次实际浏览器、BiDi、本机代理握手及about:blank脚本检查通过；前面的RemoteSettings / IndexedDB shutdown日志没有导致本次自检失败。无需再装Firefox / FFmpeg或继续增加启动补丁。通过记录来自用户服务器输出，助手未连接服务器执行。
+
+手动解压仅更新源码，商城原有生产dist仍需更新。在项目目录执行：
+
+```bash
+bash stop.sh && pnpm build && bash start.sh
+```
+
+随后在商城视频工具用公开可播放链接测试解析、提取、OSS保存及本人历史下载。该业务流程尚未收到本次修复后的实机结果，启动检查通过不能替代它。服务器实际origin/master未确认含14d45b6，当前先不用upgrade覆盖手动补丁；同步修复到该代码源后再恢复日常upgrade，其独立video sh通过自检便直接跳过安装。
+
 ## 自动处理的内容
 
 1. 检测系统、x86_64 架构及 Node >=22.13，保留现有 Node 和 pnpm。脚本目标为 CentOS 7 与 Stream 9/10；其他架构和退役的 CentOS Linux 8 暂不自动安装。
@@ -142,7 +160,7 @@ node --env-file=.env.mysql scripts/check-video-link.mjs --runtime --diagnostic
 
 ## 验收与边界
 
-2026-10-24 用户最新完整日志进一步确认：系统库和 devtoolset 已安装，当前失败发生在第3/6步下载 yt-dlp 2026.10.21，原脚本超过120秒中断；FFmpeg / Firefox 后续步骤尚未执行。商城仍完成构建并启动（PID14682），所以反复进入补装的原因是依赖安装未完成。日志中的 `No package libX11-xcb available` 未使本轮 yum 退出，不是本次中止位置。
+早期安装日志确认：系统库和 devtoolset 已安装，当时失败发生在第3/6步下载 yt-dlp 2026.10.21，原脚本超过120秒中断；FFmpeg / Firefox 后续步骤尚未执行。商城仍完成构建并启动（PID14682），所以当时反复进入补装的原因是依赖安装未完成。日志中的 `No package libX11-xcb available` 未使该轮 yum 退出，不是那次中止位置。
 
 用户后续日志显示，即使将下载上限改为600秒，慢速链路仍可能只收到5MB便超时，旧重试会重新从头开始。最新修复使用稳定的版本级 `.part` 断点文件，重试 / 再次执行按已有长度发送 Range；仅在连接响应超过60秒或连续120秒没有收到数据时中断，持续接收数据不再受600秒总时长限制。最多尝试3次，失败后仍保留已写入断点。官方地址返回206时核对 Content-Range 起点、总大小和响应长度再追加；忽略Range返回200时重新写入完整文件，避免重复拼接；摘要错误的完整文件删除，不能执行。
 
