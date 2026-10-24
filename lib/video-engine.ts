@@ -74,10 +74,10 @@ export function videoFileExtension(bytes: Buffer): 'mp4' | 'webm' | 'mov' | null
   if (bytes.length >= 4 && bytes.readUInt32BE(0) === 0x1a45dfa3) return 'webm';
   return null;
 }
-async function probe(raw: string, headers: Record<string, string> = {}) {
-  const { response, url } = await videoResponse(raw, { ...headers, Range: 'bytes=0-65535' }, 0, 8000);
+async function probe(raw: string, headers: Record<string, string> = {}, deadline = Infinity) {
+  const { response, url } = await videoResponse(raw, { ...headers, Range: 'bytes=0-65535' }, 0, 8000, deadline);
   const contentType = String(response.headers['content-type'] || '').toLowerCase();
-  if (/mpegurl/.test(contentType) || /\.m3u8(?:[?#]|$)/i.test(url)) { response.destroy(); const full = await videoResponse(url, headers, 0, 8000); return { html: '', url: full.url, size: 0, extension: null, hls: (await videoResponseBytes(full.response, 1024 ** 2)).toString('utf8') }; }
+  if (/mpegurl/.test(contentType) || /\.m3u8(?:[?#]|$)/i.test(url)) { response.destroy(); const full = await videoResponse(url, headers, 0, 8000, deadline); return { html: '', url: full.url, size: 0, extension: null, hls: (await videoResponseBytes(full.response, 1024 ** 2)).toString('utf8') }; }
   if (contentType.includes('text/html') || contentType.includes('application/xhtml')) return { html: (await videoResponseBytes(response, 2 * 1024 ** 2)).toString('utf8'), url, size: 0, extension: null };
   const size = number(response.headers['content-range']?.match(/\/(\d+)$/)?.[1]) || number(response.headers['content-length']);
   const chunks: Buffer[] = [];
@@ -111,17 +111,20 @@ async function hlsFormats(text: string, url: string, headers: Record<string, str
   return variants.map((variant, index) => ({ id: `hls-${index}`, label: variant.label, extension: 'mp4', height: variant.height, size: 0, parts: [{ url: variant.url, headers, extension: 'mp4', playlist: 'hls' }, ...(variant.audio ? [{ url: variant.audio, headers, extension: 'm4a', playlist: 'hls' as const }] : [])] }));
 }
 async function browserVideo(source: string, started: number, diagnostics = false): Promise<VideoInfo | null> {
-  const remaining = 55000 - (Date.now() - started);
+  const deadline = started + 55000, remaining = deadline - Date.now();
   if (diagnostics) console.error(`[视频解析诊断] 网页引擎剩余总预算 ${Math.max(0, remaining)}ms，作品编号 ${douyinVideoId(source) || '非抖音编号链接'}`);
-  if (remaining < 3000) return null;
-  const result = await inspectBrowserVideo(source, Math.min(24000, remaining), diagnostics);
+  // 冷启动 Firefox 可能占用约16秒；在原请求窗口内给页面留出加载时间，另留10秒校验媒体。
+  const browserBudget = Math.min(42000, remaining - 10000);
+  if (browserBudget < 3000) return null;
+  const result = await inspectBrowserVideo(source, browserBudget, diagnostics);
   if (diagnostics) console.error(`[视频解析诊断] 网页引擎返回 ${result ? `媒体候选 ${result.page.media.length} 个，请求候选 ${result.urls.length} 个` : '空结果'}`);
   if (!result) return null;
-  const found = await pageVideo(result.page, source, result.referer, result.userAgent, diagnostics);
+  const found = await pageVideo(result.page, source, result.referer, result.userAgent, diagnostics, deadline);
   if (found) return found;
   for (const url of result.urls) {
+    if (Date.now() >= deadline) break;
     try {
-      const headers = { Referer: result.referer, 'User-Agent': result.userAgent }, file = await probe(url, headers);
+      const headers = { Referer: result.referer, 'User-Agent': result.userAgent }, file = await probe(url, headers, deadline);
       const formats = file.hls ? await hlsFormats(file.hls, file.url, headers) : file.extension && file.size <= videoMaxBytes() ? [{ id: 'browser-0', label: `原始画质 · ${file.extension.toUpperCase()}`, extension: file.extension, size: file.size, height: 0, parts: [{ url: file.url, headers, extension: file.extension }] }] : [];
       if (formats.length) return { title: clean(result.page.title) || '网页视频', thumbnail: result.page.thumbnail, duration: result.page.duration, sourceUrl: source, source: new URL(source).hostname, formats };
     } catch (error) { if (error instanceof VideoError && /加密|直播/.test(error.message)) throw error; }
@@ -150,16 +153,16 @@ async function publicPage(raw: string) {
   if (!isDouyinPage(new URL(url).hostname) && !isHaokanPage(new URL(url).hostname)) { response.destroy(); throw new VideoError('分享页跳转到了不支持的平台', 422); }
   return { html: (await videoResponseBytes(response, 2 * 1024 ** 2)).toString('utf8'), url };
 }
-async function pageVideo(info: PublicVideoPage, sourceUrl: string, referer: string, userAgent = publicVideoPageUserAgent, diagnostics = false): Promise<VideoInfo | null> {
+async function pageVideo(info: PublicVideoPage, sourceUrl: string, referer: string, userAgent = publicVideoPageUserAgent, diagnostics = false, deadline = Infinity): Promise<VideoInfo | null> {
   if (info.imagePost) throw new VideoError('这是抖音图文作品，当前工具只提取视频，暂不支持图文转视频', 422);
   if (info.duration > 3600) throw new VideoError('暂不支持超过 60 分钟的视频', 422);
   const formats: VideoFormat[] = [];
   const started = Date.now();
   for (const item of info.media) {
-    if (Date.now() - started > 20000) break;
+    if (Date.now() >= Math.min(started + 20000, deadline)) break;
     if (item.size > videoMaxBytes()) continue;
     try {
-      const found = await probe(item.url, { Referer: referer, 'User-Agent': userAgent });
+      const found = await probe(item.url, { Referer: referer, 'User-Agent': userAgent }, Math.min(started + 20000, deadline));
       if (found.extension && found.size <= videoMaxBytes()) formats.push({ id: `page-${formats.length}`, label: `${item.label} · ${found.extension.toUpperCase()}`, extension: found.extension, height: item.height, size: found.size || item.size, parts: [{ url: found.url, headers: { Referer: referer, 'User-Agent': userAgent }, extension: found.extension }] });
     } catch (error) {
       // 只输出已知本地错误或错误类型，不打印源站签名地址和请求头。

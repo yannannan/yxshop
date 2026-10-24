@@ -83,12 +83,15 @@ export function videoRequestHeaders(headers: unknown): Record<string, string> {
   return result;
 }
 // DNS 在连接前校验并固定到公有 IP；每一次重定向重新校验，避免二次解析与 DNS 重绑定。
-export async function videoResponse(raw: string, headers: Record<string, string> = {}, redirects = 0, timeout = 180000): Promise<{ response: IncomingMessage; url: string }> {
+export async function videoResponse(raw: string, headers: Record<string, string> = {}, redirects = 0, timeout = 180000, deadline = Infinity): Promise<{ response: IncomingMessage; url: string }> {
   if (redirects > 5) throw new VideoError('视频链接重定向次数过多', 422);
+  if (Date.now() >= deadline) throw new VideoError('视频解析等待超时，请稍后重试', 504);
   const { url, address } = await videoUrlAddress(raw);
+  const remaining = Math.min(timeout, deadline - Date.now());
+  if (remaining <= 0) throw new VideoError('视频解析等待超时，请稍后重试', 504);
   const response = await new Promise<IncomingMessage>((resolve, reject) => {
     const request = (url.protocol === 'https:' ? httpsRequest : httpRequest)(url, {
-      agent: false, signal: AbortSignal.timeout(timeout), headers: { ...videoRequestHeaders(headers), ...(headers.Range ? { Range: headers.Range } : {}) },
+      agent: false, signal: AbortSignal.timeout(remaining), headers: { ...videoRequestHeaders(headers), ...(headers.Range ? { Range: headers.Range } : {}) },
       lookup: (_host, options, callback) => { if (options.all) callback(null, [address as { address: string; family: number }]); else callback(null, address.address, address.family); },
     }, resolve);
     request.setTimeout(15000, () => request.destroy(new VideoError('视频站点响应超时，请稍后重试', 504)));
@@ -101,7 +104,7 @@ export async function videoResponse(raw: string, headers: Record<string, string>
     if (!location) throw new VideoError('视频站点返回无效跳转', 422);
     const next = new URL(location, url);
     if (next.origin !== url.origin) headers = {};
-    return videoResponse(next.href, headers, redirects + 1, timeout);
+    return videoResponse(next.href, headers, redirects + 1, timeout, deadline);
   }
   if (status < 200 || status >= 300) { response.destroy(); throw new VideoError([401, 403].includes(status) ? '该视频需要登录或站点拒绝访问，请换一个公开链接' : '视频资源暂不可用，请检查链接或稍后重试', 422); }
   if (response.headers['content-encoding'] && response.headers['content-encoding'] !== 'identity') { response.destroy(); throw new VideoError('站点未提供可直接读取的视频资源', 422); }

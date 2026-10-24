@@ -82,9 +82,28 @@ test('抖音完整解析将显式诊断传给网页引擎，媒体日志只输�
     './video-browser': { videoBrowserExecutable: async () => '/unused', inspectBrowserVideo: async (...args) => { calls.push(args); return { page: publicPages.douyinDataVideo({ aweme_detail: video }, source), referer: source, userAgent: 'Firefox/158', urls: [] }; } },
   }, { console: { error: (...args) => logs.push(args.join(' ')) } });
   const result = await api.inspectVideo(source, false, true);
-  assert.equal(result.formats.length, 1); assert.equal(calls[0][2], true); assert.equal(calls[0][1], 24000);
+  assert.equal(result.formats.length, 1); assert.equal(calls[0][2], true); assert.equal(calls[0][1], 42000);
   assert.match(logs.join('\n'), /公开页.*媒体 0 个/); assert.match(logs.join('\n'), /网页引擎返回 媒体候选 1 个/);
   assert.doesNotMatch(logs.join('\n'), /cdn\.example|temporary|User-Agent/);
+});
+
+test('前段读取耗时后缩短浏览器预算，媒体多候选仍共享原55秒截止时间', async () => {
+  let now = 0; const calls = [], probes = [];
+  const api = load('../lib/video-engine.ts', {
+    ...base,
+    './video-network': { ...network, videoUrlAddress: async () => ({}), videoResponse: async (url, _headers, _redirects, _timeout, deadline) => {
+      if (url.includes('douyin.com')) { now += 30000; return { url, response: stream(Buffer.from('<html>公开壳页</html>')) }; }
+      probes.push(deadline); now += Math.min(8000, deadline - now); return { url, response: stream(media) };
+    } },
+    './video-browser': { videoBrowserExecutable: async () => '/unused', inspectBrowserVideo: async (_url, budget) => {
+      calls.push(budget); now += budget;
+      const page = publicPages.douyinDataVideo({ aweme_detail: video }, source);
+      page.media = Array.from({ length: 3 }, (_, index) => ({ ...page.media[0], url: `https://cdn.example/${index}.mp4` }));
+      return { page, referer: source, userAgent: 'Firefox/158', urls: [] };
+    } },
+  }, { Date: { now: () => now } });
+  const result = await api.inspectVideo(source);
+  assert.deepEqual(calls, [15000]); assert.deepEqual(probes, [55000, 55000]); assert.equal(now, 55000); assert.equal(result.formats.length, 2);
 });
 
 test('HLS 多画质及独立音轨按实际地址解析，支持相对路径', () => {

@@ -99,6 +99,26 @@ test('连接固定已校验 IP，重定向重新检查；认证和 Cookie 不转
   await assert.rejects(network.videoResponseBytes(stream(Buffer.alloc(20)), 10), /过大|限制/);
 });
 
+test('媒体探测跨重定向共享剩余预算，DNS结束已超时则不再建立资源连接', async () => {
+  let now = 1000, requests = 0; const budgets = [];
+  const request = (_url, _config, callback) => {
+    requests++; const req = new EventEmitter(); req.setTimeout = () => req;
+    req.end = () => queueMicrotask(() => { now += requests === 1 ? 3000 : 2000; callback(Object.assign(stream(Buffer.from('')), { statusCode: 302, headers: { location: 'https://public.example/next' } })); });
+    return req;
+  };
+  const safe = load('../lib/video-network.ts', {
+    './video-options': options, 'node:dns/promises': { lookup: async () => [{ address: '8.8.8.8', family: 4 }] }, 'node:https': { request },
+  }, { Date: { now: () => now }, AbortSignal: { timeout: value => { budgets.push(value); return AbortSignal.timeout(value); } } });
+  await assert.rejects(safe.videoResponse('https://public.example/start', {}, 0, 8000, 6000), error => error.status === 504);
+  assert.deepEqual(budgets, [5000, 2000]); assert.equal(requests, 2);
+  now = 0;
+  const delayedDns = load('../lib/video-network.ts', {
+    './video-options': options, 'node:dns/promises': { lookup: async () => { now = 6000; return [{ address: '8.8.8.8', family: 4 }]; } },
+    'node:https': { request() { throw Error('已超时不能再连接媒体站点'); } },
+  }, { Date: { now: () => now } });
+  await assert.rejects(delayedDns.videoResponse('https://public.example/start', {}, 0, 8000, 5000), error => error.status === 504);
+});
+
 const kuaishou = load('../lib/video-kuaishou.ts');
 const publicPages = load('../lib/video-public-pages.ts');
 const hls = load('../lib/video-hls.ts', { './video-options': options });

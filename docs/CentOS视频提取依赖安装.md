@@ -166,6 +166,30 @@ node --env-file=.env.mysql scripts/check-video-link.mjs 'https://v.douyin.com/hx
 
 65项视频 / Firefox回归、3项严格生产检查、ESLint及生产构建通过；新增测试验证诊断从完整解析透传至Firefox，普通调用保持静默，响应体失败时记录network.getData而不泄漏模拟Cookie / URL参数。全项目类型检查仍为既有20项错误，无新增修改文件错误。恢复本轮dist，原样保存并恢复用户已有路由类型文件，保留用户已有dev lock变动，不混入提交。未运行真实浏览器、连接服务器 / Bucket或业务库。
 
+## 2026-10-25 实际日志确认冷启动挤占页面解析时间
+
+用户实际执行上述v1包后，Firefox在15103ms建立会话，15809ms开始访问视频页，17029ms返回200，24510ms清理并返回空结果。24秒预算包含了冷启动，导航完成后只剩约7秒。旧tar的1970时间戳警告未阻止解压和运行，与此次解析失败无直接关系。
+
+本轮在现有55秒分配窗口内调整浏览器阶段为最多42秒，同时至少预留10秒媒体校验时间；前段耗时较长时自动缩短浏览器阶段。媒体候选 / HTTP重定向共享绝对截止时间，避免扩大浏览器窗口后再为每条候选另开20秒。Firefox增加页面实际剩余时间和最终计数诊断，首次12秒无作品接口请求 / 响应且剩余足够时才刷新一次；已有作品请求在途时继续等待，不因慢响应刷新打断。
+
+新的忽略产物为`vendor/video-engine/offline-bundles/video-douyin-cold-start-fix-20261025.tar.gz`，19593字节，SHA256 `6a871f68c5ddd71e25ba728e78119c0af9205b138c69e9cf6f4008c5cb585f0d`。仅含lib/video-engine.ts、lib/video-browser.ts、lib/video-firefox.ts、lib/video-network.ts及scripts/check-video-link.mjs，使用正常时间戳；不含环境文件、密钥或二进制。上传项目根目录后先执行：
+
+```bash
+cd /home/www/yxshop/yxshopdev
+tar -xzf video-douyin-cold-start-fix-20261025.tar.gz &&
+node --env-file=.env.mysql scripts/check-video-link.mjs 'https://v.douyin.com/hxrtY8U4YKo/' --diagnostic
+```
+
+本次CLI直接读取源码，无需先停止商城、重新安装或编译，也不读取业务数据库、生成视频或扣费。先保留完整输出确认作品媒体候选和画质读取结果；服务器尚未收到通过结果，不能将预算修复表述为抖音实机已打通。若仍空结果，新的最终页面标记 / 接口计数用于继续定位；不根据公开页200断言网络或站点访问校验已通过。
+
+CLI成功后，商城生产包才按以下方式更新：
+
+```bash
+bash stop.sh && pnpm build && bash start.sh
+```
+
+当前服务器origin/master尚未确认包含补丁，直接upgrade可能重置掉手动补丁，应在同步代码源后再恢复日常升级。本轮没有修改upgrade、安装脚本、依赖、收费配置或Nginx，无需SQL。70项视频回归及3项严格生产检查、ESLint、构建通过；虚拟时钟复现15秒冷启动后旧24秒失败、新预算成功，以及18秒作品慢响应不刷新、永不返回时退出清理、候选和跳转共用截止时间。未运行真实浏览器或连接服务器 / Bucket / 业务库；全项目类型检查仍为既有20项错误，本轮文件无新增错误，用户原有生成文件改动已保留。
+
 ## 自动处理的内容
 
 1. 检测系统、x86_64 架构及 Node >=22.13，保留现有 Node 和 pnpm。脚本目标为 CentOS 7 与 Stream 9/10；其他架构和退役的 CentOS Linux 8 暂不自动安装。

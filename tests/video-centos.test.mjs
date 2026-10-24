@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import * as fileSystem from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import vm from 'node:vm';
+import { Readable } from 'node:stream';
 import ts from 'typescript';
 import * as options from '../lib/video-options.ts';
 
@@ -17,26 +18,38 @@ function load(file, mocks, processMock = process, globals = {}) {
 const publicPages = load('../lib/video-public-pages.ts', {});
 const source = 'https://www.douyin.com/video/7692515320217407402';
 const video = { aweme_id: '7692515320217407402', desc: '匿名公开视频', video: { duration: 5000, play_addr: { url_list: ['https://cdn.example/public.mp4'] } } };
-function harness({ data = { aweme_detail: video }, root = false, launchError = false, coldStart = false, initialPage = true, createError = false, authenticationStatus = 200, realProfiles = false, bodyError = false } = {}) {
+function harness({ data = { aweme_detail: video }, root = false, launchError = false, coldStart = false, initialPage = true, createError = false, authenticationStatus = 200, realProfiles = false, bodyError = false, timing } = {}) {
   const state = { browserClosed: 0, contextClosed: 0, proxyClosed: 0, removed: [], navigations: [], budgets: [], diagnostics: [], newPageCalls: 0, launches: 0 };
+  const timers = new Map(); let now = 0, sequence = 0, readyAt = Infinity, emitted = false, requestAt = Infinity;
+  function advance(ms) {
+    now += ms;
+    if (!state.pageClosed && state.request && now >= requestAt) { requestAt = Infinity; state.request({ url: () => 'https://www.douyin.com/aweme/v1/web/aweme/detail/', resourceType: () => 'xhr', continue: async () => {}, abort: async () => {} }); }
+    if (!state.pageClosed && !emitted && now >= readyAt) { emitted = true; emitResponse(); }
+    for (const [id, timer] of timers) if (timer.at <= now) { timers.delete(id); timer.callback(); }
+  }
+  const fakeTimeout = (callback, ms) => { const id = ++sequence; if (ms <= 350) { advance(ms); queueMicrotask(callback); } else timers.set(id, { at: now + ms, callback }); return id; };
+  state.clock = { now: () => now, advance };
   let responseHandler;
+  function emitResponse() { responseHandler?.({ url: () => 'https://www.douyin.com/aweme/v1/web/aweme/detail/?token=never-log-this', headers: () => ({}), status: () => 200, content: async () => { if (bodyError) { state.pageClosed = true; throw Object.assign(Error('network.getData failed secret-cookie proxy-password'), { name: 'ProtocolError' }); } return Buffer.from(JSON.stringify(data)); } }); }
   const page = {
     authenticate: async credentials => { state.credentials = credentials; }, setViewport: async () => {}, setRequestInterception: async value => { state.intercept = value; },
     on(name, handler) { if (name === 'response') responseHandler = handler; else if (name === 'request') state.request = handler; },
-    async goto(url) { state.navigations.push(url); responseHandler?.({ url: () => 'https://www.douyin.com/aweme/v1/web/aweme/detail/?token=never-log-this', headers: () => ({}), status: () => 200, content: async () => { if (bodyError) { state.pageClosed = true; throw Object.assign(Error('network.getData failed secret-cookie proxy-password'), { name: 'ProtocolError' }); } return Buffer.from(JSON.stringify(data)); } }); await Promise.resolve(); return { status: () => authenticationStatus }; },
+    async goto(url) { state.navigations.push(url); if (timing) { if (url.includes('video-proxy.invalid')) advance(800); else { readyAt = now + timing.detailAfter; if (Number.isFinite(readyAt)) requestAt = now + 500; advance(1200); } } else emitResponse(); await Promise.resolve(); return { status: () => authenticationStatus }; },
+    async reload() { state.reloads = (state.reloads || 0) + 1; if (timing) { readyAt = now + timing.detailAfter; advance(1200); } return { status: () => 200 }; },
     content: async () => '', isClosed: () => Boolean(state.pageClosed), url: () => state.navigations.at(-1) || 'about:blank',
     evaluate: async fn => fn.toString().includes('verificationPrompt') ? { titleLength: 2, videoCount: 0, verificationPrompt: true, loginPrompt: false } : fn.toString().includes('document.title') ? { title: '标题', urls: [], userAgent: 'Firefox/158' } : 'Firefox/158',
   };
   const context = { pages: async () => initialPage ? [page] : [], newPage: async () => { state.newPageCalls++; if (createError) throw Error('browsingContext.create timed out'); return page; }, close: async () => { state.contextClosed++; } };
-  const browser = { defaultBrowserContext: () => context, createBrowserContext: async () => { throw Error('不应在全新进程中再次创建隔离上下文'); }, close: async () => { state.browserClosed++; } };
+  const browser = { defaultBrowserContext: () => context, createBrowserContext: async () => { throw Error('不应在全新进程中再次创建隔离上下文'); }, close: async () => { state.browserClosed++; if (timing) state.pageClosed = true; } };
   state.api = load('../lib/video-firefox.ts', {
     './video-options': options, './video-public-pages': publicPages,
     './video-proxy': { openVideoProxy: async config => { state.proxyConfig = config; return { server: 'http://127.0.0.1:12345', username: 'video', password: 'temporary', authenticationUrl: 'http://video-proxy.invalid/random-handshake', close: async () => { state.proxyClosed++; } }; } },
-    'puppeteer-core': { __esModule: true, default: { launch: async config => { state.launch = config; state.launches++; if (launchError) throw Error('launch failed'); if (coldStart && config.protocolTimeout <= 10000) throw Error('session.new timed out'); return browser; } } },
+    'puppeteer-core': { __esModule: true, default: { launch: async config => { state.launch = config; state.launches++; if (launchError) throw Error('launch failed'); if (coldStart && config.protocolTimeout <= 10000) throw Error('session.new timed out'); if (timing) { config.signal.addEventListener('abort', () => { state.pageClosed = true; }); advance(15000); } return browser; } } },
     'node:fs/promises': realProfiles ? { ...fileSystem, rm: async (path, options) => { state.removed.push(path); await fileSystem.rm(path, options); } } : { mkdir: async () => {}, mkdtemp: async prefix => `${prefix}123456`, chmod: async () => {}, chown: async (...args) => { state.owner = args; }, realpath: async value => value, rm: async path => { state.removed.push(path); } },
   }, { ...process, platform: root ? 'linux' : 'win32', getuid: () => root ? 0 : 1000, env: { MOZ_DISABLE_CONTENT_SANDBOX: '1' } }, {
-    AbortSignal: { timeout: value => { state.budgets.push(value); return AbortSignal.timeout(value); } },
+    AbortSignal: { timeout: value => { state.budgets.push(value); if (!timing) return AbortSignal.timeout(value); const controller = new AbortController(); fakeTimeout(() => controller.abort(), value); return controller.signal; } },
     console: { ...console, error: value => state.diagnostics.push(value) },
+    ...(timing ? { Date: { now: () => now }, setTimeout: fakeTimeout, clearTimeout: id => timers.delete(id) } : {}),
   });
   return state;
 }
@@ -100,6 +113,48 @@ test('实际解析仍受请求总预算约束，不跟随安装自检放大到90
   const state = harness({ coldStart: true }); await state.api.inspectFirefoxVideo(source, { executable: '/project/firefox' }, 24000);
   assert.equal(state.launch.timeout, 20000); assert.equal(state.launch.protocolTimeout, 20000); assert.deepEqual(state.budgets, [24000]);
   assert.equal(state.launch.dumpio, false); assert.deepEqual(state.diagnostics, []);
+});
+
+test('复现Linux冷启动15秒：原24秒漏掉延迟作品数据，新完整解析在55秒窗口内成功', async () => {
+  const old = harness({ timing: { detailAfter: 10000 } });
+  assert.equal(await old.api.inspectFirefoxVideo(source, { executable: '/project/firefox' }, 24000, false, true), null);
+  assert.ok(old.clock.now() < 25000); assert.equal(old.proxyClosed, 1); assert.equal(old.removed.length, 1);
+  const state = harness({ timing: { detailAfter: 10000 } }), calls = [], probes = [];
+  const api = load('../lib/video-engine.ts', {
+    './video-options': options, './video-public-pages': publicPages, './video-kuaishou': {}, './video-hls': {}, './video-proxy': {},
+    './video-network': {
+      videoUrlAddress: async () => ({}), videoRequestHeaders: value => value,
+      videoResponseBytes: async response => { const chunks = []; for await (const chunk of response) chunks.push(chunk); return Buffer.concat(chunks); },
+      videoResponse: async (url, _headers, _redirects, _timeout, deadline) => {
+        const publicPage = url.includes('douyin.com');
+        if (!publicPage) { probes.push(deadline); state.clock.advance(2000); }
+        const bytes = publicPage ? Buffer.from('<html>公开壳页</html>') : Buffer.concat([Buffer.from([0, 0, 0, 24]), Buffer.from('ftypisom'), Buffer.alloc(100)]);
+        return { url, response: Object.assign(Readable.from([bytes]), { headers: { 'content-type': publicPage ? 'text/html' : 'video/mp4' } }) };
+      },
+    },
+    './video-browser': { videoBrowserExecutable: async () => '/project/firefox', inspectBrowserVideo: async (...args) => { calls.push(args); return state.api.inspectFirefoxVideo(args[0], { executable: '/project/firefox' }, args[1], false, args[2]); } },
+  }, process, { Date: { now: state.clock.now }, console: { error() {} } });
+  const result = await api.inspectVideo(source, false, true);
+  assert.equal(result.title, '匿名公开视频'); assert.equal(result.formats.length, 1); assert.equal(calls[0][1], 42000);
+  assert.equal(probes[0], Math.min(55000, state.clock.now() - 2000 + 20000)); assert.ok(state.clock.now() < 55000);
+  assert.ok(state.clock.now() > 24000); assert.equal(state.reloads || 0, 0);
+  assert.match(state.diagnostics.join('\n'), /页面解析剩余 26200ms/); assert.match(state.diagnostics.join('\n'), /匹配媒体 1 个/);
+  assert.equal(state.browserClosed, 1); assert.equal(state.proxyClosed, 1); assert.equal(state.removed.length, 1);
+});
+
+test('冷启动后始终没有作品数据时按预算退出，一次延迟刷新且保留结果诊断并清理', async () => {
+  const state = harness({ timing: { detailAfter: Infinity } });
+  assert.equal(await state.api.inspectFirefoxVideo(source, { executable: '/project/firefox' }, 42000, false, true), null);
+  assert.ok(state.clock.now() >= 40000 && state.clock.now() <= 42000); assert.equal(state.reloads, 1);
+  assert.match(state.diagnostics.join('\n'), /页面解析耗时.*作品接口 0 次/);
+  assert.equal(state.proxyClosed, 1); assert.equal(state.removed.length, 1); assert.equal(state.browserClosed, 1);
+});
+
+test('作品接口已发出但响应慢于12秒时不刷新中断，仍可在预算内取得原作品', async () => {
+  const state = harness({ timing: { detailAfter: 18000 } });
+  const result = await state.api.inspectFirefoxVideo(source, { executable: '/project/firefox' }, 42000, false, true);
+  assert.equal(result.page.media.length, 1); assert.ok(state.clock.now() > 33000 && state.clock.now() < 42000);
+  assert.equal(state.reloads || 0, 0); assert.equal(state.browserClosed, 1); assert.equal(state.proxyClosed, 1);
 });
 
 test('显式真实解析诊断显示作品接口与阶段，不启用原始stderr或泄漏源地址和Cookie', async () => {
