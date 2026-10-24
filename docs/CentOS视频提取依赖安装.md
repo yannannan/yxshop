@@ -84,6 +84,26 @@ bash scripts/install-video-deps-centos.sh
 
 FFmpeg阶段应复用此前已解压的三个文件，然后签名验证、编译；不需重新传或解压源码包。Firefox首次未安装时仍需下载，这是另一阶段。之后应将6aaeb51及后续修复同步到服务器实际使用的远程master，再恢复日常 `bash upgrade.sh`。独立补装不构建 / 启停商城；若之前中断升级停了商城，完成补装后按原构建 / 启动流程恢复。本包只为解决本次旧脚本补装，不增加新的upgrade参数或入口。
 
+## Firefox 会话启动超时
+
+用户后续日志确认：FFmpeg 9.0.2已编译、安装并通过实际媒体检查，Firefox 158.0.1已安装且版本命令可运行；最终健康检查在BiDi `session.new`超时，不能报告依赖全部就绪。资源实测：内存1756MiB、可用514MiB，swap8191MiB未使用，/dev/shm879MiB空闲，根分区40GiB已用37GiB、可用762MiB、99%，`user.max_user_namespaces=0`。0会禁用用户命名空间，参见 [Red Hat说明](https://access.redhat.com/articles/5946151)；但仅凭这项和磁盘接近满不能断言它们就是本次Firefox会话超时的已证实原因，也未替用户改sysctl或删除文件。
+
+代码原先把Firefox启动 / 会话分别固定成12秒 / 10秒。现自检允许启动与会话各最多60秒，整个浏览器生命周期由AbortSignal限为90秒；实际视频解析仍使用原请求总预算，启动及协议单次最多20秒，不把业务请求也放大为90秒。代理限制、专用账号、默认沙箱及匿名档案清理保留。`--runtime --diagnostic`才输出资源、专用账号unshare测试、Firefox及libxul.so动态库缺失项、浏览器stdout/stderr和启动阶段，不连接业务库或解析真实站点，不输出环境文件内容。超时和诊断参考 [Puppeteer参数](https://pptr.dev/api/puppeteer.connectoptions) 及 [Mozilla远程协议调试](https://firefox-source-docs.mozilla.org/remote/Debugging.html)。
+
+本机准备了忽略产物 `vendor/video-engine/offline-bundles/video-firefox-start-check-20261024.tar.gz`（5582字节，SHA256 `c3693337ad84a8f68d5ffb3ff9448c36142176d00131dc7e6fdc5d210f281133`），仅包含 `lib/video-firefox.ts` 与 `scripts/check-video-link.mjs`，不含浏览器或环境文件。用户上传至项目根后执行：
+
+```bash
+cd /home/www/yxshop/yxshopdev
+tar -xzf video-firefox-start-check-20261024.tar.gz
+# 上次自检失败已恢复旧运行记录，需要重新登记本机已有Firefox缓存；相同版本不重新下载。
+node scripts/setup-video-engine.mjs --browser --firefox
+node --env-file=.env.mysql scripts/check-video-link.mjs --runtime --diagnostic
+```
+
+先在原系统参数下取得实际启动结果和错误日志，再针对已证实的限制处理；本次不自动修改用户命名空间、安全策略、系统内存或磁盘。无需重编译FFmpeg、重装yt-dlp / Firefox或重新解压前三个包。CLI直接加载当前TS源码，无需先构建商城即可验证；线上已构建的应用需随后正常发布构建 / 重启才能使用源码改动。首次诊断通过也不等于真实平台提取与收费全部验收，最后应运行原独立sh的完整自检并由用户测试。
+
+57项Firefox / 视频解析 / 权益与OSS业务检查、修改文件ESLint及生产构建通过。全项目TypeScript仍报原有20项错误，本轮修改文件没有新增错误；还原本轮类型检查生成的tsconfig.tsbuildinfo，不混入提交。未启动商城、未运行真实浏览器或连接服务器 / 数据库；本地模拟冷启动通过不能称为CentOS启动已修好。按约定提交并合并本地main，不自动推送。
+
 ## 自动处理的内容
 
 1. 检测系统、x86_64 架构及 Node >=22.13，保留现有 Node 和 pnpm。脚本目标为 CentOS 7 与 Stream 9/10；其他架构和退役的 CentOS Linux 8 暂不自动安装。

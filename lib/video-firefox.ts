@@ -9,7 +9,7 @@ import type { BrowserVideo } from './video-browser';
 export type FirefoxRuntime = { executable: string; launcher?: string; worker?: { uid: number; gid: number } };
 
 // CentOS 7 使用 Mozilla 原版 Firefox + WebDriver BiDi，不依赖新版 Chromium / glibc。
-export async function inspectFirefoxVideo(source: string, runtime: FirefoxRuntime, timeout: number, probe = false): Promise<BrowserVideo | null> {
+export async function inspectFirefoxVideo(source: string, runtime: FirefoxRuntime, timeout: number, probe = false, diagnostics = false): Promise<BrowserVideo | null> {
   const { default: puppeteer } = await import('puppeteer-core');
   const temporary = resolve('vendor/video-engine/browser-temporary');
   await mkdir(temporary, { recursive: true });
@@ -17,6 +17,7 @@ export async function inspectFirefoxVideo(source: string, runtime: FirefoxRuntim
   let browser: Browser | undefined, context: BrowserContext | undefined;
   let proxy: Awaited<ReturnType<typeof openVideoProxy>> | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined, finished = false;
+  const report = (stage: string) => { if (probe && diagnostics) console.error(`[Firefox启动检查] ${stage}`); };
   try {
     const worker = process.getuid?.() === 0 ? runtime.worker : undefined;
     if (process.platform === 'linux' && process.getuid?.() === 0 && (!worker || !runtime.launcher)) throw new VideoError('请先运行 CentOS 视频依赖安装脚本，配置非 root 网页解析账号', 503);
@@ -26,12 +27,15 @@ export async function inspectFirefoxVideo(source: string, runtime: FirefoxRuntim
     }
     await chmod(profile, 0o700);
     proxy = await openVideoProxy();
-    const proxyUrl = new URL(proxy.server), deadline = Date.now() + timeout;
+    const budget = probe ? 90000 : Math.max(1000, timeout);
+    const proxyUrl = new URL(proxy.server), deadline = Date.now() + budget;
     const environment: NodeJS.ProcessEnv = { ...process.env, TMPDIR: temporary, TMP: temporary, TEMP: temporary, HOME: profile, XDG_RUNTIME_DIR: profile, XDG_CACHE_HOME: profile, XDG_CONFIG_HOME: profile, YX_VIDEO_FIREFOX_BINARY: runtime.executable };
     // 不继承运维终端里可能存在的“关闭沙箱”开关。
     for (const name of Object.keys(environment)) if (/^MOZ_DISABLE_.*SANDBOX$/.test(name)) delete environment[name];
+    report('准备浏览器进程和 BiDi 会话；自检会话等待上限60秒，总上限90秒。');
     browser = await puppeteer.launch({ browser: 'firefox', protocol: 'webDriverBiDi', executablePath: worker ? runtime.launcher : runtime.executable,
-      headless: true, userDataDir: profile, timeout: 12000, protocolTimeout: 10000, env: environment,
+      headless: true, userDataDir: profile, timeout: probe ? 60000 : Math.min(20000, budget), protocolTimeout: probe ? 60000 : Math.min(20000, budget), env: environment,
+      signal: AbortSignal.timeout(budget), dumpio: probe && diagnostics,
       extraPrefsFirefox: {
         'network.proxy.type': 1, 'network.proxy.http': proxyUrl.hostname, 'network.proxy.http_port': Number(proxyUrl.port),
         'network.proxy.ssl': proxyUrl.hostname, 'network.proxy.ssl_port': Number(proxyUrl.port),
@@ -42,12 +46,15 @@ export async function inspectFirefoxVideo(source: string, runtime: FirefoxRuntim
         // 沙箱采用当前 Firefox 默认策略，不降低级别。
       },
     });
+    report('BiDi 会话已建立，正在创建隔离上下文。');
     context = await browser.createBrowserContext();
+    report('隔离上下文已建立，正在创建页面。');
     const page = await context.newPage(), douyin = isDouyinPage(new URL(source).hostname), urls = new Set<string>();
     await page.authenticate({ username: proxy.username, password: proxy.password });
     await page.setViewport({ width: 1365, height: 900 });
     if (probe) {
-      await page.goto('about:blank');
+      report('正在检查 about:blank 和页面脚本。');
+      await page.goto('about:blank', { timeout: 10000 });
       const userAgent = await page.evaluate(() => navigator.userAgent);
       return { page: { title: 'Firefox 启动检查通过', thumbnail: '', duration: 0, media: [], imagePost: false }, referer: 'about:blank', userAgent, urls: [] };
     }
@@ -96,6 +103,7 @@ export async function inspectFirefoxVideo(source: string, runtime: FirefoxRuntim
     const info = await page.evaluate(() => ({ title: document.title, userAgent: navigator.userAgent, urls: Array.from(document.querySelectorAll('video, video source')).map(node => node.getAttribute('src') || '').filter(url => /^https?:\/\//.test(url)) }));
     return { page: detail || { title: info.title, thumbnail: '', duration: 0, media: [], imagePost: false }, referer: page.url(), userAgent: info.userAgent, urls: douyin ? [] : [...new Set([...urls, ...info.urls])].slice(0, 12) };
   } finally {
+    report('关闭本次浏览器、代理并清理匿名档案。');
     finished = true; clearTimeout(timer);
     await context?.close().catch(() => {}); await browser?.close().catch(() => {}); await proxy?.close().catch(() => {});
     const actual = await realpath(profile), child = relative(await realpath(temporary), actual);

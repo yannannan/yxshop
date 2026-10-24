@@ -7,17 +7,17 @@ import ts from 'typescript';
 import * as options from '../lib/video-options.ts';
 
 const require = createRequire(import.meta.url);
-function load(file, mocks, processMock = process) {
+function load(file, mocks, processMock = process, globals = {}) {
   const exports = {};
   const code = ts.transpileModule(readFileSync(new URL(file, import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText;
-  vm.runInNewContext(code, { exports, URL, Buffer, process: processMock, AbortSignal, setTimeout, clearTimeout, console, require: name => name in mocks ? mocks[name] : require(name) });
+  vm.runInNewContext(code, { exports, URL, Buffer, process: processMock, AbortSignal, setTimeout, clearTimeout, console, ...globals, require: name => name in mocks ? mocks[name] : require(name) });
   return exports;
 }
 const publicPages = load('../lib/video-public-pages.ts', {});
 const source = 'https://www.douyin.com/video/7692515320217407402';
 const video = { aweme_id: '7692515320217407402', desc: '匿名公开视频', video: { duration: 5000, play_addr: { url_list: ['https://cdn.example/public.mp4'] } } };
-function harness({ data = { aweme_detail: video }, root = false, launchError = false } = {}) {
-  const state = { browserClosed: 0, contextClosed: 0, proxyClosed: 0, removed: [], navigations: [] };
+function harness({ data = { aweme_detail: video }, root = false, launchError = false, coldStart = false } = {}) {
+  const state = { browserClosed: 0, contextClosed: 0, proxyClosed: 0, removed: [], navigations: [], budgets: [], diagnostics: [] };
   let responseHandler;
   const page = {
     authenticate: async credentials => { state.credentials = credentials; }, setViewport: async () => {}, setRequestInterception: async value => { state.intercept = value; },
@@ -31,9 +31,12 @@ function harness({ data = { aweme_detail: video }, root = false, launchError = f
   state.api = load('../lib/video-firefox.ts', {
     './video-options': options, './video-public-pages': publicPages,
     './video-proxy': { openVideoProxy: async () => ({ server: 'http://127.0.0.1:12345', username: 'video', password: 'temporary', close: async () => { state.proxyClosed++; } }) },
-    'puppeteer-core': { __esModule: true, default: { launch: async config => { state.launch = config; if (launchError) throw Error('launch failed'); return browser; } } },
+    'puppeteer-core': { __esModule: true, default: { launch: async config => { state.launch = config; if (launchError) throw Error('launch failed'); if (coldStart && config.protocolTimeout <= 10000) throw Error('session.new timed out'); return browser; } } },
     'node:fs/promises': { mkdir: async () => {}, mkdtemp: async prefix => `${prefix}123456`, chmod: async () => {}, chown: async (...args) => { state.owner = args; }, realpath: async value => value, rm: async path => { state.removed.push(path); } },
-  }, { ...process, platform: root ? 'linux' : 'win32', getuid: () => root ? 0 : 1000, env: { MOZ_DISABLE_CONTENT_SANDBOX: '1' } });
+  }, { ...process, platform: root ? 'linux' : 'win32', getuid: () => root ? 0 : 1000, env: { MOZ_DISABLE_CONTENT_SANDBOX: '1' } }, {
+    AbortSignal: { timeout: value => { state.budgets.push(value); return AbortSignal.timeout(value); } },
+    console: { ...console, error: value => state.diagnostics.push(value) },
+  });
   return state;
 }
 test('CentOS Firefox 解析匹配视频，代理无本机豁免、禁止直接回退，沙箱保持开启', async () => {
@@ -74,6 +77,30 @@ test('Firefox 启动失败或作品仅好友可见时仍释放浏览器、代理
 test('启动自检只访问 about:blank，不连接业务库或请求真实网站', async () => {
   const state = harness(); const result = await state.api.inspectFirefoxVideo(source, { executable: '/project/firefox' }, 10000, true);
   assert.equal(result.referer, 'about:blank'); assert.deepEqual(state.navigations, ['about:blank']); assert.equal(state.proxyClosed, 1);
+});
+
+test('冷启动自检不再用10秒会话限制，允许60秒握手且总预算90秒', async () => {
+  const state = harness({ coldStart: true });
+  const result = await state.api.inspectFirefoxVideo(source, { executable: '/project/firefox' }, 12000, true);
+  assert.equal(result.referer, 'about:blank'); assert.equal(state.launch.timeout, 60000); assert.equal(state.launch.protocolTimeout, 60000);
+  assert.deepEqual(state.budgets, [90000]); assert.equal(state.launch.signal.aborted, false);
+  assert.equal(state.launch.dumpio, false); assert.deepEqual(state.diagnostics, []);
+});
+
+test('实际解析仍受请求总预算约束，不跟随安装自检放大到90秒', async () => {
+  const state = harness({ coldStart: true }); await state.api.inspectFirefoxVideo(source, { executable: '/project/firefox' }, 24000, false, true);
+  assert.equal(state.launch.timeout, 20000); assert.equal(state.launch.protocolTimeout, 20000); assert.deepEqual(state.budgets, [24000]);
+  assert.equal(state.launch.dumpio, false); assert.deepEqual(state.diagnostics, []);
+});
+
+test('诊断仅在自检显式开启，输出阶段与浏览器stderr，启动失败仍清理', async () => {
+  const state = harness(); await state.api.inspectFirefoxVideo(source, { executable: '/project/firefox' }, 12000, true, true);
+  assert.equal(state.launch.dumpio, true); assert.ok(state.diagnostics.some(value => value.includes('BiDi 会话已建立')));
+  assert.ok(state.diagnostics.some(value => value.includes('about:blank'))); assert.equal(state.browserClosed, 1);
+  const failed = harness({ launchError: true });
+  await assert.rejects(failed.api.inspectFirefoxVideo(source, { executable: '/project/firefox' }, 12000, true, true), /launch failed/);
+  assert.equal(failed.proxyClosed, 1); assert.equal(failed.removed.length, 1);
+  assert.ok(failed.diagnostics.some(value => value.includes('清理匿名档案')));
 });
 test('浏览器配置识别 Firefox，拒绝跨操作系统路径记录，保留旧 Chromium 记录兼容', async () => {
   function runtime(record, env = {}) { return load('../lib/video-browser.ts', { './video-options': options, './video-public-pages': publicPages, './video-network': {}, './video-proxy': {}, 'node:fs/promises': { readFile: async () => JSON.stringify(record), access: async () => {} } }, { ...process, platform: 'linux', env }); }
