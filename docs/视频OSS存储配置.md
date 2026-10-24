@@ -2,6 +2,24 @@
 
 按用户确认，Bucket 为 `yxstarshop`，上海地域 `oss-cn-shanghai`，公网 Endpoint 为 `oss-cn-shanghai.aliyuncs.com`。本轮无需新增 SQL，不改变原积分、会员及按次价格。
 
+## 预览和下载错误 0017-00000902
+
+用户已确认工具入口恢复，并在Linux配置密钥后可以识别链接、提取视频；成品预览和下载跳到OSS后返回`InvalidRequest / Can not override response header on content-type / 0017-00000902`。该错误对应下载签名中的`response-content-type`参数，与本次截图一致；[阿里云官方说明](https://help.aliyun.com/zh/oss/user-guide/0017-00000902)要求GET取消此参数。
+
+已从公共downloadUrl签名函数移除此参数，预览inline与下载attachment同时生效；保留15分钟V4签名、文件名、登录与任务归属验证。视频类型继续由上传putStream的mime写入对象元数据（MP4为video/mp4），不会改成公开Bucket或由商城转发视频。已有任务每次点击都会重新签名，无需重新提取、上传或扣分，也不修改历史记录或OSS对象。
+
+本机已准备忽略产物`vendor/video-engine/offline-bundles/video-oss-download-fix-20261024.tar.gz`（3825字节、SHA256 `2036acede825bf016669ce28838c193d4cc2edad3c1c7b1d4996b49102deba54`），仅含`lib/video-object-storage.mjs`，没有密钥或引擎文件。上传至服务器项目根后执行：
+
+```bash
+cd /home/www/yxshop/yxshopdev
+tar -xzf video-oss-download-fix-20261024.tar.gz &&
+bash stop.sh && pnpm build && bash start.sh
+```
+
+回到视频工具页刷新，从已有历史记录重新点击下载取得新签名地址，并测试成品预览。当前先不运行upgrade覆盖手动补丁；将已验证的所有修复同步到服务器实际origin/master后再恢复日常升级。无需新SQL、重装视频依赖、修改密钥或Bucket权限。
+
+49项视频 / OSS检查及3项严格生产渲染、ESLint和生产构建通过；使用真实SDK离线验证MP4 / WebM / MOV的inline与attachment共6种签名均不带禁用参数，保留签名与归属校验。没有读取真实密钥、连接用户Bucket / 业务库或打开浏览器；生产云端预览和下载仍待用户部署验收。
+
 ## 处理与下载
 
 1. 原引擎把视频下载 / 合并到项目 `uploads/video-extractions/<任务 UUID>/` 临时目录。

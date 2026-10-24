@@ -45,6 +45,7 @@ test('分块上传、MD5 校验、私有 ACL、禁止覆盖；HEAD 验证长度�
   const object = await factory(client).upload(input);
   assert.deepEqual(object, pointer()); assert.deepEqual(uploaded, bytes);
   assert.equal(options.contentLength, bytes.length); assert.equal(options.headers['Content-MD5'], createHash('md5').update(bytes).digest('base64'));
+  assert.equal(options.mime, 'video/mp4');
   assert.equal(options.headers['x-oss-object-acl'], 'private'); assert.equal(options.headers['x-oss-forbid-overwrite'], 'true'); assert.equal(options.meta['yxshop-task'], id);
   assert.deepEqual(await readFile(input.path), bytes); // 上传层自身绝不先删文件。
 });
@@ -69,14 +70,19 @@ test('OSS 凭据或上传失败不读取成品到内存、不删除本地；错�
   await assert.rejects(factory({}).upload({ ...input, size: 999 }), /无效/);
 });
 
-test('真实 SDK 离线生成公网 V4 签名，成品长期保留，链接每次 15 分钟有效', async () => {
+test('真实 SDK 为已有成品签发下载及预览链接，不覆盖 OSS 禁止修改的 Content-Type', async () => {
   const storage = createVideoObjectStorage({ environment: () => ({ ...credentials, VIDEO_OSS_INTERNAL_UPLOAD: '1' }) });
   const object = storage.readRecord(row());
-  const url = new URL(await storage.downloadUrl(object, { userId: 7, id, extension: 'mp4', title: '中文视频' }));
-  assert.equal(url.origin, 'https://yxstarshop.oss-cn-shanghai.aliyuncs.com');
-  assert.equal(url.searchParams.get('x-oss-expires'), '900'); assert.equal(url.searchParams.get('x-oss-signature-version'), 'OSS4-HMAC-SHA256');
-  assert.match(url.searchParams.get('response-content-disposition'), /attachment;.*UTF-8''%/); assert.ok(!url.href.includes('test-only-secret'));
-  const inline = new URL(await storage.downloadUrl(object, { userId: 7, id, extension: 'mp4', title: '视频', inline: true })); assert.match(inline.searchParams.get('response-content-disposition'), /^inline;/);
+  for (const extension of ['mp4', 'webm', 'mov']) {
+    for (const inline of [false, true]) {
+      const url = new URL(await storage.downloadUrl({ ...object, key: object.key.replace(/\.mp4$/, `.${extension}`) }, { userId: 7, id, extension, title: '中文视频', inline }));
+      assert.equal(url.origin, 'https://yxstarshop.oss-cn-shanghai.aliyuncs.com');
+      assert.equal(url.searchParams.get('x-oss-expires'), '900'); assert.equal(url.searchParams.get('x-oss-signature-version'), 'OSS4-HMAC-SHA256');
+      assert.match(url.searchParams.get('x-oss-signature'), /^[a-f0-9]{64}$/);
+      assert.match(url.searchParams.get('response-content-disposition'), new RegExp(`^${inline ? 'inline' : 'attachment'};.*UTF-8''%`));
+      assert.equal(url.searchParams.has('response-content-type'), false); assert.ok(!url.href.includes('test-only-secret'));
+    }
+  }
   await assert.rejects(storage.downloadUrl(object, { userId: 8, id, extension: 'mp4', title: '' }), /不匹配/);
 });
 
