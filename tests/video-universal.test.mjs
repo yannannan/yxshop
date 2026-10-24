@@ -74,6 +74,19 @@ test('动态解析准确透传好友可见限制，失败或引擎启动异常�
   const failed = browserHarness({}, true); await assert.rejects(failed.api.inspectBrowserVideo(source), error => error.status === 503 && /网页解析引擎暂不可用/.test(error.message)); assert.equal(failed.proxyClosed, 1);
 });
 
+test('抖音完整解析将显式诊断传给网页引擎，媒体日志只输出数量和已知错误', async () => {
+  const calls = [], logs = [];
+  const api = load('../lib/video-engine.ts', {
+    ...base,
+    './video-network': { ...network, videoUrlAddress: async () => ({}), videoResponse: async url => ({ url, response: stream(url.includes('douyin.com') ? Buffer.from('<html>公开壳页</html>') : media, url.includes('douyin.com') ? { 'content-type': 'text/html' } : {}) }) },
+    './video-browser': { videoBrowserExecutable: async () => '/unused', inspectBrowserVideo: async (...args) => { calls.push(args); return { page: publicPages.douyinDataVideo({ aweme_detail: video }, source), referer: source, userAgent: 'Firefox/158', urls: [] }; } },
+  }, { console: { error: (...args) => logs.push(args.join(' ')) } });
+  const result = await api.inspectVideo(source, false, true);
+  assert.equal(result.formats.length, 1); assert.equal(calls[0][2], true); assert.equal(calls[0][1], 24000);
+  assert.match(logs.join('\n'), /公开页.*媒体 0 个/); assert.match(logs.join('\n'), /网页引擎返回 媒体候选 1 个/);
+  assert.doesNotMatch(logs.join('\n'), /cdn\.example|temporary|User-Agent/);
+});
+
 test('HLS 多画质及独立音轨按实际地址解析，支持相对路径', () => {
   const result = hls.hlsVariants('#EXTM3U\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="aac",DEFAULT=YES,URI="audio/list.m3u8"\n#EXT-X-STREAM-INF:BANDWIDTH=2000000,RESOLUTION=1280x720,AUDIO="aac"\nvideo/list.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=500000,RESOLUTION=640x360\nlow.m3u8', 'https://cdn.example/root/master.m3u8');
   assert.deepEqual(plain(result), [{ url: 'https://cdn.example/root/video/list.m3u8', height: 720, label: '720p · MP4', audio: 'https://cdn.example/root/audio/list.m3u8' }, { url: 'https://cdn.example/root/low.m3u8', height: 360, label: '360p · MP4' }]);

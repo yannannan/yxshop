@@ -17,7 +17,14 @@ export async function inspectFirefoxVideo(source: string, runtime: FirefoxRuntim
   let browser: Browser | undefined;
   let proxy: Awaited<ReturnType<typeof openVideoProxy>> | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined, finished = false;
-  const report = (stage: string) => { if (probe && diagnostics) console.error(`[Firefox启动检查] ${stage}`); };
+  const began = Date.now();
+  const report = (stage: string) => { if (diagnostics) console.error(`[${probe ? 'Firefox启动检查' : 'Firefox解析诊断'} +${Date.now() - began}ms] ${stage}`); };
+  const failureType = (error: unknown) => {
+    const message = String((error as Error)?.message || '');
+    const command = message.match(/\b(?:network|browsingContext|session|script)\.[a-zA-Z]+\b/)?.[0] || '';
+    const code = message.match(/\b(?:NS_ERROR_|ERR_|SEC_ERROR_|SSL_ERROR_|MOZILLA_PKIX_ERROR_)[A-Z0-9_]+\b/)?.[0] || '';
+    return [(error as Error)?.name || 'Error', command, code].filter(Boolean).join(' ');
+  };
   try {
     const worker = process.getuid?.() === 0 ? runtime.worker : undefined;
     if (process.platform === 'linux' && process.getuid?.() === 0 && (!worker || !runtime.launcher)) throw new VideoError('请先运行 CentOS 视频依赖安装脚本，配置非 root 网页解析账号', 503);
@@ -32,7 +39,7 @@ export async function inspectFirefoxVideo(source: string, runtime: FirefoxRuntim
     const environment: NodeJS.ProcessEnv = { ...process.env, TMPDIR: temporary, TMP: temporary, TEMP: temporary, HOME: profile, XDG_RUNTIME_DIR: profile, XDG_CACHE_HOME: profile, XDG_CONFIG_HOME: profile, YX_VIDEO_FIREFOX_BINARY: runtime.executable };
     // 不继承运维终端里可能存在的“关闭沙箱”开关。
     for (const name of Object.keys(environment)) if (/^MOZ_DISABLE_.*SANDBOX$/.test(name)) delete environment[name];
-    report('准备浏览器进程和 BiDi 会话；自检会话等待上限60秒，总上限90秒。');
+    report(`准备浏览器进程和 BiDi 会话；本次总预算 ${budget}ms。`);
     browser = await puppeteer.launch({ browser: 'firefox', protocol: 'webDriverBiDi', executablePath: worker ? runtime.launcher : runtime.executable,
       headless: true, userDataDir: profile, timeout: probe ? 60000 : Math.min(20000, budget), protocolTimeout: probe ? 60000 : Math.min(20000, budget), env: environment,
       signal: AbortSignal.timeout(budget), dumpio: probe && diagnostics,
@@ -65,7 +72,7 @@ export async function inspectFirefoxVideo(source: string, runtime: FirefoxRuntim
       return { page: { title: 'Firefox 启动检查通过', thumbnail: '', duration: 0, media: [], imagePost: false }, referer: 'about:blank', userAgent, urls: [] };
     }
     await page.setRequestInterception(true);
-    let detail: PublicVideoPage | null = null, restriction = '', reloaded = false;
+    let detail: PublicVideoPage | null = null, restriction = '', reloaded = false, apiResponses = 0, bodyFailures = 0;
     const started = Date.now();
     timer = setTimeout(() => { finished = true; void browser?.close().catch(() => {}); }, Math.max(1000, deadline - Date.now()));
     page.on('request', request => {
@@ -87,22 +94,34 @@ export async function inspectFirefoxVideo(source: string, runtime: FirefoxRuntim
         if (response.ok() && /^(?:video\/|application\/(?:vnd\.apple\.mpegurl|x-mpegurl))/i.test(response.headers()['content-type'] || '') && urls.size < 12) urls.add(response.url());
         return;
       }
-      if (!isDouyinPage(new URL(response.url()).hostname) || !response.url().includes('/aweme/') || response.status() !== 200 || Number(response.headers()['content-length']) > 2 * 1024 ** 2) return;
+      if (!isDouyinPage(new URL(response.url()).hostname) || !response.url().includes('/aweme/')) return;
+      apiResponses++;
+      if (apiResponses <= 8) report(`作品接口响应 ${response.status()}，声明大小 ${Number(response.headers()['content-length']) || 0} 字节。`);
+      if (response.status() !== 200 || Number(response.headers()['content-length']) > 2 * 1024 ** 2) return;
       void (async () => {
         const body = await response.content();
         if (finished || body.length > 2 * 1024 ** 2) return;
         const data = JSON.parse(Buffer.from(body).toString());
         restriction = douyinRestriction(data, source);
         const found = douyinDataVideo(data, source);
+        if (apiResponses <= 8) report(`作品数据已读取；状态码 ${Number(data?.status_code) || 0}，匹配媒体 ${found.media.length} 个，图文 ${found.imagePost}，访问受限 ${Boolean(restriction)}。`);
         if (found.media.length || found.imagePost) detail = found;
-      })().catch(() => {});
+      })().catch(error => { bodyFailures++; if (bodyFailures <= 4) report(`作品响应体读取失败：${failureType(error)}。`); });
     });
-    await page.goto(douyin ? douyinCanonicalUrl(source) || source : source, { waitUntil: 'domcontentloaded', timeout: Math.min(14000, Math.max(1000, deadline - Date.now())) }).catch(() => {});
+    report('正在打开视频页面。');
+    await page.goto(douyin ? douyinCanonicalUrl(source) || source : source, { waitUntil: 'domcontentloaded', timeout: Math.min(14000, Math.max(1000, deadline - Date.now())) }).then(response => { report(`视频页面导航响应 ${response?.status() || 0}。`); }).catch(error => { report(`视频页面导航未完成：${failureType(error)}。`); });
     while (!finished && !page.isClosed() && Date.now() < deadline - 1000 && !detail && !restriction && !urls.size) {
       if (douyin && !reloaded && Date.now() - started > 5000 && deadline - Date.now() > 5000) { reloaded = true; await page.reload({ waitUntil: 'domcontentloaded', timeout: Math.min(8000, deadline - Date.now()) }).catch(() => {}); }
       if (douyin) { const found = douyinPageVideo(await page.content().catch(() => ''), source); if (found.media.length || found.imagePost) detail = found; }
       await page.evaluate(() => { for (const video of document.querySelectorAll('video')) { video.muted = true; void video.play().catch(() => {}); } }).catch(() => {});
       await new Promise(resolve => setTimeout(resolve, 350));
+    }
+    if (diagnostics && !page.isClosed()) {
+      const state = await page.evaluate(() => {
+        const text = document.body?.innerText || '';
+        return { titleLength: document.title.length, videoCount: document.querySelectorAll('video').length, verificationPrompt: /安全验证|请完成验证|拖动滑块|验证码/.test(text), loginPrompt: /登录后观看|请先登录/.test(text) };
+      }).catch(() => null);
+      report(`最终页面状态 ${JSON.stringify(state)}；作品接口 ${apiResponses} 次，响应体失败 ${bodyFailures} 次，匹配媒体 ${detail ? (detail as PublicVideoPage).media.length : 0} 个。`);
     }
     if (restriction) throw new VideoError(restriction, 403);
     if (page.isClosed() || (douyin && !detail)) return null;

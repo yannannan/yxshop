@@ -146,6 +146,26 @@ bash stop.sh && pnpm build && bash start.sh
 
 随后在商城视频工具用公开可播放链接测试解析、提取、OSS保存及本人历史下载。该业务流程尚未收到本次修复后的实机结果，启动检查通过不能替代它。服务器实际origin/master未确认含14d45b6，当前先不用upgrade覆盖手动补丁；同步修复到该代码源后再恢复日常upgrade，其独立video sh通过自检便直接跳过安装。
 
+## 抖音在Windows成功、Linux返回空源
+
+用户随后提供短链`https://v.douyin.com/hxrtY8U4YKo/`，Linux商城及`node --env-file=.env.mysql scripts/check-video-link.mjs 'https://v.douyin.com/hxrtY8U4YKo/'`均返回同一句通用空源提示；用户确认Windows本地可以提取。普通HTTP检查确认短链跳转至作品`7677524321853558067`，最终200响应为约72914字节的页面，未直接包含既有路由数据 / 视频源；没有运行本地真实浏览器，也没有据此判定私密或作品不可用。
+
+本机运行记录是旧版win32记录，未填engine字段，源码默认按chromium处理，两份本地环境未显式覆盖浏览器路径；Linux此前安装并通过自检的是Firefox。引擎与出口网络均存在差异，仅凭差异不能断言根因或将自检通过视为抖音实机通过。
+
+新增真实解析的显式`--diagnostic`：沿同一解析流程输出公开页媒体数量、当前引擎 / 开关 / 预算、Firefox阶段耗时、视频页面响应、作品接口状态、响应体读取异常类型及BiDi命令名、匹配媒体数量、页面验证 / 登录提示布尔值及媒体探测的已知错误。真实解析诊断不打开原始浏览器stderr，不输出URL参数、Cookie、代理口令、源站签名媒体地址或环境内容；原有启动自检诊断保留。普通商城调用默认关闭，不放大原24秒解析预算或关闭沙箱。
+
+这是定位工具，尚未修复这条链接的Linux提取。准备忽略包`vendor/video-engine/offline-bundles/video-douyin-linux-diagnostic-v1.tar.gz`（16209字节，SHA256 `288faa780da8aed1573e2a05083dc8a32770ed3aafffe4aba0ca015e30e46e46`），仅4份源码：lib/video-engine.ts、lib/video-browser.ts、lib/video-firefox.ts、scripts/check-video-link.mjs。上传至服务器项目根后执行：
+
+```bash
+cd /home/www/yxshop/yxshopdev
+tar -xzf video-douyin-linux-diagnostic-v1.tar.gz &&
+node --env-file=.env.mysql scripts/check-video-link.mjs 'https://v.douyin.com/hxrtY8U4YKo/' --diagnostic
+```
+
+无需停服、构建、升级或安装依赖，CLI直接读源码；不加--download，因此不生成视频、不请求业务数据库、不扣分。需用户提供这次完整阶段输出后，针对实际失败环节继续修复；没有拿到输出前不猜测更换引擎、调大超时或调整内核。
+
+65项视频 / Firefox回归、3项严格生产检查、ESLint及生产构建通过；新增测试验证诊断从完整解析透传至Firefox，普通调用保持静默，响应体失败时记录network.getData而不泄漏模拟Cookie / URL参数。全项目类型检查仍为既有20项错误，无新增修改文件错误。恢复本轮dist，原样保存并恢复用户已有路由类型文件，保留用户已有dev lock变动，不混入提交。未运行真实浏览器、连接服务器 / Bucket或业务库。
+
 ## 自动处理的内容
 
 1. 检测系统、x86_64 架构及 Node >=22.13，保留现有 Node 和 pnpm。脚本目标为 CentOS 7 与 Stream 9/10；其他架构和退役的 CentOS Linux 8 暂不自动安装。

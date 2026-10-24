@@ -27,8 +27,9 @@ export async function videoBrowserExecutable() {
 export type BrowserVideo = { page: PublicVideoPage; referer: string; userAgent: string; urls: string[] };
 
 // 后端解析引擎：全新匿名上下文，不读取用户浏览器、账号或本地 Cookie。
-export async function inspectBrowserVideo(source: string, timeout = 22000): Promise<BrowserVideo | null> {
+export async function inspectBrowserVideo(source: string, timeout = 22000, diagnostics = false): Promise<BrowserVideo | null> {
   const runtime = await videoBrowserRuntime(), executablePath = runtime?.executable;
+  if (diagnostics) console.error(`[视频解析诊断] 网页引擎：${runtime?.engine || '没有可用运行记录'}，配置开关 ${process.env.VIDEO_BROWSER_ENABLED === '0' ? '关闭' : '开启'}，本次预算 ${timeout}ms`);
   if (!executablePath || process.env.VIDEO_BROWSER_ENABLED === '0') return null;
   if (active >= 2) throw new VideoError('网页解析正在处理中，请稍后重试', 429);
   await videoUrlAddress(source);
@@ -39,7 +40,7 @@ export async function inspectBrowserVideo(source: string, timeout = 22000): Prom
   try {
     if (runtime.engine === 'firefox') {
       const { inspectFirefoxVideo } = await import('./video-firefox');
-      return await inspectFirefoxVideo(source, runtime, timeout);
+      return await inspectFirefoxVideo(source, runtime, timeout, false, diagnostics);
     }
     proxy = await openVideoProxy();
     const { chromium } = await import('playwright-core');

@@ -17,15 +17,15 @@ function load(file, mocks, processMock = process, globals = {}) {
 const publicPages = load('../lib/video-public-pages.ts', {});
 const source = 'https://www.douyin.com/video/7692515320217407402';
 const video = { aweme_id: '7692515320217407402', desc: '匿名公开视频', video: { duration: 5000, play_addr: { url_list: ['https://cdn.example/public.mp4'] } } };
-function harness({ data = { aweme_detail: video }, root = false, launchError = false, coldStart = false, initialPage = true, createError = false, authenticationStatus = 200, realProfiles = false } = {}) {
+function harness({ data = { aweme_detail: video }, root = false, launchError = false, coldStart = false, initialPage = true, createError = false, authenticationStatus = 200, realProfiles = false, bodyError = false } = {}) {
   const state = { browserClosed: 0, contextClosed: 0, proxyClosed: 0, removed: [], navigations: [], budgets: [], diagnostics: [], newPageCalls: 0, launches: 0 };
   let responseHandler;
   const page = {
     authenticate: async credentials => { state.credentials = credentials; }, setViewport: async () => {}, setRequestInterception: async value => { state.intercept = value; },
     on(name, handler) { if (name === 'response') responseHandler = handler; else if (name === 'request') state.request = handler; },
-    async goto(url) { state.navigations.push(url); responseHandler?.({ url: () => 'https://www.douyin.com/aweme/v1/web/aweme/detail/', headers: () => ({}), status: () => 200, content: async () => Buffer.from(JSON.stringify(data)) }); await Promise.resolve(); return { status: () => authenticationStatus }; },
-    content: async () => '', isClosed: () => false, url: () => state.navigations.at(-1) || 'about:blank',
-    evaluate: async fn => fn.toString().includes('document.title') ? { title: '标题', urls: [], userAgent: 'Firefox/158' } : 'Firefox/158',
+    async goto(url) { state.navigations.push(url); responseHandler?.({ url: () => 'https://www.douyin.com/aweme/v1/web/aweme/detail/?token=never-log-this', headers: () => ({}), status: () => 200, content: async () => { if (bodyError) { state.pageClosed = true; throw Object.assign(Error('network.getData failed secret-cookie proxy-password'), { name: 'ProtocolError' }); } return Buffer.from(JSON.stringify(data)); } }); await Promise.resolve(); return { status: () => authenticationStatus }; },
+    content: async () => '', isClosed: () => Boolean(state.pageClosed), url: () => state.navigations.at(-1) || 'about:blank',
+    evaluate: async fn => fn.toString().includes('verificationPrompt') ? { titleLength: 2, videoCount: 0, verificationPrompt: true, loginPrompt: false } : fn.toString().includes('document.title') ? { title: '标题', urls: [], userAgent: 'Firefox/158' } : 'Firefox/158',
   };
   const context = { pages: async () => initialPage ? [page] : [], newPage: async () => { state.newPageCalls++; if (createError) throw Error('browsingContext.create timed out'); return page; }, close: async () => { state.contextClosed++; } };
   const browser = { defaultBrowserContext: () => context, createBrowserContext: async () => { throw Error('不应在全新进程中再次创建隔离上下文'); }, close: async () => { state.browserClosed++; } };
@@ -97,9 +97,21 @@ test('冷启动自检不再用10秒会话限制，允许60秒握手且总预算9
 });
 
 test('实际解析仍受请求总预算约束，不跟随安装自检放大到90秒', async () => {
-  const state = harness({ coldStart: true }); await state.api.inspectFirefoxVideo(source, { executable: '/project/firefox' }, 24000, false, true);
+  const state = harness({ coldStart: true }); await state.api.inspectFirefoxVideo(source, { executable: '/project/firefox' }, 24000);
   assert.equal(state.launch.timeout, 20000); assert.equal(state.launch.protocolTimeout, 20000); assert.deepEqual(state.budgets, [24000]);
   assert.equal(state.launch.dumpio, false); assert.deepEqual(state.diagnostics, []);
+});
+
+test('显式真实解析诊断显示作品接口与阶段，不启用原始stderr或泄漏源地址和Cookie', async () => {
+  const state = harness(); await state.api.inspectFirefoxVideo(source, { executable: '/project/firefox' }, 24000, false, true);
+  assert.equal(state.launch.dumpio, false); assert.deepEqual(state.budgets, [24000]);
+  const output = state.diagnostics.join('\n');
+  assert.match(output, /Firefox解析诊断/); assert.match(output, /视频页面导航响应 200/); assert.match(output, /匹配媒体 1 个/); assert.match(output, /verificationPrompt/);
+  assert.doesNotMatch(output, /never-log-this|secret-cookie|proxy-password|cdn\.example|random-handshake/);
+  assert.equal(state.proxyClosed, 1); assert.equal(state.removed.length, 1);
+  const failure = harness({ bodyError: true }); assert.equal(await failure.api.inspectFirefoxVideo(source, { executable: '/project/firefox' }, 24000, false, true), null);
+  const errors = failure.diagnostics.join('\n'); assert.match(errors, /作品响应体读取失败：ProtocolError network.getData/);
+  assert.doesNotMatch(errors, /never-log-this|secret-cookie|proxy-password/); assert.equal(failure.browserClosed, 1); assert.equal(failure.removed.length, 1);
 });
 
 test('诊断仅在自检显式开启，输出阶段与浏览器stderr，启动失败仍清理', async () => {
@@ -144,4 +156,19 @@ test('浏览器配置识别 Firefox，拒绝跨操作系统路径记录，保留
   assert.equal(await runtime({ executable: 'C:/chrome.exe', platform: 'win32' }).videoBrowserExecutable(), '');
   assert.equal((await runtime({ executable: '/chrome', platform: 'linux' }).videoBrowserRuntime()).engine, 'chromium');
   assert.equal((await runtime({}, { VIDEO_BROWSER_PATH: '/custom/firefox', VIDEO_BROWSER_ENGINE: 'firefox' }).videoBrowserRuntime()).engine, 'firefox');
+});
+
+test('真实链接诊断从浏览器选择透传到 Firefox，普通调用默认关闭且不输出档案路径', async () => {
+  const calls = [], output = [];
+  const api = load('../lib/video-browser.ts', {
+    './video-options': options, './video-public-pages': publicPages, './video-proxy': {},
+    './video-network': { videoUrlAddress: async () => ({}) },
+    './video-firefox': { inspectFirefoxVideo: async (...args) => { calls.push(args); return null; } },
+    'node:fs/promises': { readFile: async () => JSON.stringify({ engine: 'firefox', platform: 'linux', executable: '/private-profile/firefox' }), access: async () => {} },
+  }, { ...process, platform: 'linux', env: {} }, { console: { error: value => output.push(value) } });
+  await api.inspectBrowserVideo(source, 24000, true);
+  assert.equal(calls[0][3], false); assert.equal(calls[0][4], true); assert.match(output.join('\n'), /网页引擎：firefox/);
+  assert.doesNotMatch(output.join('\n'), /private-profile/); output.length = 0;
+  await api.inspectBrowserVideo(source, 24000);
+  assert.equal(calls[1][4], false); assert.deepEqual(output, []);
 });

@@ -110,12 +110,14 @@ async function hlsFormats(text: string, url: string, headers: Record<string, str
   if (!variants.length) { hlsSegments(text, url); return [{ id: 'hls-0', label: '原始画质 · MP4', extension: 'mp4', height: 0, size: 0, parts: [{ url, headers, extension: 'mp4', playlist: 'hls' }] }]; }
   return variants.map((variant, index) => ({ id: `hls-${index}`, label: variant.label, extension: 'mp4', height: variant.height, size: 0, parts: [{ url: variant.url, headers, extension: 'mp4', playlist: 'hls' }, ...(variant.audio ? [{ url: variant.audio, headers, extension: 'm4a', playlist: 'hls' as const }] : [])] }));
 }
-async function browserVideo(source: string, started: number): Promise<VideoInfo | null> {
+async function browserVideo(source: string, started: number, diagnostics = false): Promise<VideoInfo | null> {
   const remaining = 55000 - (Date.now() - started);
+  if (diagnostics) console.error(`[视频解析诊断] 网页引擎剩余总预算 ${Math.max(0, remaining)}ms，作品编号 ${douyinVideoId(source) || '非抖音编号链接'}`);
   if (remaining < 3000) return null;
-  const result = await inspectBrowserVideo(source, Math.min(24000, remaining));
+  const result = await inspectBrowserVideo(source, Math.min(24000, remaining), diagnostics);
+  if (diagnostics) console.error(`[视频解析诊断] 网页引擎返回 ${result ? `媒体候选 ${result.page.media.length} 个，请求候选 ${result.urls.length} 个` : '空结果'}`);
   if (!result) return null;
-  const found = await pageVideo(result.page, source, result.referer, result.userAgent);
+  const found = await pageVideo(result.page, source, result.referer, result.userAgent, diagnostics);
   if (found) return found;
   for (const url of result.urls) {
     try {
@@ -148,7 +150,7 @@ async function publicPage(raw: string) {
   if (!isDouyinPage(new URL(url).hostname) && !isHaokanPage(new URL(url).hostname)) { response.destroy(); throw new VideoError('分享页跳转到了不支持的平台', 422); }
   return { html: (await videoResponseBytes(response, 2 * 1024 ** 2)).toString('utf8'), url };
 }
-async function pageVideo(info: PublicVideoPage, sourceUrl: string, referer: string, userAgent = publicVideoPageUserAgent): Promise<VideoInfo | null> {
+async function pageVideo(info: PublicVideoPage, sourceUrl: string, referer: string, userAgent = publicVideoPageUserAgent, diagnostics = false): Promise<VideoInfo | null> {
   if (info.imagePost) throw new VideoError('这是抖音图文作品，当前工具只提取视频，暂不支持图文转视频', 422);
   if (info.duration > 3600) throw new VideoError('暂不支持超过 60 分钟的视频', 422);
   const formats: VideoFormat[] = [];
@@ -159,11 +161,14 @@ async function pageVideo(info: PublicVideoPage, sourceUrl: string, referer: stri
     try {
       const found = await probe(item.url, { Referer: referer, 'User-Agent': userAgent });
       if (found.extension && found.size <= videoMaxBytes()) formats.push({ id: `page-${formats.length}`, label: `${item.label} · ${found.extension.toUpperCase()}`, extension: found.extension, height: item.height, size: found.size || item.size, parts: [{ url: found.url, headers: { Referer: referer, 'User-Agent': userAgent }, extension: found.extension }] });
-    } catch { /* 单个公开画质失效时继续其他候选，不发放或扣费。 */ }
+    } catch (error) {
+      // 只输出已知本地错误或错误类型，不打印源站签名地址和请求头。
+      if (diagnostics) console.error('[视频解析诊断] 媒体探测失败', error instanceof VideoError ? error.message : (error as Error).name);
+    }
   }
   return formats.length ? { title: clean(info.title) || '分享视频', source: new URL(sourceUrl).hostname, sourceUrl, duration: info.duration, thumbnail: info.thumbnail, formats: formats.sort((a, b) => b.height - a.height) } : null;
 }
-export async function inspectVideo(sourceUrl: string, embedded = false): Promise<VideoInfo> {
+export async function inspectVideo(sourceUrl: string, embedded = false, diagnostics = false): Promise<VideoInfo> {
   const started = Date.now();
   await videoUrlAddress(sourceUrl);
   const haokan = isHaokanPage(new URL(sourceUrl).hostname), douyin = isDouyinPage(new URL(sourceUrl).hostname);
@@ -174,12 +179,16 @@ export async function inspectVideo(sourceUrl: string, embedded = false): Promise
       const page = await publicPage(id ? `https://www.iesdouyin.com/share/video/${id}/` : sourceUrl);
       publicSource = page.url;
       const info = haokan ? haokanPageVideo(page.html, page.url) : douyinPageVideo(page.html, page.url);
-      const found = await pageVideo(info, sourceUrl, page.url);
+      if (diagnostics) console.error(`[视频解析诊断] 公开页：作品编号 ${douyinVideoId(page.url) || '无'}，HTML ${page.html.length} 字符，媒体 ${info.media.length} 个`);
+      const found = await pageVideo(info, sourceUrl, page.url, publicVideoPageUserAgent, diagnostics);
       if (found) return found;
-    } catch (error) { if (haokan || error instanceof VideoError && /图文|60 分钟/.test(error.message)) throw error; }
+    } catch (error) {
+      if (diagnostics) console.error('[视频解析诊断] 公开页未提供可用媒体', error instanceof VideoError ? error.message : (error as Error).name);
+      if (haokan || error instanceof VideoError && /图文|60 分钟/.test(error.message)) throw error;
+    }
     if (douyin) {
       const url = await platformVideoUrl(publicSource);
-      const found = await browserVideo(url, started); if (found) return { ...found, sourceUrl, source: new URL(sourceUrl).hostname };
+      const found = await browserVideo(url, started, diagnostics); if (found) return { ...found, sourceUrl, source: new URL(sourceUrl).hostname };
     }
   }
   const kuaishou = isKuaishouPage(new URL(sourceUrl).hostname);
@@ -188,6 +197,7 @@ export async function inspectVideo(sourceUrl: string, embedded = false): Promise
     try {
       return await nativeVideo(sourceUrl, platformUrl, started, Boolean(await videoBrowserExecutable()));
     } catch (error) {
+      if (diagnostics) console.error('[视频解析诊断] 平台程序未返回结果', (error as Error).name || 'Error');
       if (error instanceof VideoError && /FFmpeg|直播|60 分钟/.test(error.message)) throw error;
       if (!douyin) { const found = await browserVideo(sourceUrl, started); if (found) return found; }
       const reason = String((error as { stderr?: string }).stderr || '');

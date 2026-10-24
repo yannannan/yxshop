@@ -63,9 +63,9 @@ try {
     process.exit(0);
   }
   const input = process.argv.slice(2).find(value => !value.startsWith('--'));
-  if (!input) throw new Error('用法：node scripts/check-video-link.mjs "视频链接或分享文字" [--download]');
+  if (!input) throw new Error('用法：node scripts/check-video-link.mjs "视频链接或分享文字" [--download] [--diagnostic]');
   const engine = local('video-engine'), source = local('video-options').sharedVideoUrl(input), started = Date.now();
-  const info = await engine.inspectVideo(source);
+  const info = await engine.inspectVideo(source, false, process.argv.includes('--diagnostic'));
   console.log(JSON.stringify({ title: info.title, source: info.source, duration: info.duration, formats: info.formats.map(({ id, label, size }) => ({ id, label, size })), seconds: (Date.now() - started) / 1000 }, null, 2));
   if (process.argv.includes('--download')) {
     const id = randomUUID(), format = info.formats.find(item => item.height <= 720) || info.formats[0];
