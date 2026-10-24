@@ -24,7 +24,7 @@ async function fixture(t, branch = 'main') {
   const bin = join(root, 'bin'), seed = join(root, 'seed'), remote = join(root, 'remote.git'), client = join(root, 'client'), trace = join(root, 'trace');
   await mkdir(bin); await mkdir(seed); await writeFile(trace, '');
   await writeFile(join(root, 'git-config'), '');
-  await writeFile(join(root, 'os-release'), 'ID=centos\nVERSION_ID=7\n');
+  await writeFile(join(root, 'os-release'), 'ID=centos\nVERSION_ID=7\nPRETTY_NAME="CentOS Linux 7 (Core)"\n');
   await writeFile(join(seed, 'upgrade.sh'), upgrade);
   await writeFile(join(seed, '.gitignore'), '.env.mysql\nuploads/\n');
   await writeFile(join(seed, 'app.txt'), 'v1\n');
@@ -53,12 +53,28 @@ async function fixture(t, branch = 'main') {
     try { const result = await execute(bash, [slashes(join(client, 'upgrade.sh')), ...args], { cwd: root, env: { ...env, ...overrides }, timeout: 30000, windowsHide: true }); return { ...result, code: 0 }; }
     catch (error) { return { code: error.code, stdout: error.stdout || '', stderr: error.stderr || '' }; }
   }
-  async function runVideo(args = [], overrides = {}) {
-    await writeFile(join(client, 'scripts/install-video-deps-centos.sh'), videoInstaller.replaceAll('/etc/os-release', quote(join(root, 'os-release'))));
+  async function runVideo(args = [], overrides = {}, { install = false, keyIssue = '' } = {}) {
+    let script = videoInstaller.replaceAll('/etc/os-release', quote(join(root, 'os-release')));
+    if (install) {
+      // Windows 的 Git Bash 不提供真实 Linux root；只绕过此 guard，所有安装命令仍被替身拦截。
+      assert.ok(script.includes('[[ "$EUID" -eq 0 ]]'));
+      script = script.replace('[[ "$EUID" -eq 0 ]]', '[[ 0 -eq 0 ]]');
+      const keys = join(client, 'scripts/keys'); await mkdir(keys, { recursive: true });
+      for (const name of ['RPM-GPG-KEY-CentOS-7', 'RPM-GPG-KEY-CentOS-SIG-SCLo']) {
+        await writeFile(join(keys, name), await readFile(new URL(`../scripts/keys/${name}`, import.meta.url)));
+      }
+      if (keyIssue === 'missing') await rm(join(keys, 'RPM-GPG-KEY-CentOS-SIG-SCLo'));
+      if (keyIssue === 'corrupt') await writeFile(join(keys, 'RPM-GPG-KEY-CentOS-SIG-SCLo'), 'corrupted-key\n');
+    }
+    await writeFile(join(client, 'scripts/install-video-deps-centos.sh'), script);
     await writeFile(join(bin, 'uname'), '#!/bin/bash\nif [[ "$1" == -s ]]; then echo Linux; else echo x86_64; fi\n', { mode: 0o755 });
     await writeFile(join(bin, 'node-video-test'), '#!/bin/bash\ncase "$*" in *setup-video-engine.mjs*) echo binary-check >>"$UPGRADE_TRACE"; exit "${BINARY_FAILURE:-0}";; *check-video-link.mjs*) echo browser-check >>"$UPGRADE_TRACE"; exit 0;; *) exit 0;; esac\n', { mode: 0o755 });
     for (const name of ['yum', 'dnf', 'useradd']) await writeFile(join(bin, name), '#!/bin/bash\necho 不允许测试安装系统依赖 >&2\nexit 91\n', { mode: 0o755 });
-    const options = { cwd: root, env: { ...env, NODE_BIN: slashes(join(bin, 'node-video-test')), ...overrides }, timeout: 10000, windowsHide: true };
+    if (install) {
+      await writeFile(join(bin, 'flock'), '#!/bin/bash\nexit 0\n', { mode: 0o755 });
+      await writeFile(join(bin, 'yum'), '#!/bin/bash\necho yum >>"$UPGRADE_TRACE"\n[[ "$1" == -c ]] || exit 92\ncat "$2" >"$UPGRADE_YUM_CAPTURE"\necho 模拟归档源全部不可用 >&2\nexit 78\n', { mode: 0o755 });
+    }
+    const options = { cwd: root, env: { ...env, NODE_BIN: slashes(join(bin, 'node-video-test')), UPGRADE_YUM_CAPTURE: slashes(join(root, 'generated-yum.conf')), ...overrides }, timeout: 10000, windowsHide: true };
     const testBin = process.platform === 'win32' ? (await execute(bash, ['-c', 'cygpath -u "$1"', '--', slashes(bin)], options)).stdout.trim() : bin;
     try { const result = await execute(bash, ['-c', 'export PATH="$1:$PATH"\nshift\nvideo_test_script="$1"\nshift\nsource "$video_test_script" "$@"', '--', testBin, slashes(join(client, 'scripts/install-video-deps-centos.sh')), ...args], options); return { ...result, code: 0 }; }
     catch (error) { return { code: error.code, stdout: error.stdout || '', stderr: error.stderr || '' }; }
@@ -161,4 +177,50 @@ test('video 只读自检失败返回非零，不会偷偷安装或报告就绪',
   const f = await fixture(t);
   const result = await f.runVideo(['--check'], { BINARY_FAILURE: '25' }); assert.notEqual(result.code, 0);
   assert.deepEqual(await f.events(), ['binary-check']); assert.doesNotMatch(result.stdout, /跳过重复安装/);
+});
+
+test('CentOS 7 安装使用三个 HTTPS 归档镜像和本地官方公钥，yum 失败不改动已有引擎或启动商城', async t => {
+  const f = await fixture(t);
+  const engine = join(f.client, 'vendor/video-engine'); await mkdir(engine, { recursive: true });
+  await writeFile(join(engine, 'browser-runtime.json'), '{"oldRuntime":true}');
+  await writeFile(join(engine, 'ffmpeg'), 'old-engine');
+  const result = await f.runVideo([], { BINARY_FAILURE: '25' }, { install: true });
+  assert.equal(result.code, 78, result.stderr);
+  assert.match(result.stderr, /视频依赖安装失败/); assert.doesNotMatch(result.stdout, /安装及启动检查通过/);
+  const config = await readFile(join(f.root, 'generated-yum.conf'), 'utf8');
+  function section(name) {
+    const value = config.split(`[${name}]\n`)[1]; assert.ok(value, name);
+    return value.split(/\n\[/)[0];
+  }
+  for (const [name, path, key] of [
+    ['video-c7-base', 'os/$basearch', 'RPM-GPG-KEY-CentOS-7'],
+    ['video-c7-updates', 'updates/$basearch', 'RPM-GPG-KEY-CentOS-7'],
+    ['video-c7-scl', 'sclo/$basearch/rh', 'RPM-GPG-KEY-CentOS-SIG-SCLo'],
+  ]) {
+    const repo = section(name), urls = repo.match(/https:\/\/\S+/g);
+    assert.deepEqual(urls, [
+      `https://mirrors.aliyun.com/centos-vault/7.9.2009/${path}/`,
+      `https://repo.huaweicloud.com/centos-vault/7.9.2009/${path}/`,
+      `https://vault.centos.org/7.9.2009/${path}/`,
+    ]);
+    assert.match(repo, /failovermethod=priority/); assert.match(repo, /gpgcheck=1/);
+    assert.match(repo, new RegExp(`gpgkey=file://[^\\n]+/scripts/keys/${key}(?:\\n|$)`));
+    assert.ok((await readFile(join(f.client, 'scripts/keys', key), 'utf8')).startsWith('-----BEGIN PGP PUBLIC KEY BLOCK-----'));
+  }
+  assert.match(section('main'), /cachedir=.+\/vendor\/video-engine\/yum-cache\/\$basearch\/\$releasever/);
+  assert.match(section('main'), /reposdir=\/dev\/null/); assert.match(section('main'), /plugins=0/); assert.match(section('main'), /sslverify=1/);
+  assert.doesNotMatch(config, /mirrorlist=|gpgcheck=0|sslverify=0|gpgkey=https:/);
+  assert.equal(await readFile(join(engine, 'browser-runtime.json'), 'utf8'), '{"oldRuntime":true}');
+  assert.equal(await readFile(join(engine, 'ffmpeg'), 'utf8'), 'old-engine');
+  assert.deepEqual(await f.events(), ['binary-check', 'yum']);
+});
+
+test('CentOS 官方公钥文件缺失或被修改时停止安装，不联系 yum 或跳过签名检查', async t => {
+  const f = await fixture(t);
+  for (const keyIssue of ['missing', 'corrupt']) {
+    await writeFile(f.trace, '');
+    const result = await f.runVideo([], { BINARY_FAILURE: '25' }, { install: true, keyIssue });
+    assert.notEqual(result.code, 0); assert.match(result.stderr, keyIssue === 'missing' ? /缺少官方公钥/ : /公钥校验失败/);
+    assert.deepEqual(await f.events(), ['binary-check']); assert.doesNotMatch(result.stdout, /安装及启动检查通过/);
+  }
 });

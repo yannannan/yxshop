@@ -51,35 +51,59 @@ flock -n 9 || fail '另一个视频依赖安装任务正在运行'
 echo "[1/6] $PRETTY_NAME；Node $("$NODE_BIN" -v)；安装系统库（保持浏览器沙箱）"
 PACKAGE_MANAGER=()
 if [[ "$ID" == centos && "$MAJOR" == 7 ]]; then
-    # CentOS 7 原 mirrorlist 已退役。只为本次安装使用独立配置，不改 /etc/yum.repos.d。
-    cat >"$ENGINE/centos7-video-yum.conf" <<'REPOSITORIES'
+    # CentOS 7 原 mirrorlist 已退役。镜像按优先级回退，仍校验官方 RPM 签名。
+    KEY_DIR="$APP_DIR/scripts/keys"
+    for key in RPM-GPG-KEY-CentOS-7 RPM-GPG-KEY-CentOS-SIG-SCLo; do
+        [[ -r "$KEY_DIR/$key" ]] || fail "缺少官方公钥 scripts/keys/$key，请同步完整项目后重试"
+    done
+    (
+        cd "$KEY_DIR"
+        sha256sum --check --status <<'KEY_HASHES'
+8b48b04b336bd725b9e611c441c65456a4168083c4febc28e88828d8ec14827f  RPM-GPG-KEY-CentOS-7
+1402b1ea263cd0e51e7fe77c89ab98d64dd08fdc54e7a4afe27b2782ddfc351c  RPM-GPG-KEY-CentOS-SIG-SCLo
+KEY_HASHES
+    ) || fail '项目内 CentOS 公钥校验失败，请重新同步 scripts/keys，不能跳过签名验证'
+    # 独立配置与缓存，不改 /etc/yum.repos.d 或复用全局失效仓库缓存。
+    cat >"$ENGINE/centos7-video-yum.conf" <<REPOSITORIES
 [main]
-cachedir=/var/cache/yum/$basearch/$releasever
+cachedir=$ENGINE/yum-cache/\$basearch/\$releasever
 keepcache=0
 debuglevel=2
 gpgcheck=1
 plugins=0
 reposdir=/dev/null
 sslverify=1
+timeout=20
+retries=2
 [video-c7-base]
 name=CentOS 7.9 archive base (video dependencies only)
-baseurl=https://vault.centos.org/7.9.2009/os/$basearch/
+failovermethod=priority
+baseurl=https://mirrors.aliyun.com/centos-vault/7.9.2009/os/\$basearch/
+        https://repo.huaweicloud.com/centos-vault/7.9.2009/os/\$basearch/
+        https://vault.centos.org/7.9.2009/os/\$basearch/
 enabled=1
 gpgcheck=1
-gpgkey=https://www.centos.org/keys/RPM-GPG-KEY-CentOS-7
+gpgkey=file://$KEY_DIR/RPM-GPG-KEY-CentOS-7
 [video-c7-updates]
 name=CentOS 7.9 archive updates (video dependencies only)
-baseurl=https://vault.centos.org/7.9.2009/updates/$basearch/
+failovermethod=priority
+baseurl=https://mirrors.aliyun.com/centos-vault/7.9.2009/updates/\$basearch/
+        https://repo.huaweicloud.com/centos-vault/7.9.2009/updates/\$basearch/
+        https://vault.centos.org/7.9.2009/updates/\$basearch/
 enabled=1
 gpgcheck=1
-gpgkey=https://www.centos.org/keys/RPM-GPG-KEY-CentOS-7
+gpgkey=file://$KEY_DIR/RPM-GPG-KEY-CentOS-7
 [video-c7-scl]
 name=CentOS 7 SCL archive (C compiler for FFmpeg)
-baseurl=https://vault.centos.org/7.9.2009/sclo/$basearch/rh/
+failovermethod=priority
+baseurl=https://mirrors.aliyun.com/centos-vault/7.9.2009/sclo/\$basearch/rh/
+        https://repo.huaweicloud.com/centos-vault/7.9.2009/sclo/\$basearch/rh/
+        https://vault.centos.org/7.9.2009/sclo/\$basearch/rh/
 enabled=1
 gpgcheck=1
-gpgkey=https://www.centos.org/keys/RPM-GPG-KEY-CentOS-SIG-SCLo
+gpgkey=file://$KEY_DIR/RPM-GPG-KEY-CentOS-SIG-SCLo
 REPOSITORIES
+    echo 'CentOS 7 归档源：阿里云 → 华为云 → CentOS Vault；官方公钥校验已通过。'
     PACKAGE_MANAGER=(yum -c "$ENGINE/centos7-video-yum.conf")
 elif command -v dnf >/dev/null; then
     PACKAGE_MANAGER=(dnf)

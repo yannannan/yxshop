@@ -1,2 +1,3 @@
 /scripts/install-video-deps-centos.sh text eol=lf
 /upgrade.sh text eol=lf
+/scripts/keys/RPM-GPG-KEY-* text eol=lf
