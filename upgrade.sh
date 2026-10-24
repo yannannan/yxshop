@@ -85,11 +85,12 @@ if ! git rev-parse --verify --quiet "refs/remotes/$UPGRADE_REF^{commit}" >/dev/n
     echo "未找到远程分支 $UPGRADE_REF，请检查当前分支和 origin 配置。商城尚未停止。" >&2
     exit 1
 fi
-if ! git show "$UPGRADE_REF:upgrade.sh" | grep -Fx '# video-upgrade-policy: check-only-v1' >/dev/null; then
-    echo "远程 $UPGRADE_REF 尚未包含视频依赖仅检查策略。请先将本轮完整代码同步到该远程分支，再运行升级。商城尚未停止。" >&2
+PROJECT_PREFIX="$(git rev-parse --show-prefix)"
+if ! git show "$UPGRADE_REF:${PROJECT_PREFIX}upgrade.sh" | grep -Fx '# video-upgrade-policy: check-only-v1' >/dev/null; then
+    echo "远程 $UPGRADE_REF 的 ${PROJECT_PREFIX}upgrade.sh 尚未包含视频依赖仅检查策略。请先将本轮完整代码同步到该远程分支，再运行升级。商城尚未停止。" >&2
     exit 1
 fi
-if [[ -n "$(git ls-tree -r --name-only "$UPGRADE_REF" -- vendor/video-engine)" ]]; then
+if [[ -n "$(git ls-tree --full-tree -r --name-only "$UPGRADE_REF" -- "${PROJECT_PREFIX}vendor/video-engine")" ]]; then
     echo '远程代码包含视频引擎目录，可能覆盖本机程序。请先从版本管理移除 vendor/video-engine；商城尚未停止。' >&2
     exit 1
 fi

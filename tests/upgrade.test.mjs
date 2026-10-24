@@ -14,15 +14,15 @@ const quote = value => `'${slashes(value).replaceAll("'", "'\\''")}'`;
 const upgrade = readFileSync(new URL('../upgrade.sh', import.meta.url), 'utf8').replaceAll('\r\n', '\n');
 const videoInstaller = readFileSync(new URL('../scripts/install-video-deps-centos.sh', import.meta.url), 'utf8').replaceAll('\r\n', '\n');
 
-async function fixture(t, branch = 'main', { trackedEnvironment = false } = {}) {
+async function fixture(t, branch = 'main', { trackedEnvironment = false, subdirectory = '' } = {}) {
   const root = await mkdtemp(join(process.cwd(), '.upgrade-test-'));
   t.after(async () => {
     const actual = await realpath(root), child = relative(process.cwd(), actual);
     assert.ok(!isAbsolute(child) && !child.startsWith('..') && child.startsWith('.upgrade-test-'));
     await rm(actual, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   });
-  const bin = join(root, 'bin'), seed = join(root, 'seed'), remote = join(root, 'remote.git'), client = join(root, 'client'), trace = join(root, 'trace');
-  await mkdir(bin); await mkdir(seed); await writeFile(trace, '');
+  const bin = join(root, 'bin'), seedRepository = join(root, 'seed'), clientRepository = join(root, 'client'), seed = join(seedRepository, subdirectory), remote = join(root, 'remote.git'), client = join(clientRepository, subdirectory), trace = join(root, 'trace');
+  await mkdir(bin); await mkdir(seed, { recursive: true }); await writeFile(trace, '');
   await writeFile(join(root, 'git-config'), '');
   await writeFile(join(root, 'os-release'), 'ID=centos\nVERSION_ID=7\nPRETTY_NAME="CentOS Linux 7 (Core)"\n');
   await writeFile(join(seed, 'upgrade.sh'), upgrade);
@@ -43,12 +43,12 @@ async function fixture(t, branch = 'main', { trackedEnvironment = false } = {}) 
   for (const key of Object.keys(env)) if (key.toUpperCase() === 'PATH') delete env[key];
   Object.assign(env, { PATH: `${bin}${delimiter}${process.env.PATH || process.env.Path}`, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: join(root, 'git-config'), UPGRADE_TRACE: slashes(trace), NODE_BIN: slashes(process.execPath) });
   const git = async (cwd, ...args) => execute('git', args, { cwd, env, windowsHide: true });
-  await git(root, 'init', '--bare', remote); await git(seed, 'init', '-b', branch);
+  await git(root, 'init', '--bare', remote); await git(root, 'init', '-b', branch, seedRepository);
   await git(seed, 'config', 'user.name', 'Upgrade test'); await git(seed, 'config', 'user.email', 'upgrade@example.invalid'); await git(seed, 'config', 'core.autocrlf', 'false');
   await git(seed, 'add', '.');
   if (trackedEnvironment) await git(seed, 'add', '-f', '.env.local', '.env.mysql');
   await git(seed, 'commit', '-m', 'base'); await git(seed, 'remote', 'add', 'origin', remote); await git(seed, 'push', 'origin', branch);
-  await git(root, 'clone', '-b', branch, remote, client); await git(client, 'config', 'core.autocrlf', 'false');
+  await git(root, 'clone', '-b', branch, remote, clientRepository); await git(client, 'config', 'core.autocrlf', 'false');
   await writeFile(join(client, '.env.mysql'), 'keep-server-environment');
   await writeFile(join(client, '.env.local'), 'keep-local-environment');
   await mkdir(join(client, 'uploads')); await writeFile(join(client, 'uploads/keep.txt'), 'keep-user-upload');
@@ -87,7 +87,7 @@ async function fixture(t, branch = 'main', { trackedEnvironment = false } = {}) 
     try { const result = await execute(bash, ['-c', 'export PATH="$1:$PATH"\nshift\nvideo_test_script="$1"\nshift\nsource "$video_test_script" "$@"', '--', testBin, slashes(join(client, 'scripts/install-video-deps-centos.sh')), ...args], options); return { ...result, code: 0 }; }
     catch (error) { return { code: error.code, stdout: error.stdout || '', stderr: error.stderr || '' }; }
   }
-  return { root, client, seed, trace, git, publish, run, runVideo, events: async () => (await readFile(trace, 'utf8')).trim().split(/\r?\n/).filter(Boolean).map(line => line.trim()) };
+  return { root, client, seed, clientRepository, seedRepository, trace, git, publish, run, runVideo, events: async () => (await readFile(trace, 'utf8')).trim().split(/\r?\n/).filter(Boolean).map(line => line.trim()) };
 }
 
 test('main 分支按现有跟踪关系升级，只调用一次独立 video 脚本，保留环境与上传文件', async t => {
@@ -136,6 +136,45 @@ test('远程误提交Windows或其他视频引擎文件时提前拒绝，不覆�
   const result = await f.run(); assert.notEqual(result.code, 0);
   assert.match(result.stderr, /远程代码包含视频引擎目录/); assert.deepEqual(await f.events(), []);
   assert.equal(await readFile(join(engine, 'yt-dlp'), 'utf8'), 'server-linux-engine');
+});
+
+test('项目位于仓库yxshopdev子目录时正确读取远程入口，保留本机环境与引擎', async t => {
+  const f = await fixture(t, 'master', { subdirectory: 'yxshopdev', trackedEnvironment: true });
+  const engine = join(f.client, 'vendor/video-engine'); await mkdir(engine, { recursive: true }); await writeFile(join(engine, 'ffmpeg'), 'linux-engine');
+  await f.publish(async seed => { await f.git(seed, 'rm', '--cached', '.env.local', '.env.mysql'); });
+  assert.match((await f.git(f.client, 'show', 'origin/master:./upgrade.sh')).stdout, /check-only-v1/);
+  const entry = join(f.client, 'upgrade.sh');
+  await writeFile(entry, upgrade.replace('"$UPGRADE_REF:${PROJECT_PREFIX}upgrade.sh"', '"$UPGRADE_REF:upgrade.sh"'));
+  const rejected = await f.run(); assert.notEqual(rejected.code, 0); assert.match(rejected.stderr, /fatal: path/i); assert.deepEqual(await f.events(), []);
+  const replacement = 's|"$UPGRADE_REF:upgrade.sh"|"$UPGRADE_REF:./upgrade.sh"|';
+  await execute(bash, ['-c', 'sed -i.bak "$1" "$2"', '--', replacement, slashes(entry)], { cwd: f.root, windowsHide: true });
+  const result = await f.run(); assert.equal(result.code, 0, result.stderr);
+  assert.doesNotMatch(result.stderr, /fatal: path|尚未包含/i); assert.match(result.stdout, /origin\/master/);
+  assert.equal(await readFile(join(f.client, 'app.txt'), 'utf8'), 'v2\n');
+  assert.equal(await readFile(join(f.client, '.env.mysql'), 'utf8'), 'keep-server-environment');
+  assert.equal(await readFile(join(engine, 'ffmpeg'), 'utf8'), 'linux-engine');
+  assert.deepEqual(await f.events(), ['stop', 'pnpm install --frozen-lockfile --prod=false', 'video-script --check', 'pnpm build', 'start']);
+});
+
+test('嵌套且含空格的项目路径可以升级，仓库其他目录的同名引擎不误拦截', async t => {
+  const f = await fixture(t, 'master', { subdirectory: 'deploy/apps/yxshop dev' });
+  await mkdir(join(f.seedRepository, 'vendor/video-engine'), { recursive: true });
+  await writeFile(join(f.seedRepository, 'vendor/video-engine/another-project'), 'unrelated');
+  await f.git(f.seedRepository, 'add', 'vendor/video-engine/another-project');
+  await f.publish();
+  const result = await f.run(); assert.equal(result.code, 0, result.stderr);
+  assert.ok((await f.events()).includes('video-script --check'));
+});
+
+test('子目录项目自身的引擎误入远程版本管理时仍提前拒绝，不遗漏或双重追加前缀', async t => {
+  const f = await fixture(t, 'master', { subdirectory: 'yxshopdev' });
+  await f.publish(async seed => {
+    await mkdir(join(seed, 'vendor/video-engine'), { recursive: true });
+    await writeFile(join(seed, 'vendor/video-engine/ffmpeg'), 'wrong-engine');
+    await f.git(seed, 'add', '-f', 'vendor/video-engine/ffmpeg');
+  });
+  const result = await f.run(); assert.notEqual(result.code, 0);
+  assert.match(result.stderr, /远程代码包含视频引擎目录/); assert.deepEqual(await f.events(), []);
 });
 
 test('旧服务器环境文件从 Git 跟踪转为忽略后，首次升级仍保留两份真实本地配置', async t => {
