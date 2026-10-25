@@ -93,7 +93,7 @@ export function stampSvg(options: StampOptions, preview = false) {
     }
   }
   const background = o.background === 'white' ? '<rect width="1000" height="1000" fill="white" />' : '';
-  const watermark = preview ? '<g font-family="Noto Serif CJK SC" fill="#718096" opacity=".38" font-size="40" text-anchor="middle" transform="rotate(-28 500 500)"><text x="500" y="310">宇星商城 · 效果预览</text><text x="500" y="540">宇星商城 · 效果预览</text><text x="500" y="770">宇星商城 · 效果预览</text></g>' : '';
+  const watermark = preview ? '<g font-family="Noto Serif CJK SC" fill="#718096" opacity=".38" font-size="40" text-anchor="middle" transform="rotate(-28 500 500)"><text x="500" y="310">宇星脉通 · 效果预览</text><text x="500" y="540">宇星脉通 · 效果预览</text><text x="500" y="770">宇星脉通 · 效果预览</text></g>' : '';
   return `<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1000" viewBox="0 0 1000 1000"><g font-family="${fonts[o.font].family}, Noto Serif CJK SC">${background}<g color="${o.color}" fill="${o.color}" transform="rotate(${o.rotation} 500 500)">${body}</g>${watermark}</g></svg>`;
 }
 

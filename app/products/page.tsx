@@ -9,7 +9,7 @@ import { CatalogPagination } from '@/components/catalog-pagination';
 import { matchesProductCategory } from '@/lib/categories';
 
 export const dynamic = 'force-dynamic';
-export const metadata: Metadata = { title: '商品目录｜宇星商城', description: '浏览宇星商城的会员、账号及数字服务，按类型查找所需商品。' };
+export const metadata: Metadata = { title: '商品目录｜宇星脉通', description: '浏览宇星脉通的会员、账号及数字服务，按类型查找所需商品。' };
 
 export default async function ProductsPage({ searchParams }: { searchParams: Promise<{ category?: string; secondary?: string; third?: string; q?: string; page?: string }> }) {
   const [products, categories, config, params] = await Promise.all([getPublishedProducts(), getPublishedCategories(), getHomepageDisplay(), searchParams]);

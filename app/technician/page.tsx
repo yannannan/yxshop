@@ -84,12 +84,12 @@ export default function TechnicianPage() {
   const currentLogs=useMemo(()=>data&&orderView?data.logs.filter((item)=>text(item.order_id)===text(orderView.id)).slice().reverse():[],[data,orderView]);
 
   if(loading&&!data) return <main className="technician-workbench"><div className="technician-empty">正在读取技术人员工作台…</div></main>;
-  if(!data) return <main className="technician-workbench"><section className="technician-access-card"><span className="brand-mark"><Image src="/yxstar_logo.png" alt="宇星商城" fill sizes="52px"/></span><h1>技术人员工作台</h1><p>{message||"当前账号未绑定技术人员身份。"}</p><p>请先使用商城手机号登录，并由超级管理员在“技术人员”中绑定该手机号。</p><Link href="/">返回宇星商城</Link></section></main>;
+  if(!data) return <main className="technician-workbench"><section className="technician-access-card"><span className="brand-mark"><Image src="/yxstar_logo.png" alt="宇星脉通" fill sizes="52px"/></span><h1>技术人员工作台</h1><p>{message||"当前账号未绑定技术人员身份。"}</p><p>请先使用商城手机号登录，并由超级管理员在“技术人员”中绑定该手机号。</p><Link href="/">返回宇星脉通</Link></section></main>;
 
   return <main className="technician-workbench">
     <aside className="technician-sidebar">
       {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- 首页入口采用原生导航，保证软路由异常时仍可返回商城。 */}
-      <a className="brand technician-brand" href="/"><span className="brand-mark"><Image src="/yxstar_logo.png" alt="宇星商城" fill sizes="34px"/></span><span>宇星商城</span></a>
+      <a className="brand technician-brand" href="/"><span className="brand-mark"><Image src="/yxstar_logo.png" alt="宇星脉通" fill sizes="34px"/></span><span>宇星脉通</span></a>
       <div className="technician-profile-mini">{data.provider.avatar?<img src={data.provider.avatar} alt=""/>:<span>{data.provider.name.slice(0,1)}</span>}<div><b>{data.provider.name}</b><small>{data.provider.roleName||"技术人员"}</small></div></div>
       <nav>
         <button className={tab==="overview"?"active":""} onClick={()=>setTab("overview")}>工作台首页</button>

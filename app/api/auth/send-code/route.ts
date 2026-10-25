@@ -30,7 +30,7 @@ export async function POST(request: Request) {
 
   const existing = await env.DB.prepare('SELECT id FROM users WHERE phone=?').bind(phone).first();
   const code = String(randomInt(100000, 1000000));
-  const message = `【宇星商城】您的验证码为：${code}，宇星商城`;
+  const message = `【宇星脉通】您的验证码为：${code}，宇星脉通`;
   const smsApiUrl = process.env.SMS_API_URL || 'http://127.0.0.1:9268/api/sms/send';
 
   try {

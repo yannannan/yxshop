@@ -403,7 +403,7 @@ async function handleAdminAction(request: Request) {
     case 'email-config-test': {
       const recipient = String(body.recipient || '').trim();
       if (!/^\S+@\S+\.\S+$/.test(recipient)) return Response.json({ message: '请填写测试收件邮箱' }, { status: 400 });
-      await sendConfiguredEmail(recipient, '【宇星商城】SMTP 测试邮件', '这是一封 SMTP 测试邮件。收到此邮件说明订单通知发信配置有效。');
+      await sendConfiguredEmail(recipient, '【宇星脉通】SMTP 测试邮件', '这是一封 SMTP 测试邮件。收到此邮件说明订单通知发信配置有效。');
       return Response.json({ ok: true, message: `测试邮件已发送至 ${recipient}` });
     }
     case 'email-send-custom': {

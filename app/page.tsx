@@ -430,7 +430,7 @@ export default function StorePage() {
             >
               <span className="channel-icon">⌘</span>
               <span>
-                <b>AI商城服务</b>
+                <b>AI数字服务</b>
                 <small>会员、账号、工具与 AI 教程，即买即用</small>
               </span>
               <em>{channel === "mall" ? "当前频道" : "切换频道"}</em>
@@ -622,12 +622,12 @@ export default function StorePage() {
             <span className="brand-mark">
               <Image
                 src="/yxstar_logo.png"
-                alt="宇星商城 Logo"
+                alt="宇星脉通 Logo"
                 fill
                 sizes="34px"
               />
             </span>
-            <span>宇星商城</span>
+            <span>宇星脉通</span>
           </a>
           <p>简单、透明、可靠的数字商品购买体验。</p>
         </div>
@@ -641,7 +641,7 @@ export default function StorePage() {
           {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- 工具跨页入口使用原生导航，避免客户端路由异常时点击无反应。 */}
           <a href="/tools">工具服务</a>
           {isAdmin && <a href="/admin">管理后台</a>}
-          <span>© 2026 宇星商城</span>
+          <span>© 2026 宇星脉通</span>
         </div>
       </footer>
 
@@ -736,7 +736,7 @@ export default function StorePage() {
               <span className="brand-mark">
                 <Image
                   src="/yxstar_logo.png"
-                  alt="宇星商城 Logo"
+                  alt="宇星脉通 Logo"
                   fill
                   sizes="34px"
                 />

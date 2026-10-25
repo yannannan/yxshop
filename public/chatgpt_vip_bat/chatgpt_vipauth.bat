@@ -244,7 +244,7 @@ $plainPwd = $null
 try {
     Clear-Host
     Write-Host '============================================================'
-    Write-Host '欢迎使用宇星商城充值'
+    Write-Host '欢迎使用宇星脉通充值'
     Write-Host 'www.yxstar.shop'
     Write-Host '============================================================'
     Write-Host ''

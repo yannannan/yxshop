@@ -152,7 +152,7 @@ export async function POST(request: Request) {
         if (loginPhone) {
           if (!/^1\d{10}$/.test(loginPhone)) return Response.json({ message: '技术人员登录手机号格式不正确' }, { status: 400 });
           const linkedUser = await env.DB.prepare("SELECT id,status,permission_type FROM users WHERE phone=?").bind(loginPhone).first<{ id: number; status: string; permission_type: string }>();
-          if (!linkedUser) return Response.json({ message: '该手机号尚未注册宇星商城，请先让技术人员完成商城登录/注册' }, { status: 400 });
+          if (!linkedUser) return Response.json({ message: '该手机号尚未注册宇星脉通，请先让技术人员完成商城登录/注册' }, { status: 400 });
           if (linkedUser.status !== 'active') return Response.json({ message: '该商城账号已停用，不能绑定技术人员' }, { status: 400 });
           if (linkedUser.permission_type === '10002') return Response.json({ message: '超级管理员账号不能直接绑定为技术人员，请使用独立商城账号' }, { status: 400 });
           const used = await env.DB.prepare('SELECT id FROM technical_providers WHERE user_id=? AND id<>?').bind(linkedUser.id, Number(body.id || 0)).first();

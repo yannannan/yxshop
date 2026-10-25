@@ -8,7 +8,7 @@ import { orderItems } from '@/lib/homepage-display';
 
 export const dynamic = 'force-dynamic';
 export const metadata: Metadata = {
-  title: '工具服务｜宇星商城', description: '发现清理、视频提取、文件签名与印章制作等实用工具，查看介绍和使用入口。',
+  title: '工具服务｜宇星脉通', description: '发现清理、视频提取、文件签名与印章制作等实用工具，查看介绍和使用入口。',
   alternates: { canonical: `${siteOrigin()}/tools` },
 };
 

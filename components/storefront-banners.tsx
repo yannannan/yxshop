@@ -112,12 +112,12 @@ export function StorefrontBanners() {
     return () => { window.clearInterval(timer); motion.removeEventListener("change", updateAutoplay); };
   }, [hovered, focused]);
 
-  const slides = ["AI 数字商城", "在线与上门技术服务"];
-  return <section className={`storefront-banners banner-theme-${slide === 0 ? "digital" : "service"}`} aria-label="宇星商城服务介绍" aria-roledescription="轮播图" onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)} onFocusCapture={() => setFocused(true)} onBlurCapture={event => { if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false); }}>
+  const slides = ["AI数字服务", "在线与上门技术服务"];
+  return <section className={`storefront-banners banner-theme-${slide === 0 ? "digital" : "service"}`} aria-label="宇星脉通服务介绍" aria-roledescription="轮播图" onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)} onFocusCapture={() => setFocused(true)} onBlurCapture={event => { if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false); }}>
     <div className="storefront-banner-track" style={{ transform: `translateX(-${slide * 50}%)` }}>
-      <div id="storefront-banner-digital" className="storefront-banner storefront-banner-digital" role="group" aria-roledescription="幻灯片" aria-label="第 1 张，共 2 张：AI 数字商城" aria-hidden={slide !== 0}>
+      <div id="storefront-banner-digital" className="storefront-banner storefront-banner-digital" role="group" aria-roledescription="幻灯片" aria-label="第 1 张，共 2 张：AI数字服务" aria-hidden={slide !== 0}>
         <div className="storefront-banner-copy">
-          <span className="storefront-banner-eyebrow"><b>宇星商城</b><i />AI 数字商城</span>
+          <span className="storefront-banner-eyebrow"><b>宇星脉通</b><i />AI数字服务</span>
           <h1>AI 会员与实用工具<br /><em>一站选购，省心使用</em></h1>
           <p>会员账号、充值服务、效率工具，一站选购。<br className="banner-desktop-break" />清晰交付，人工售后，让每一次使用都更省心。</p>
           <div className="storefront-banner-features"><span><FeatureIcon kind="shield" />丰富数字商品</span><span><FeatureIcon kind="mail" />订单邮箱交付</span><span><FeatureIcon kind="support" />人工售后保障</span></div>
@@ -126,7 +126,7 @@ export function StorefrontBanners() {
       </div>
       <div id="storefront-banner-service" className="storefront-banner storefront-banner-service" role="group" aria-roledescription="幻灯片" aria-label="第 2 张，共 2 张：在线与上门技术服务" aria-hidden={slide !== 1}>
         <div className="storefront-banner-copy">
-          <span className="storefront-banner-eyebrow"><b>宇星商城</b><i />在线与上门技术服务</span>
+          <span className="storefront-banner-eyebrow"><b>宇星脉通</b><i />在线与上门技术服务</span>
           <h2>在线解答，上门服务<br /><em>技术问题，交给专业</em></h2>
           <p>从远程协助到上门技术服务，找到适合的技术人员。<br className="banner-desktop-break" />让专业支持离你更近，工作生活更轻松。</p>
           <div className="storefront-banner-features"><span><FeatureIcon kind="chat" />在线技术咨询</span><span><FeatureIcon kind="location" />上门技术服务</span><span><FeatureIcon kind="support" />7 × 24 人工客服</span></div>

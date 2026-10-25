@@ -28,7 +28,7 @@ export async function sendOrderNotification(type: OrderNotificationType, order: 
     if (existing?.status === 'sent') continue;
     if (existing) await env.DB.prepare("UPDATE order_notifications SET status='pending',error_message='',created_at=? WHERE order_id=? AND type=? AND recipient_email=?").bind(now, order.id, type, recipient).run();
     else await env.DB.prepare("INSERT INTO order_notifications (order_id,type,recipient_email,status,error_message,created_at) VALUES (?,?,?,'pending','',?)").bind(order.id, type, recipient, now).run();
-    const subject = `【宇星商城】${typeLabel[type]} - ${order.id}`;
+    const subject = `【宇星脉通】${typeLabel[type]} - ${order.id}`;
     const content = [
       typeLabel[type],
       `订单编号：${order.id}`,

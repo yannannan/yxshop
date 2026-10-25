@@ -396,9 +396,9 @@ test('独立页面输出商场导航、SEO、三步流程及真实操作入口',
   const Link=({href,children,...props})=>React.createElement('a',{href,...props},children), Image=props=>React.createElement('img',props);
   const component=load('../components/video-extractor.tsx',{'next/link':Link,'next/image':Image,'../lib/tool-services':tools,'../lib/video-options':options});
   const tool={id:4,name:'链接视频提取工具',slug:'video-extractor',description:'公开分享链接与网页视频提取',detail:'',logo:'',plans:[],chargeType:'points',pointsCost:10};
-  const page=load('../app/tools/[slug]/page.tsx',{'next/link':Link,'next/image':Image,'next/navigation':{notFound(){throw Error('404');},permanentRedirect(){throw Error('redirect');}},'@/components/tool-launch':{ToolLaunch:()=>null},'@/components/storefront-header':{StorefrontHeader:()=>React.createElement('nav',null,'AI商城服务')},'@/components/stamp-maker':{StampMaker:()=>null},'@/components/video-extractor':component,'@/lib/tool-services':tools,'@/lib/tool-service-data':{getPublishedTool:async()=>tool}});
+  const page=load('../app/tools/[slug]/page.tsx',{'next/link':Link,'next/image':Image,'next/navigation':{notFound(){throw Error('404');},permanentRedirect(){throw Error('redirect');}},'@/components/tool-launch':{ToolLaunch:()=>null},'@/components/storefront-header':{StorefrontHeader:()=>React.createElement('nav',null,'AI数字服务')},'@/components/stamp-maker':{StampMaker:()=>null},'@/components/video-extractor':component,'@/lib/tool-services':tools,'@/lib/tool-service-data':{getPublishedTool:async()=>tool}});
   const html=renderToStaticMarkup(await page.default({params:Promise.resolve({slug:'video-extractor.html'})}));
-  for(const text of ['AI商城服务','粘贴视频链接','免费解析','B站','Facebook','我的提取记录','SoftwareApplication'])assert.ok(html.includes(text),text);
+  for(const text of ['AI数字服务','粘贴视频链接','免费解析','B站','Facebook','我的提取记录','SoftwareApplication'])assert.ok(html.includes(text),text);
   const metadata=await page.generateMetadata({params:Promise.resolve({slug:'video-extractor.html'})});assert.ok(metadata.description.includes('B站'));assert.match(metadata.alternates.canonical,/video-extractor\.html$/);
   assert.equal(tools.builtInToolEntry('video-extractor'),'/tools/video-extractor.html');
 });

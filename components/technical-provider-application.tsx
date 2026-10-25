@@ -40,7 +40,7 @@ export function TechnicalProviderApplication({ open, onClose }: Props) {
     <section className="technical-provider-application-modal" role="dialog" aria-modal="true" aria-label="技术人才入驻申请">
       <button className="modal-close" aria-label="关闭" onClick={onClose}>×</button>
       {success ? <div className="technical-provider-application-success"><span>✓</span><h2>入驻申请已提交</h2><p>平台会审核您的技术方向、经验与服务能力。审核结果由平台后续联系确认。</p><button onClick={onClose}>完成</button></div> : <>
-        <header><span>TECH TALENT</span><h2>技术人才入驻</h2><p>提交基础资料和技术方向，通过审核后可在宇星商城发布技术服务并接单。</p></header>
+        <header><span>TECH TALENT</span><h2>技术人才入驻</h2><p>提交基础资料和技术方向，通过审核后可在宇星脉通发布技术服务并接单。</p></header>
         <form onSubmit={submit}>
           <div className="technical-provider-application-grid">
             <label><span>姓名 *</span><input value={form.applicantName} onChange={(e) => setForm({ ...form, applicantName: e.target.value })} /></label>

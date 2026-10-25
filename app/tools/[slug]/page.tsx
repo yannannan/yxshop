@@ -16,8 +16,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug: rawSlug } = await params;
   const slug = normalizedSlug(rawSlug);
   const tool = isToolSlug(slug) ? await getPublishedTool(slug) : null;
-  if (!tool) return { title: '工具不存在｜宇星商城', robots: { index: false, follow: false } };
-  const title = tool.seoTitle || `${tool.name}｜宇星商城`;
+  if (!tool) return { title: '工具不存在｜宇星脉通', robots: { index: false, follow: false } };
+  const title = tool.seoTitle || `${tool.name}｜宇星脉通`;
   const description = tool.seoDescription || (slug === 'stamp-maker' ? '在线设计圆形、椭圆形、方形及姓名印章，实时预览，支持 256 至 4096 像素，可导出 PNG、JPG 及 SVG。支持按次、包月及包年套餐。' : slug === 'video-extractor' ? '解析抖音、快手、小红书、B站、Facebook 等公开视频分享链接及网页视频源，选择画质并提取下载。解析免费，生成文件成功后使用积分或套餐权益。' : tool.description || tool.detail.slice(0, 160));
   const url = `${siteOrigin()}${toolPagePath(tool.slug)}`;
   return { title, description, alternates: { canonical: url }, openGraph: { title, description, url, type: 'website', images: tool.logo ? [tool.logo] : [] } };

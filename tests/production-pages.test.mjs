@@ -58,7 +58,7 @@ const pages = [];
 for (const path of ${JSON.stringify(paths)}) {
   const response = await handler(new Request('http://localhost:3000' + path));
   const html = await response.text();
-  pages.push({ path, status: response.status, failed: html.includes('This page couldn'), hasBrand: html.includes('宇星商城'), hasVideoForm: html.includes('粘贴视频链接'), hasStampPreview: html.includes('效果预览') });
+  pages.push({ path, status: response.status, failed: html.includes('This page couldn'), hasBrand: html.includes('宇星脉通'), hasVideoForm: html.includes('粘贴视频链接'), hasStampPreview: html.includes('效果预览') });
 }
 console.log(JSON.stringify({ pages, errors, queries }));
 `;

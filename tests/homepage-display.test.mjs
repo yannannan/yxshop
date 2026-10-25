@@ -298,8 +298,8 @@ test('软路由不可用时商城Logo和跨页主导航仍为原生链接，独�
   const tree = host.render({ isAdmin: false, isTechnician: false, children: React.createElement('span', null, '账户') });
   const logo = elements(tree).find(node => node.props.className === 'brand');
   assert.equal(logo.type, 'a'); assert.equal(logo.props.href, '/'); assert.equal(logo.props.onClick, undefined);
-  const html = markup(tree); assert.ok(html.includes('宇星商城首页'));
-  for (const label of ['AI商城服务', '上门技术服务', 'AI智能获客', 'AI运营工具']) {
+  const html = markup(tree); assert.ok(html.includes('宇星脉通首页'));
+  for (const label of ['AI数字服务', '上门技术服务', 'AI智能获客', 'AI运营工具']) {
     const link = elements(tree).find(node => node.type === 'a' && textOf(node) === label);
     assert.ok(link); let prevented = false;
     link.props.onClick?.({ button: 0, preventDefault() { prevented = true; } });
