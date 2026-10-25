@@ -57,7 +57,8 @@ export type ToolService = {
 
 export const toolChargeLabels: Record<ToolChargeType, string> = { free: '免费使用', paid: '付费使用', pending: '收费待确认', points: '通用积分' };
 export const toolPagePath = (slug: string) => `/tools/${encodeURIComponent(slug)}.html`;
-export const builtInToolEntry = (slug: string | undefined) => slug === 'stamp-maker' || slug === 'video-extractor' ? toolPagePath(slug) : '';
+export const isWebsiteAnalysis = (slug: string | undefined, name = '') => ['webmaster-tools','webmaster-analysis','webmaster','site-analysis','site-analyzer','website-analysis'].includes(slug || '') || name === '站长分析工具';
+export const builtInToolEntry = (slug: string | undefined) => slug && (slug === 'stamp-maker' || slug === 'video-extractor' || isWebsiteAnalysis(slug)) ? toolPagePath(slug) : '';
 export const siteOrigin = () => (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.yxstar.shop').replace(/\/$/, '');
 export const isToolSlug = (value: string) => /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value) && value.length <= 100;
 
@@ -74,7 +75,7 @@ export function mapTool(row: Record<string, unknown>): ToolService {
     detail: String(row.detail || ''), logo: String(row.cover_image || ''), slug: String(row.tool_slug || ''),
     chargeType: row.tool_charge_type === 'points' ? 'points' : row.tool_charge_type === 'paid' ? 'paid' : row.tool_charge_type === 'free' ? 'free' : 'pending',
     pointsCost: Number(row.tool_points_cost || 0),
-    price: Number(row.price || 0), entryConfigured: Boolean(Number(row.entry_configured) || builtInToolEntry(String(row.tool_slug || ''))),
+    price: Number(row.price || 0), entryConfigured: Boolean(Number(row.entry_configured) || builtInToolEntry(String(row.tool_slug || '')) || isWebsiteAnalysis(String(row.tool_slug || ''), String(row.name || ''))),
     plans: row.tool_charge_type === 'paid' ? readToolPlans(row.tool_plans_json, Number(row.price || 0), String(row.billing_cycle || 'once')) : [],
     seoTitle: String(row.seo_title || ''), seoDescription: String(row.seo_description || ''), updatedAt: String(row.updated_at || ''),
   };

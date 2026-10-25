@@ -23,7 +23,7 @@ function fixture({ missingProfile = false, missingModules = false, walletFailure
   let state = {
     users: [{ id: 1, phone: '13800000000', email: 'one@example.com', status: 'active', permission_type: '10001', created_at: '2026-10-24T00:00:00Z' }, { id: 2, phone: '13900000000', email: 'two@example.com', status: 'active', permission_type: '10002', created_at: '2026-10-24T00:00:00Z' }],
     profiles: [{ user_id: 1, nickname: '小宇', avatar_data: '', avatar_mime: '', avatar_version: '' }, { user_id: 2, nickname: '其他用户', avatar_data: png, avatar_mime: 'image/png', avatar_version: 'other-secret' }],
-    points: { 1: 680, 2: 900 },
+    points: { 1: 680, 2: 900 }, analyses: [],
     orders: [{ id: 'order-1', user_id: 1, title: '普通商品', kind: 'mall', status: 'pending', created_at: '2026-10-25T00:00:00Z', amount: 20 }, { id: 'order-2', user_id: 1, title: '600积分', kind: 'points', status: 'delivered', created_at: '2026-10-24T00:00:00Z', amount: 50 }, { id: 'private-order', user_id: 2, title: 'private', kind: 'mall' }],
     technical: [{ id: 'service-1', user_id: 1, title: '电脑维护', kind: 'technical', status: 'in_service', created_at: '2026-10-25T01:00:00Z', amount: null }],
     videos: [{ id: 'video-1', user_id: 1, title: '我的视频', kind: 'video', status: 'ready', created_at: '2026-10-25T00:00:00Z' }, { id: 'private-video', user_id: 2, title: 'private-video', kind: 'video', status: 'ready' }],
@@ -33,9 +33,10 @@ function fixture({ missingProfile = false, missingModules = false, walletFailure
   const error = code => Object.assign(Error('private database details'), { code });
   function sourceRows(sql, userId) {
     if (dbFailure && sql.includes(dbFailure)) throw error('ER_ACCESS_DENIED_ERROR');
-    if (missingModules && /technical_service_orders|video_extraction_tasks|tool_generation_results/.test(sql)) throw error('ER_NO_SUCH_TABLE');
+    if (missingModules && /technical_service_orders|video_extraction_tasks|tool_generation_results|site_analysis_runs/.test(sql)) throw error('ER_NO_SUCH_TABLE');
     let rows;
-    if (sql.includes('technical_service_orders')) rows = state.technical;
+    if (sql.includes('site_analysis_runs')) rows = state.analyses;
+    else if (sql.includes('technical_service_orders')) rows = state.technical;
     else if (sql.includes('video_extraction_tasks')) rows = state.videos;
     else if (sql.includes('tool_generation_results')) rows = state.stamps;
     else rows = state.orders.filter(row => !sql.includes("AND p.product_type='points'") || row.kind === 'points').filter(row => !sql.includes("p.product_type<>'points'") || row.kind !== 'points');
@@ -137,6 +138,12 @@ test('综合订单与工具记录只查询本人，跨模块排序、筛选并�
   assert.equal(activity.total, 13); assert.equal(activity.page, 2); assert.equal(activity.items.length, 3); assert.ok(activity.items.every(row => !row.id.includes('private'))); assert.match(activity.items.at(-1).href, /stamp-maker.html\?result=/);
   assert.ok(!JSON.stringify(activity).includes('image_base64')); assert.ok(!JSON.stringify(activity).includes('format_json'));
   assert.equal((await f.routes['/records'].GET(f.request('/records?kind=invalid'))).status, 400); assert.equal((await f.routes['/records'].GET(f.request('/records?kind=activity&filter=bad'))).status, 400);
+});
+test('站长分析记录并入个人中心，按本人筛选且保留实际工具slug的报告深链', async () => {
+  const f = fixture();
+  f.state().analyses.push({ id: 'analysis-one', user_id: 1, title: '站长分析 · example.org', kind: 'site:custom-seo', status: 'partial', created_at: '2026-10-25T02:00:00Z' }, { id: 'private-analysis', user_id: 2, kind: 'site:private', status: 'completed', created_at: '2026-10-25T01:00:00Z' });
+  const result = await (await f.routes['/records'].GET(f.request('/records?kind=activity&filter=site'))).json();
+  assert.equal(result.total, 1); assert.equal(result.items[0].kind, 'site'); assert.equal(result.items[0].href, '/tools/custom-seo.html?run=analysis-one'); assert.equal(helpers.recordStatusLabel(result.items[0]), '部分完成');
 });
 test('未安装模块独立提示；数据库真正失败返回错误，不能伪装成无记录', async () => {
   const f = fixture({ missingModules: true }), result = await (await f.routes['/records'].GET(f.request('/records'))).json(); assert.equal(result.items.length, 2); assert.ok(result.warnings.length);

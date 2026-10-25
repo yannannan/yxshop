@@ -3,3 +3,4 @@
 /migration_upgrade.sh text eol=lf
 /scripts/migrations/*.sh text eol=lf
 /scripts/keys/RPM-GPG-KEY-* text eol=lf
+scripts/site-analysis-worker.sh text eol=lf

@@ -1,5 +1,16 @@
 # Design QA
 
+## Current iteration — website analytics overview, 2026-10-25
+
+- Selected target: first displayed SEO workspace image, `C:/Users/Administrator/.codex/generated_images/01a16199-c23a-7443-8df4-a3163cfdc134/exec-82ebd1f2-91f2-4b18-9789-ac4885493919.png`, inspected before implementation.
+- Preserved composition: existing global header, white left workspace navigation, cream content background, orange selected state / main action, domain selector and right-hand analysis panels. New profile, metric, keyword, history and findings sections follow the subsequently approved functional requirements.
+- Existing brand assets and Heroicons are reused; no new raster imagery was needed. Desktop uses a 244px sidebar; smaller screens use a horizontal navigation strip and stacked cards.
+- Functional evidence: actual component SSR checks, request / ownership / duplicate / billing / queue / source parsing tests, production-handler rendering, CSS and source checks. No browser, application server, real database or user cloud storage was opened.
+- Visual comparison final result: **blocked — pending user browser acceptance**, per the user's standing project instruction assigning local runtime / visual acceptance to the user. There is no implementation screenshot and no claim of pixel comparison or live engine verification.
+- Deployment and acceptance: `docs/站长分析综合看板与部署.md`.
+
+The entries below retain earlier iterations and do not override this current status.
+
 ## Current iteration — personal account center, 2026-10-25
 
 - Selected visual target: the first displayed personal-center design, `C:/Users/Administrator/.codex/generated_images/01a16199-c23a-7443-8df4-a3163cfdc134/exec-26a6d6ac-8865-4e77-b75e-8c30191ae3b0.png`.

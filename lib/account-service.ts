@@ -113,18 +113,19 @@ export async function readAccountRecords(userId: number, group: 'orders' | 'acti
   } else {
     if (['all','video'].includes(filter)) sources.push({ sql: "SELECT id,title,'video' AS kind,status,created_at,NULL AS amount FROM video_extraction_tasks WHERE user_id=?", args: [userId] });
     if (['all','stamp'].includes(filter)) sources.push({ sql: "SELECT id,'印章制作' AS title,'stamp' AS kind,'ready' AS status,created_at,NULL AS amount FROM tool_generation_results WHERE user_id=?", args: [userId] });
+    if (['all','site'].includes(filter)) sources.push({ sql: "SELECT r.id,CONCAT('站长分析 · ',r.host) AS title,CONCAT('site:',p.tool_slug) AS kind,r.status,r.created_at,NULL AS amount FROM site_analysis_runs r JOIN products p ON p.id=r.product_id WHERE r.user_id=?", args: [userId] });
   }
   if (!sources.length) throw new AccountError('记录筛选条件不正确');
   // 各模块独立查询以兼容尚未初始化的历史模块；真正查询失败不会伪装成空记录。
   const usable: typeof sources = []; let total = 0;
   for (const source of sources) {
     try { const count = await env.DB.prepare(`SELECT COUNT(*) AS total FROM (${source.sql}) account_records`).bind(...source.args).first<{ total: number }>(); total += Number(count?.total || 0); usable.push(source); }
-    catch (error) { if (!missingTable(error)) throw error; warnings.push(source.sql.includes('video_extraction') ? '视频记录尚未初始化' : source.sql.includes('tool_generation') ? '印章记录尚未初始化' : '部分订单记录尚未初始化'); }
+    catch (error) { if (!missingTable(error)) throw error; warnings.push(source.sql.includes('site_analysis_runs') ? '站长分析记录尚未初始化' : source.sql.includes('video_extraction') ? '视频记录尚未初始化' : source.sql.includes('tool_generation') ? '印章记录尚未初始化' : '部分订单记录尚未初始化'); }
   }
   const pageSize = 10, page = Math.max(1, Math.min(Math.ceil(total / pageSize) || 1, Number.isFinite(requested) ? Math.floor(requested) : 1));
   const rows = usable.length ? (await env.DB.prepare(`SELECT * FROM (${usable.map(s => s.sql).join(' UNION ALL ')}) account_records ORDER BY created_at DESC,kind,id DESC LIMIT 10 OFFSET ?`).bind(...usable.flatMap(s => s.args), (page - 1) * pageSize).all<RecordRow>()).results : [];
-  const items: AccountRecord[] = rows.map(row => ({ id: row.id, title: row.title, kind: row.kind, status: row.status, createdAt: row.created_at, ...(group === 'orders' ? { amount: row.amount === null ? null : Number(row.amount) } : {}),
-    href: row.kind === 'technical' ? `/service-orders/${encodeURIComponent(row.id)}` : row.kind === 'video' ? `/tools/video-extractor.html?task=${encodeURIComponent(row.id)}` : row.kind === 'stamp' ? `/tools/stamp-maker.html?result=${encodeURIComponent(row.id)}` : `/checkout/${encodeURIComponent(row.id)}` }));
+  const items: AccountRecord[] = rows.map(row => ({ id: row.id, title: row.title, kind: row.kind.startsWith('site:') ? 'site' : row.kind, status: row.status, createdAt: row.created_at, ...(group === 'orders' ? { amount: row.amount === null ? null : Number(row.amount) } : {}),
+    href: row.kind.startsWith('site:') ? `/tools/${encodeURIComponent(row.kind.slice(5))}.html?run=${encodeURIComponent(row.id)}` : row.kind === 'technical' ? `/service-orders/${encodeURIComponent(row.id)}` : row.kind === 'video' ? `/tools/video-extractor.html?task=${encodeURIComponent(row.id)}` : row.kind === 'stamp' ? `/tools/stamp-maker.html?result=${encodeURIComponent(row.id)}` : `/checkout/${encodeURIComponent(row.id)}` }));
   return { items, total, page, pageSize, warnings };
 }
 export function accountFailure(error: unknown) {

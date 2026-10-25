@@ -3,6 +3,7 @@ set -Eeuo pipefail
 
 APP_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PID_FILE="$APP_DIR/.yxstarshop.pid"
+bash "$APP_DIR/scripts/site-analysis-worker.sh" stop || echo "站长采集进程停止失败，请检查采集 PID；继续停止商城。"
 
 if [[ ! -s "$PID_FILE" ]]; then
   echo "未找到 PID 文件，商城未通过 start.sh 启动或已经停止。"

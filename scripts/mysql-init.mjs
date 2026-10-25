@@ -1,4 +1,5 @@
 import mysql from 'mysql2/promise';
+import { readFileSync } from 'node:fs';
 
 const config = {
   host: process.env.MYSQL_HOST,
@@ -37,6 +38,9 @@ const tables = [
 const pool = mysql.createPool(config);
 try {
   for (const statement of tables) await pool.query(statement);
+  // 只复用新增表定义；初始化不覆盖既有工具配置。
+  const siteSchema = readFileSync(new URL('../sql/10_site_analysis_20261025.sql', import.meta.url), 'utf8').replace(/^--.*$/gm, '');
+  for (const statement of siteSchema.split(';').map(s => s.trim()).filter(s => /^CREATE TABLE IF NOT EXISTS site_analysis_/i.test(s))) await pool.query(statement);
   // 兼容首次导入前已由旧脚本创建的 TEXT 字段。
   await pool.query('ALTER TABLE payment_qrs MODIFY image_url MEDIUMTEXT NULL');
   console.log(`MySQL 初始化完成：${config.host}:${config.port}/${config.database}`);

@@ -22,6 +22,7 @@ if [[ -s "$PID_FILE" ]]; then
   PID="$(<"$PID_FILE")"
   if kill -0 "$PID" 2>/dev/null; then
     echo "商城已在运行，PID：$PID"
+    bash "$APP_DIR/scripts/site-analysis-worker.sh" start || echo "站长采集进程未就绪，请检查采集日志；商城继续运行。"
     exit 0
   fi
   rm -f "$PID_FILE"
@@ -42,3 +43,4 @@ fi
 
 echo "商城已启动，PID：$PID，端口：${PORT:-3000}"
 echo "日志：$LOG_FILE"
+bash "$APP_DIR/scripts/site-analysis-worker.sh" start || echo "站长采集进程未就绪，请检查采集日志；商城继续运行。"
