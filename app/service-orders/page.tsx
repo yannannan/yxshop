@@ -1,4 +1,6 @@
 "use client";
+import { useI18n } from '@/components/language-provider';
+
 
 import { StorefrontHeader } from "../../components/storefront-header";
 import Link from "next/link";
@@ -21,6 +23,7 @@ const statusText: Record<string, string> = {
 };
 
 export default function TechnicalServiceOrdersPage() {
+  const { t } = useI18n();
   const [orders, setOrders] = useState<ServiceOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [unauthorized, setUnauthorized] = useState(false);
@@ -41,10 +44,10 @@ export default function TechnicalServiceOrdersPage() {
   return <main className="simple-page orders-page">
     <StorefrontHeader channel="technical" />
     <section className="orders-wrap">
-      <div className="orders-title"><div><span className="section-kicker">SERVICE ORDER CENTER</span><h1>我的技术服务订单</h1><p>查看购买、支付和技术服务进度</p></div><Link href="/?channel=technical">继续选择技术服务 →</Link></div>
-      {loading ? <div className="orders-empty">正在读取技术服务订单…</div> : unauthorized ? <div className="orders-empty"><b>登录后查看技术服务订单</b><p>请使用商城手机号登录后再查看。</p><Link href="/?channel=technical">返回技术服务</Link></div> : !visible.length ? <div className="orders-empty"><b>暂时没有技术服务订单</b><p>购买技术服务后，订单会显示在这里。</p><Link href="/?channel=technical">选择技术服务</Link></div> : <div className="orders-list">{visible.map((order) => <article className="order-card" key={order.id}>
-        <div className="order-card-top"><span>服务订单号：{order.id}</span><b className={`order-status status-${order.status}`}>{statusText[order.status] || order.status}</b></div>
-        <div className="order-card-body"><span className="order-product-icon">服</span><div className="order-product"><small>技术服务</small><b>{order.service_title}</b><span>{order.provider_name} · {order.delivery_mode === "onsite" ? "上门服务" : "在线服务"}</span></div><div className="order-price"><small>服务金额</small><b>{order.amount === null ? "待报价" : <><em>¥</em>{order.amount}</>}</b></div><div className="order-action"><small>服务时间：{String(order.scheduled_at).replace("T"," ").slice(0,16)}</small><Link href={`/service-orders/${encodeURIComponent(order.id)}`}>查看订单</Link></div></div>
+      <div className="orders-title"><div><span className="section-kicker">SERVICE ORDER CENTER</span><h1>{t("我的技术服务订单")}</h1><p>{t("查看购买、支付和技术服务进度")}</p></div><Link href="/?channel=technical">{t("继续选择技术服务 →")}</Link></div>
+      {loading ? <div className="orders-empty">{t("正在读取技术服务订单…")}</div> : unauthorized ? <div className="orders-empty"><b>{t("登录后查看技术服务订单")}</b><p>{t("请使用商城手机号登录后再查看。")}</p><Link href="/?channel=technical">{t("返回技术服务")}</Link></div> : !visible.length ? <div className="orders-empty"><b>{t("暂时没有技术服务订单")}</b><p>{t("购买技术服务后，订单会显示在这里。")}</p><Link href="/?channel=technical">{t("选择技术服务")}</Link></div> : <div className="orders-list">{visible.map((order) => <article className="order-card" key={order.id}>
+        <div className="order-card-top"><span>{t("服务订单号：")}{order.id}</span><b className={`order-status status-${order.status}`}>{t(statusText[order.status] || order.status)}</b></div>
+        <div className="order-card-body"><span className="order-product-icon">{t("服")}</span><div className="order-product"><small>{t("技术服务")}</small><b>{order.service_title}</b><span>{order.provider_name} · {t(order.delivery_mode === "onsite" ? "上门服务" : "在线服务")}</span></div><div className="order-price"><small>{t("服务金额")}</small><b>{order.amount === null ? "待报价" : <><em>¥</em>{t(order.amount)}</>}</b></div><div className="order-action"><small>{t("服务时间：")}{t(String(order.scheduled_at).replace("T"," ").slice(0,16))}</small><Link href={`/service-orders/${encodeURIComponent(order.id)}`}>{t("查看订单")}</Link></div></div>
       </article>)}</div>}
     </section>
   </main>;

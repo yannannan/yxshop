@@ -55,10 +55,11 @@ ssr.renderToReadableStream = (tree, options = {}) => render(tree, {
 const module = await import(${JSON.stringify(entry.href)});
 const handler = typeof module.default === 'function' ? module.default : module.default.fetch.bind(module.default);
 const pages = [];
-for (const path of ${JSON.stringify(paths)}) {
-  const response = await handler(new Request('http://localhost:3000' + path));
+for (const spec of ${JSON.stringify(paths)}) {
+  const path = typeof spec === 'string' ? spec : spec.path;
+  const response = await handler(new Request('http://localhost:3000' + path, { headers: typeof spec === 'object' ? { cookie: 'yxshop_locale=' + spec.locale } : {} }));
   const html = await response.text();
-  pages.push({ path, status: response.status, failed: html.includes('This page couldn'), hasBrand: html.includes('宇星脉通'), hasVideoForm: html.includes('粘贴视频链接'), hasStampPreview: html.includes('效果预览') });
+  pages.push({ path, status: response.status, failed: html.includes('This page couldn'), hasBrand: html.includes('宇星脉通'), hasVideoForm: html.includes('粘贴视频链接'), hasStampPreview: html.includes('效果预览'), language: /<html[^>]*lang="([^"]+)"/.exec(html)?.[1], englishNav: html.includes('AI Digital Services'), englishPoints: html.includes('One balance. Many possibilities.'), englishStamp: html.includes('Design Your Stamp'), englishVideo: html.includes('Paste a Video Link'), chineseAdmin: html.includes('正在验证管理权限') });
 }
 console.log(JSON.stringify({ pages, errors, queries }));
 `;
@@ -95,4 +96,17 @@ test('生产个人中心 API 匿名不读取业务数据，记录与头像必须
   const result = await renderPages(['/api/account', '/api/account/records?kind=orders&userId=2', '/api/account/avatar?userId=2']);
   assert.deepEqual(result.pages.map(page => page.status), [200, 401, 401]);
   assert.deepEqual(result.errors, []); assert.equal(result.queries, 0);
+});
+
+test('同一生产处理器按语言 Cookie 渲染英文前台，非法偏好回退中文，管理端保持中文', { skip: needsBuild }, async () => {
+  const result = await renderPages([
+    { path: '/', locale: 'en' }, { path: '/points', locale: 'en' }, { path: '/tools/stamp-maker.html', locale: 'en' }, { path: '/tools/video-extractor.html', locale: 'en' },
+    { path: '/admin', locale: 'en' }, { path: '/', locale: 'zh-CN' }, { path: '/', locale: 'invalid' },
+  ]);
+  assert.deepEqual(result.errors, []);
+  for (const page of result.pages) assert.equal(page.status, 200, JSON.stringify(page));
+  assert.equal(result.pages[0].language, 'en'); assert.equal(result.pages[0].englishNav, true);
+  assert.equal(result.pages[1].englishPoints, true); assert.equal(result.pages[2].englishStamp, true); assert.equal(result.pages[3].englishVideo, true);
+  assert.equal(result.pages[4].chineseAdmin, true); assert.equal(result.pages[4].englishNav, false);
+  for (const page of result.pages.slice(5)) { assert.equal(page.language, 'zh-CN'); assert.equal(page.englishNav, false); }
 });

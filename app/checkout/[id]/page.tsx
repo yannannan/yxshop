@@ -1,4 +1,6 @@
 "use client";
+import { useI18n } from '@/components/language-provider';
+
 
 import { useParams } from "next/navigation";
 import { StorefrontHeader } from "../../../components/storefront-header";
@@ -33,6 +35,7 @@ type PaymentQr = {
 };
 
 export default function CheckoutPage() {
+  const { t } = useI18n();
   const params = useParams<{ id: string }>();
   const [order, setOrder] = useState<Order | null>(null);
   const [paid, setPaid] = useState(false);
@@ -183,23 +186,23 @@ export default function CheckoutPage() {
       <StorefrontHeader />
       <div className="checkout-progress">
         <span className="done">1</span>
-        <b>确认订单</b>
+        <b>{t("确认订单")}</b>
         <i />
         <span className={paid ? "done" : "active"}>2</span>
-        <b>扫码支付</b>
+        <b>{t("扫码支付")}</b>
         <i />
         {isChatGptRecharge ? (
           <>
             <span className={paid ? "active" : ""}>3</span>
-            <b>等待提交充值信息</b>
+            <b>{t("等待提交充值信息")}</b>
             <i />
             <span>4</span>
-            <b>完成订单</b>
+            <b>{t("完成订单")}</b>
           </>
         ) : (
           <>
             <span className={paid ? "active" : ""}>3</span>
-            <b>完成订单</b>
+            <b>{t("完成订单")}</b>
           </>
         )}
       </div>
@@ -209,42 +212,36 @@ export default function CheckoutPage() {
             isChatGptRecharge ? (
               <div className="paid-state recharge-state">
                 <span>✓</span>
-                <h1>{order?.status === "pending_delivery" ? "充值信息已提交" : "支付已确认"}</h1>
+                <h1>{t(order?.status === "pending_delivery" ? "充值信息已提交" : "支付已确认")}</h1>
                 <div className="paid-order recharge-order">
-                  <span>订单编号</span>
+                  <span>{t("订单编号")}</span>
                   <b>{order?.id || params.id}</b>
                 </div>
                 {order?.status === "pending_delivery" ? (
                   <>
                     <p>
-                      充值信息已提交，充值将自动到账。
-                      <br />
-                      请关注查收邮件和重新刷新登录账号。
-                    </p>
+                      {t("充值信息已提交，充值将自动到账。")}<br />
+                      {t("请关注查收邮件和重新刷新登录账号。")}</p>
                     <Link className="recharge-home-button" href="/orders">
-                      返回我的订单
-                    </Link>
+                      {t("返回我的订单")}</Link>
                   </>
                 ) : (
                   <>
                     <p>
-                      请按步骤提交充值信息。
-                      <br />
-                      充值商品信息和充值脚本已发送至：
-                      <b>{order?.email || "您的订单邮箱"}</b>
+                      {t("请按步骤提交充值信息。")}<br />
+                      {t("充值商品信息和充值脚本已发送至：")}<b>{order?.email || t("您的订单邮箱")}</b>
                     </p>
                     <section className="recharge-guide">
-                      <h2>充值步骤</h2>
+                      <h2>{t("充值步骤")}</h2>
                       <ol>
                         <li>
                           <b>1、</b>
-                          <span>请先打开浏览器登录 ChatGPT 账号。</span>
+                          <span>{t("请先打开浏览器登录 ChatGPT 账号。")}</span>
                         </li>
                         <li>
                           <b>2、</b>
                           <span>
-                            请下载邮件中的附件脚本，或使用下方 BAT 脚本并直接运行。
-                            <span className="recharge-tools">
+                            {t("请下载邮件中的附件脚本，或使用下方 BAT 脚本并直接运行。")}<span className="recharge-tools">
                               <a
                                 className="recharge-tool"
                                 href="/chatgpt_vip_bat/chatgpt_vipauth.bat"
@@ -256,8 +253,7 @@ export default function CheckoutPage() {
                                   alt=""
                                   aria-hidden="true"
                                 />
-                                ChatGPT充值脚本下载
-                              </a>
+                                {t("ChatGPT充值脚本下载")}</a>
                               <a
                                 className="recharge-tool"
                                 href="https://chatgpt.com/api/auth/session"
@@ -270,37 +266,33 @@ export default function CheckoutPage() {
                                   alt=""
                                   aria-hidden="true"
                                 />
-                                Safari浏览器直接访问
-                              </a>
+                                {t("Safari浏览器直接访问")}</a>
                             </span>
                           </span>
                         </li>
                         <li>
                           <b>3、</b>
                           <span>
-                            复制弹出浏览器输出的完整 JSON
-                            字符串，粘贴到下方输入框并提交。
-                          </span>
+                            {t("复制弹出浏览器输出的完整 JSON 字符串，粘贴到下方输入框并提交。")}</span>
                         </li>
                         <li>
                           <b>4、</b>
-                          <span>提交后 1–5 分钟自动到账。</span>
+                          <span>{t("提交后 1–5 分钟自动到账。")}</span>
                         </li>
                       </ol>
                     </section>
                     <form className="recharge-form" onSubmit={submitRechargeInfo}>
                       <label>
-                        粘贴浏览器弹出的完整JSON字符串
-                        <textarea
+                        {t("粘贴浏览器弹出的完整JSON字符串")}<textarea
                           value={rechargeJson}
                           onChange={(event) => setRechargeJson(event.target.value)}
-                          placeholder="请完整复制弹出浏览器中的完整JSON字符串粘贴此处"
+                          placeholder={t("请完整复制弹出浏览器中的完整JSON字符串粘贴此处")}
                         />
                       </label>
                       <button type="submit" disabled={!rechargeJson.trim() || rechargeSubmitting}>
-                        {rechargeSubmitting ? "正在提交…" : "提交充值信息"}
+                        {t(rechargeSubmitting ? "正在提交…" : "提交充值信息")}
                       </button>
-                      {rechargeError && <small className="form-error">{rechargeError}</small>}
+                      {rechargeError && <small className="form-error">{t(rechargeError)}</small>}
                     </form>
                   </>
                 )}
@@ -308,144 +300,140 @@ export default function CheckoutPage() {
             ) : (
               <div className="paid-state">
                 <span>✓</span>
-                <h1>{order?.product_type === 'points' ? '积分充值已到账' : order?.product_type === 'tool' ? '工具购买已确认' : '支付确认已提交'}</h1>
+                <h1>{t(order?.product_type === 'points' ? '积分充值已到账' : order?.product_type === 'tool' ? '工具购买已确认' : '支付确认已提交')}</h1>
                 <p>
-                  {order?.product_type === 'points' ? `${order.points_amount} 积分已充值至您的账户` : order?.product_type === 'tool' ? '支付已通过核验，可返回工具页面使用' : '我们正在核验支付结果'}
+                  {t(order?.product_type === 'points' ? `${order.points_amount} 积分已充值至您的账户` : order?.product_type === 'tool' ? '支付已通过核验，可返回工具页面使用' : '我们正在核验支付结果')}
                   <br />
-                  {order?.product_type === 'points' ? '支持积分的工具共用余额，成功处理后扣分。' : order?.product_type === 'tool' ? '点击下方按钮进入对应工具页面。' : <>商品信息将发送至 {order?.email || "您的订单邮箱"}</>}
+                  {order?.product_type === 'points' ? '支持积分的工具共用余额，成功处理后扣分。' : order?.product_type === 'tool' ? '点击下方按钮进入对应工具页面。' : <>{t("商品信息将发送至 ")}{order?.email || t("您的订单邮箱")}</>}
                 </p>
                 <div className="paid-order">
-                  <span>订单编号</span>
+                  <span>{t("订单编号")}</span>
                   <b>{order?.id || params.id}</b>
                 </div>
-                {order?.product_type === 'points' ? <Link href="/points">查看积分余额与明细</Link> : order?.product_type === 'tool' && order.tool_slug ? <Link href={toolPagePath(order.tool_slug)}>返回工具页面并使用</Link> : <Link href="/">继续选购</Link>}
+                {order?.product_type === 'points' ? <Link href="/points">{t("查看积分余额与明细")}</Link> : order?.product_type === 'tool' && order.tool_slug ? <Link href={toolPagePath(order.tool_slug)}>{t("返回工具页面并使用")}</Link> : <Link href="/">{t("继续选购")}</Link>}
               </div>
             )
           ) : (
             <>
               <div className="checkout-title">
                 <div>
-                  <span>订单待支付</span>
-                  <small>请在倒计时结束前完成支付</small>
+                  <span>{t("订单待支付")}</span>
+                  <small>{t("请在倒计时结束前完成支付")}</small>
                 </div>
-                <b>{remaining}</b>
+                <b>{t(remaining)}</b>
               </div>
               <div className="checkout-product">
                 <span className="checkout-product-icon">Q</span>
                 <div>
-                  <small>正在购买</small>
-                  <b>{order?.product_name || "正在读取订单…"}</b>{order?.product_type === 'points' && <small>充值到账 {order.points_amount} 积分</small>}{order?.tool_billing_cycle && isToolBillingCycle(order.tool_billing_cycle) && <small>所选套餐：{[order.tool_plan_name, toolBillingLabels[order.tool_billing_cycle]].filter(Boolean).join(' · ')}</small>}
+                  <small>{t("正在购买")}</small>
+                  <b>{t(order?.product_name || "正在读取订单…")}</b>{order?.product_type === 'points' && <small>{t("充值到账 ")}{t(order.points_amount)}{t(" 积分")}</small>}{order?.tool_billing_cycle && isToolBillingCycle(order.tool_billing_cycle) && <small>{t("所选套餐：")}{t([order.tool_plan_name, toolBillingLabels[order.tool_billing_cycle]].filter(Boolean).join(' · '))}</small>}
                 </div>
                 <strong>
                   <em>¥</em>
-                  {order?.amount ?? "--"}
+                  {t(order?.amount ?? "--")}
                 </strong>
               </div>
-              <div className="pay-methods" role="tablist" aria-label="支付方式">
+              <div className="pay-methods" role="tablist" aria-label={t("支付方式")}>
                 <button
                   className={method === "wechat" ? "active" : ""}
                   onClick={() => setMethod("wechat")}
                 >
-                  <span className="wechat-dot">✓</span>微信支付
-                </button>
+                  <span className="wechat-dot">✓</span>{t("微信支付")}</button>
                 <button
                   className={method === "alipay" ? "active" : ""}
                   onClick={() => setMethod("alipay")}
                 >
-                  <span className="alipay-dot">支</span>支付宝
-                </button>
+                  <span className="alipay-dot">{t("支")}</span>{t("支付宝")}</button>
               </div>
               <div
                 className={`qr-box payment-qr-box ${method}`}
-                aria-label={`${method === "wechat" ? "微信支付" : "支付宝"}二维码`}
+                aria-label={t(`${method === "wechat" ? "微信支付" : "支付宝"}二维码`)}
               >
                 {paymentQr?.imageUrl ? (
                   <Image
                     unoptimized
                     src={paymentQr.imageUrl}
-                    alt={`${method === "wechat" ? "微信支付" : "支付宝"}收款二维码`}
+                    alt={t(`${method === "wechat" ? "微信支付" : "支付宝"}收款二维码`)}
                     width={220}
                     height={220}
                   />
                 ) : (
                   <div className="qr-placeholder">
-                    <b>待上传收款二维码</b>
+                    <b>{t("待上传收款二维码")}</b>
                     <small>
-                      {method === "wechat" ? "微信支付" : "支付宝"} · ¥
-                      {order?.amount ?? "--"}
+                      {t(method === "wechat" ? "微信支付" : "支付宝")} · ¥
+                      {t(order?.amount ?? "--")}
                     </small>
                   </div>
                 )}
               </div>
               <p className="scan-tip">
-                {paymentQr?.imageUrl
+                {t(paymentQr?.imageUrl
                   ? `打开${method === "wechat" ? "微信" : "支付宝"}，使用“扫一扫”完成支付`
-                  : `该商品的${method === "wechat" ? "微信" : "支付宝"}二维码尚未上传，请联系商家配置`}
+                  : `该商品的${method === "wechat" ? "微信" : "支付宝"}二维码尚未上传，请联系商家配置`)}
               </p>
               <p className="phone-transfer-tip">
-                <b>重要提示</b> 转账时备注填写：<strong>对应的订单编号</strong>
+                <b>{t("重要提示")}</b>{t(" 转账时备注填写：")}<strong>{t("对应的订单编号")}</strong>
               </p>
               <div className="order-line order-id-line">
-                <span>订单编号</span>
+                <span>{t("订单编号")}</span>
                 <div>
                   <b>{order?.id || params.id}</b>
                   <button
                     className={`copy-order-button${orderCopied ? " copied" : ""}`}
                     type="button"
                     onClick={() => void copyOrderId()}
-                    aria-label="复制订单编号"
+                    aria-label={t("复制订单编号")}
                   >
                     <i className="copy-icon" aria-hidden="true" />
-                    {orderCopied ? "已复制" : "复制订单编号"}
+                    {t(orderCopied ? "已复制" : "复制订单编号")}
                   </button>
                 </div>
               </div>
               <div className="order-line">
-                <span>接收邮箱</span>
-                <b>{order?.email || "读取中…"}</b>
+                <span>{t("接收邮箱")}</span>
+                <b>{order?.email || t("读取中…")}</b>
               </div>
               <button
                 className="paid-button"
                 onClick={() => void confirmPaymentFinished()}
                 disabled={payConfirmChecking || paymentVerifying}
               >
-                {paymentVerifying
+                {t(paymentVerifying
                   ? "支付核验中（自动跳转）…"
                   : payConfirmChecking
                     ? "正在核验支付状态…"
-                    : "我已完成支付"}
+                    : "我已完成支付")}
               </button>
               {paymentVerifying && (
                 <small className="payment-verifying-note">
-                  支付核验中，预计 1–2 分钟完成；管理员确认收款后将自动进入下一步。
-                </small>
+                  {t("支付核验中，预计 1–2 分钟完成；管理员确认收款后将自动进入下一步。")}</small>
               )}
               <small className="demo-note">
-                请核对支付类型与金额，确认无误后再完成支付。
-              </small>
+                {t("请核对支付类型与金额，确认无误后再完成支付。")}</small>
             </>
           )}
         </section>
         <aside className="checkout-support">
-          <span className="support-kicker">7 × 24 小时在线客服</span>
-          <h2>支付遇到问题？</h2>
-          <p>微信扫码联系人工客服</p>
+          <span className="support-kicker">{t("7 × 24 小时在线客服")}</span>
+          <h2>{t("支付遇到问题？")}</h2>
+          <p>{t("微信扫码联系人工客服")}</p>
           <div className="support-qr support-qr-image">
             <Image
               unoptimized
               src="/customer-service-wechat.png"
-              alt="在线微信客服二维码"
+              alt={t("在线微信客服二维码")}
               width={184}
               height={234}
             />
           </div>
-          <small>扫码添加在线微信客服</small>
+          <small>{t("扫码添加在线微信客服")}</small>
         </aside>
       </div>
       <div className="checkout-assurance">
-        <span>✓ 支付信息安全加密</span>
-        <span>✓ 订单问题售后处理</span>
-        <span>✓ 数字商品自动交付</span>
+        <span>{t("✓ 支付信息安全加密")}</span>
+        <span>{t("✓ 订单问题售后处理")}</span>
+        <span>{t("✓ 数字商品自动交付")}</span>
       </div>
       {payConfirmError && (
         <div
@@ -462,12 +450,11 @@ export default function CheckoutPage() {
             aria-labelledby="pay-confirm-title"
           >
             <span>!</span>
-            <h2 id="pay-confirm-title">系统尚未检测到支付！</h2>
-            <p>{payConfirmError}</p>
-            <small>请稍后再试，或联系右侧在线客服处理。</small>
+            <h2 id="pay-confirm-title">{t("系统尚未检测到支付！")}</h2>
+            <p>{t(payConfirmError)}</p>
+            <small>{t("请稍后再试，或联系右侧在线客服处理。")}</small>
             <button type="button" onClick={() => setPayConfirmError("")}>
-              我知道了
-            </button>
+              {t("我知道了")}</button>
           </section>
         </div>
       )}

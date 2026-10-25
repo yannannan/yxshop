@@ -1,16 +1,17 @@
+import { localizeMetadata } from '@/lib/i18n-server';
 import type { Metadata } from 'next';
 import { getProduct } from '../../../lib/catalog';
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const { id } = await params;
   const product = getProduct(Number(id));
-  if (!product) return { title: '商品不存在｜宇星脉通' };
-  return {
+  if (!product) return localizeMetadata({ title: '商品不存在｜宇星脉通' });
+  return localizeMetadata({
     title: `${product.name}｜宇星脉通`,
     description: product.detail,
     openGraph: { title: `${product.name}｜宇星脉通`, description: product.detail, images: [] },
     twitter: { title: `${product.name}｜宇星脉通`, description: product.detail, images: [] },
-  };
+  });
 }
 
 export default function ProductLayout({ children }: { children: React.ReactNode }) { return children; }

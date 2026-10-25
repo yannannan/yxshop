@@ -1,3 +1,4 @@
+import { i18nMock } from './helpers/i18n.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -12,7 +13,7 @@ const image = 'data:image/png;base64,YQ==', otherImage = 'data:image/png;base64,
 function load(file, mocks, globals = {}) {
   const exports = {};
   const code = ts.transpileModule(readFileSync(new URL(file, import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText;
-  vm.runInNewContext(code, { exports, Response, Request, URL, console: { error() {} }, ...globals, require(name) { if (name in mocks) return mocks[name]; if (['react', 'react/jsx-runtime'].includes(name)) return require(name); throw Error(`Unexpected import ${name}`); } });
+  vm.runInNewContext(code, { exports, Response, Request, URL, console: { error() {} }, ...globals, require(name) { if (name in mocks) return mocks[name]; if (i18nMock(name)) return i18nMock(name); if (['react', 'react/jsx-runtime'].includes(name)) return require(name); throw Error(`Unexpected import ${name}`); } });
   return exports;
 }
 function server({ failMethod, denied = false } = {}) {

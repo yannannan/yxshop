@@ -1,4 +1,6 @@
 import type { Metadata } from 'next';
+import { getI18n, localizeMetadata } from '@/lib/i18n-server';
+import { LanguageProvider } from '@/components/language-provider';
 import './globals.css';
 import './extra.css';
 import './refined.css';
@@ -13,7 +15,8 @@ import './homepage-display.css';
 import './points.css';
 import './video-extractor.css';
 import './account.css';
-export const metadata: Metadata = {
+import './language.css';
+const pageMetadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'https://www.yxstar.shop'),
   title: '宇星脉通｜精选数字商品',
   description: '轻量、可靠的数字商品购买平台，支持自动发货与订单售后。',
@@ -29,4 +32,8 @@ export const metadata: Metadata = {
     images: ['/og.png'],
   },
 };
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) { return <html lang="zh-CN"><body>{children}</body></html>; }
+export async function generateMetadata() { return localizeMetadata(pageMetadata); }
+export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  const { locale } = await getI18n();
+  return <html lang={locale}><body><LanguageProvider locale={locale}>{children}</LanguageProvider></body></html>;
+}

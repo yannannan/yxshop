@@ -1,3 +1,4 @@
+import { i18nMock } from './helpers/i18n.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -22,7 +23,7 @@ function load(file, mocks = {}, globals = {}) {
   vm.runInNewContext(code, {
     exports, Response, URL, URLSearchParams, console: { error() {} }, ...globals,
     require(name) {
-      if (name in mocks) return mocks[name]; if (name === '../lib/account') return accountHelpers; if (name === '../lib/account-client') return { notifyAccountChanged() {} }; if (name === './account-menu') return { AccountMenu: () => null }; if (name === '../../../components/storefront-header') return { StorefrontHeader: () => null };
+      if (name in mocks) return mocks[name]; if (i18nMock(name)) return i18nMock(name); if (name === '../lib/account') return accountHelpers; if (name === '../lib/account-client') return { notifyAccountChanged() {} }; if (name === './account-menu') return { AccountMenu: () => null }; if (name === '../../../components/storefront-header') return { StorefrontHeader: () => null };
       if (['react', 'react/jsx-runtime'].includes(name)) return require(name);
       throw new Error(`Unexpected module: ${name}`);
     },

@@ -1,3 +1,4 @@
+import { i18nMock } from './helpers/i18n.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
@@ -11,7 +12,7 @@ import * as tools from '../lib/tool-services.ts';
 function load(path, mocks, globals = {}) {
   const exports = {};
   const code = ts.transpileModule(readFileSync(new URL(path, import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText;
-  vm.runInNewContext(code, { exports, Request, Response, URL, console, ...globals, require(name) { if (name in mocks) return mocks[name]; if (name === '../../../components/storefront-header') return { StorefrontHeader: () => null }; if (name === '../../../lib/account-client') return { notifyAccountChanged() {} }; if (name === 'react/jsx-runtime') return jsxRuntime; throw new Error(`Unexpected module: ${name}`); } });
+  vm.runInNewContext(code, { exports, Request, Response, URL, console, ...globals, require(name) { if (name in mocks) return mocks[name]; if (i18nMock(name)) return i18nMock(name); if (name === '../../../components/storefront-header') return { StorefrontHeader: () => null }; if (name === '../../../lib/account-client') return { notifyAccountChanged() {} }; if (name === 'react/jsx-runtime') return jsxRuntime; throw new Error(`Unexpected module: ${name}`); } });
   return exports;
 }
 

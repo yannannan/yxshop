@@ -1,4 +1,6 @@
 "use client";
+import { useI18n } from '@/components/language-provider';
+
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { TechnicalService } from "../lib/technical-services";
@@ -35,6 +37,7 @@ function formatMessageTime(value: unknown) {
 }
 
 export function TechnicalSupportChat({ activeService, open, services, onClose }: TechnicalSupportChatProps) {
+  const { t } = useI18n();
   const [threadSlugs, setThreadSlugs] = useState<string[]>([]);
   const [activeSlug, setActiveSlug] = useState<string | null>(null);
   const [messagesBySlug, setMessagesBySlug] = useState<Record<string, ChatMessage[]>>({});
@@ -150,15 +153,15 @@ export function TechnicalSupportChat({ activeService, open, services, onClose }:
 
   return (
     <div className="technical-chat-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-      <section className="technical-support-chat" role="dialog" aria-modal="true" aria-label="在线免费技术支持">
-        <aside className="technical-chat-sidebar" aria-label="技术支持会话列表">
-          <header><div><span>TECH SUPPORT</span><b>在线免费技术支持</b></div><small>{threads.length} 个会话</small></header>
+      <section className="technical-support-chat" role="dialog" aria-modal="true" aria-label={t("在线免费技术支持")}>
+        <aside className="technical-chat-sidebar" aria-label={t("技术支持会话列表")}>
+          <header><div><span>TECH SUPPORT</span><b>{t("在线免费技术支持")}</b></div><small>{t(threads.length)}{t(" 个会话")}</small></header>
           <div className="technical-chat-thread-list">
             {threads.map((thread) => {
               const lastMessage = messagesBySlug[thread.slug]?.at(-1);
               return <button type="button" className={thread.slug === currentService.slug ? "active" : ""} key={thread.slug} onClick={() => setActiveSlug(thread.slug)}>
-                <span className="technical-avatar" aria-hidden="true">{thread.initials}</span>
-                <span><b>{thread.provider}</b><small>{lastMessage?.content || "开始技术咨询"}</small></span>
+                <span className="technical-avatar" aria-hidden="true">{t(thread.initials)}</span>
+                <span><b>{t(thread.provider)}</b><small>{lastMessage?.content || t("开始技术咨询")}</small></span>
               </button>;
             })}
           </div>
@@ -166,28 +169,28 @@ export function TechnicalSupportChat({ activeService, open, services, onClose }:
 
         <div className="technical-chat-main">
           <header className="technical-chat-main-header">
-            <div><b>{currentService.provider}</b><span>已认证技术服务者 · 在线沟通</span><small>咨询服务：{currentService.title}</small></div>
-            <button type="button" className="modal-close" aria-label="关闭在线技术支持" onClick={onClose}>×</button>
+            <div><b>{t(currentService.provider)}</b><span>{t("已认证技术服务者 · 在线沟通")}</span><small>{t("咨询服务：")}{currentService.title}</small></div>
+            <button type="button" className="modal-close" aria-label={t("关闭在线技术支持")} onClick={onClose}>×</button>
           </header>
           <div className="technical-chat-messages" aria-live="polite">
-            <div className="technical-chat-notice">本次沟通用于确认服务范围、交付方式与价格；请勿发送账号密码等敏感信息。</div>
-            {notice && <div className="technical-chat-notice technical-chat-error">{notice}</div>}
-            {messages.map((message) => <div className={`technical-chat-message ${message.from === "customer" ? "mine" : ""}`} key={message.id}><span>{message.content}</span><small>{message.time}</small></div>)}
+            <div className="technical-chat-notice">{t("本次沟通用于确认服务范围、交付方式与价格；请勿发送账号密码等敏感信息。")}</div>
+            {notice && <div className="technical-chat-notice technical-chat-error">{t(notice)}</div>}
+            {messages.map((message) => <div className={`technical-chat-message ${message.from === "customer" ? "mine" : ""}`} key={message.id}><span>{message.content}</span><small>{t(message.time)}</small></div>)}
           </div>
           <div className="technical-chat-composer">
-            <input value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => event.key === "Enter" && void sendMessage()} placeholder="请输入咨询内容" />
-            <button type="button" disabled={sending || !draft.trim()} onClick={() => void sendMessage()}>{sending ? "发送中…" : "发送"}</button>
+            <input value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => event.key === "Enter" && void sendMessage()} placeholder={t("请输入咨询内容")} />
+            <button type="button" disabled={sending || !draft.trim()} onClick={() => void sendMessage()}>{t(sending ? "发送中…" : "发送")}</button>
           </div>
         </div>
 
-        <aside className="technical-contact-protection" aria-label="联系方式保护">
-          <header><div><span>CONTACT ACCESS</span><b>联系方式申请</b><small>微信二维码与手机号默认隐藏</small></div><em className={contactRequestState}>{contactRequestState === "approved" ? "已授权" : contactRequestState === "requested" ? "审核中" : "未授权"}</em></header>
+        <aside className="technical-contact-protection" aria-label={t("联系方式保护")}>
+          <header><div><span>CONTACT ACCESS</span><b>{t("联系方式申请")}</b><small>{t("微信二维码与手机号默认隐藏")}</small></div><em className={contactRequestState}>{t(contactRequestState === "approved" ? "已授权" : contactRequestState === "requested" ? "审核中" : "未授权")}</em></header>
           <div className="technical-contact-preview">
-            <div className="technical-contact-qr technical-contact-qr-locked"><span>微信二维码</span><small>{contactRequestState === "approved" ? "已授权" : "已保护"}</small></div>
-            <div><span>技术人员手机号</span><b>{contactRequestState === "approved" ? "请通过平台确认" : "***********"}</b></div>
-            <p>{contactRequestState === "approved" ? "联系方式申请已通过，请在平台沟通中确认具体联系方式。" : "技术人员或平台审核通过后，才会开放联系方式。"}</p>
+            <div className="technical-contact-qr technical-contact-qr-locked"><span>{t("微信二维码")}</span><small>{t(contactRequestState === "approved" ? "已授权" : "已保护")}</small></div>
+            <div><span>{t("技术人员手机号")}</span><b>{t(contactRequestState === "approved" ? "请通过平台确认" : "***********")}</b></div>
+            <p>{t(contactRequestState === "approved" ? "联系方式申请已通过，请在平台沟通中确认具体联系方式。" : "技术人员或平台审核通过后，才会开放联系方式。")}</p>
           </div>
-          {contactRequestState === "idle" ? <button type="button" onClick={() => void requestContact()}>申请添加联系方式</button> : <p className="technical-contact-pending">{contactRequestState === "approved" ? "申请已通过，可继续在平台内沟通。" : "申请已提交，等待技术人员或平台审核。"}</p>}
+          {contactRequestState === "idle" ? <button type="button" onClick={() => void requestContact()}>{t("申请添加联系方式")}</button> : <p className="technical-contact-pending">{t(contactRequestState === "approved" ? "申请已通过，可继续在平台内沟通。" : "申请已提交，等待技术人员或平台审核。")}</p>}
         </aside>
       </section>
     </div>

@@ -1,4 +1,6 @@
 "use client";
+import { useI18n } from '@/components/language-provider';
+
 
 import Image from "next/image";
 import Link from "next/link";
@@ -32,6 +34,7 @@ type CategoryGroup = CategoryNode & { id?: number };
 const pageSize = 12;
 
 export default function StorePage() {
+  const { t } = useI18n();
   const [category, setCategory] = useState("全部商品");
   const [subcategory, setSubcategory] = useState("全部");
   const [thirdCategory, setThirdCategory] = useState("全部");
@@ -258,69 +261,68 @@ export default function StorePage() {
         <a
           className="technical-card-hitarea"
           href={`/service/${service.slug}`}
-          aria-label={`查看${service.title}服务详情`}
+          aria-label={t(`查看${service.title}服务详情`)}
         />
 
         <header className="technical-reference-card-header">
           <Image
             className="technical-reference-card-avatar"
             src={service.avatar}
-            alt={`${service.provider}技术人员头像`}
+            alt={t(`${service.provider}技术人员头像`)}
             width={108}
             height={108}
             sizes="108px"
           />
           <div className="technical-reference-card-provider">
             <div>
-              <b>{service.provider}</b>
-              <span>已认证</span>
+              <b>{t(service.provider)}</b>
+              <span>{t("已认证")}</span>
             </div>
             <p>
-              {service.city} · {service.experience}
+              {service.city} · {t(service.experience)}
             </p>
-            <small>{service.providerRole}</small>
+            <small>{t(service.providerRole)}</small>
           </div>
-          <em>{service.onlineStatus === "offline" ? "暂停服务" : "可服务"}</em>
+          <em>{t(service.onlineStatus === "offline" ? "暂停服务" : "可服务")}</em>
         </header>
 
         <section className="technical-reference-card-service">
           <h3>{service.title}</h3>
           <p>{service.summary}</p>
-          <div className="technical-reference-card-skills" aria-label="技术能力">
+          <div className="technical-reference-card-skills" aria-label={t("技术能力")}>
             {service.skills.slice(0, 4).map((skill) => (
-              <span key={skill}>{skill}</span>
+              <span key={skill}>{t(skill)}</span>
             ))}
           </div>
         </section>
 
-        <section className="technical-reference-card-service-info" aria-label="服务方式与价格">
+        <section className="technical-reference-card-service-info" aria-label={t("服务方式与价格")}>
           <div className="technical-reference-card-delivery">
             {service.deliveryModes.map((mode) => (
-              <span key={mode}>{serviceDeliveryLabels[mode]}</span>
+              <span key={mode}>{t(serviceDeliveryLabels[mode])}</span>
             ))}
             {supportsOnsite && (
               <small>
-                {service.coverage || "支持上门服务"} · 购买时选择服务时间和上门地址
-              </small>
+                {service.coverage || t("支持上门服务")}{t(" · 购买时选择服务时间和上门地址")}</small>
             )}
           </div>
-          <div className="technical-reference-card-price" aria-label="服务价格">
+          <div className="technical-reference-card-price" aria-label={t("服务价格")}>
             {service.pricingMode === "fixed" && service.price !== undefined ? (
               <span
                 className="technical-card-price"
-                aria-label={servicePriceText(service)}
+                aria-label={t(servicePriceText(service))}
               >
                 <i>¥</i>
-                <b>{formatServicePrice(service.price)}</b>
-                <em>/ {service.unit ?? "次"}</em>
+                <b>{t(formatServicePrice(service.price))}</b>
+                <em>/ {t(service.unit ?? "次")}</em>
               </span>
             ) : (
               <strong className="negotiable">
-                {service.pricingMode === "negotiable" ? "价格面议" : "价格待确认"}
+                {t(service.pricingMode === "negotiable" ? "价格面议" : "价格待确认")}
               </strong>
             )}
             {service.pricingMode === "negotiable" && (
-              <small>根据实际需求确认服务价格</small>
+              <small>{t("根据实际需求确认服务价格")}</small>
             )}
           </div>
         </section>
@@ -333,20 +335,19 @@ export default function StorePage() {
               onClick={() => openTechnicalChat(service)}
             >
               <span>
-                <b>在线免费技术支持</b>
-                <small>先沟通需求，再确认服务安排</small>
+                <b>{t("在线免费技术支持")}</b>
+                <small>{t("先沟通需求，再确认服务安排")}</small>
               </span>
-              <em>{service.onlineResponse ? `最快 ${service.onlineResponse}` : "立即沟通"}</em>
+              <em>{t(service.onlineResponse ? `最快 ${service.onlineResponse}` : "立即沟通")}</em>
             </button>
           )}
           <div className="technical-reference-card-secondary-actions">
-            <a href={`/service/${service.slug}`}>查看服务</a>
+            <a href={`/service/${service.slug}`}>{t("查看服务")}</a>
             <a
               className="primary"
               href={`/service/${service.slug}`}
             >
-              购买服务
-            </a>
+              {t("购买服务")}</a>
           </div>
         </div>
       </article>
@@ -421,7 +422,7 @@ export default function StorePage() {
         <section className="content refined-content">
           <StorefrontBanners />
 
-          <section className="channel-switch" aria-label="服务频道">
+          <section className="channel-switch" aria-label={t("服务频道")}>
             <button
               type="button"
               className={channel === "mall" ? "active" : ""}
@@ -430,10 +431,10 @@ export default function StorePage() {
             >
               <span className="channel-icon">⌘</span>
               <span>
-                <b>AI数字服务</b>
-                <small>会员、账号、工具与 AI 教程，即买即用</small>
+                <b>{t("AI数字服务")}</b>
+                <small>{t("会员、账号、工具与 AI 教程，即买即用")}</small>
               </span>
-              <em>{channel === "mall" ? "当前频道" : "切换频道"}</em>
+              <em>{t(channel === "mall" ? "当前频道" : "切换频道")}</em>
             </button>
             <button
               type="button"
@@ -443,10 +444,10 @@ export default function StorePage() {
             >
               <span className="channel-icon">⌖</span>
               <span>
-                <b>上门技术服务</b>
-                <small>在线咨询最快 1–5 分钟，到场最快 20 分钟</small>
+                <b>{t("上门技术服务")}</b>
+                <small>{t("在线咨询最快 1–5 分钟，到场最快 20 分钟")}</small>
               </span>
-              <em>{channel === "technical" ? "当前频道" : "切换频道"}</em>
+              <em>{t(channel === "technical" ? "当前频道" : "切换频道")}</em>
             </button>
           </section>
 
@@ -454,23 +455,23 @@ export default function StorePage() {
           {channel === "mall" && <>
           {!isToolsCategory && <div className="quick-benefits" id="services">
             <span>
-              <b>自动发货</b>
-              <small>支付核验后自动账号 / 卡密推送至邮箱</small>
+              <b>{t("自动发货")}</b>
+              <small>{t("支付核验后自动账号 / 卡密推送至邮箱")}</small>
             </span>
             <span>
-              <b>7 × 24 小时客服人工在线</b>
-              <small>客服真人在线，让你安心购买</small>
+              <b>{t("7 × 24 小时客服人工在线")}</b>
+              <small>{t("客服真人在线，让你安心购买")}</small>
             </span>
             <span>
-              <b>保质保量</b>
-              <small>官方渠道保质保量，无效退款</small>
+              <b>{t("保质保量")}</b>
+              <small>{t("官方渠道保质保量，无效退款")}</small>
             </span>
           </div>
 
           }
           <div className="catalog-filter-area" id="products">
             <div className="catalog-filter-row">
-              <nav className="category-tabs" aria-label="商品类型">
+              <nav className="category-tabs" aria-label={t("商品类型")}>
                 {categories.map((item) => (
                   <button
                     key={item}
@@ -483,31 +484,31 @@ export default function StorePage() {
                       setPage(1);
                     }}
                   >
-                    {item}
+                    {t(item)}
                   </button>
                 ))}
               </nav>
               <label className="search catalog-search">
                 <span aria-hidden="true">⌕</span>
                 <input
-                  aria-label={isToolsCategory ? '搜索工具' : showGroupedCatalog ? '搜索商品或工具' : '搜索商品'}
+                  aria-label={t(isToolsCategory ? '搜索工具' : showGroupedCatalog ? '搜索商品或工具' : '搜索商品')}
                   value={query}
                   onChange={(event) => {
                     setQuery(event.target.value);
                     setPage(1);
                   }}
-                  placeholder={isToolsCategory ? '搜索需要的工具' : showGroupedCatalog ? '搜索商品、工具或服务' : '搜索商品、品牌或服务'}
+                  placeholder={t(isToolsCategory ? '搜索需要的工具' : showGroupedCatalog ? '搜索商品、工具或服务' : '搜索商品、品牌或服务')}
                 />
-                <button type="button">搜索</button>
+                <button type="button">{t("搜索")}</button>
               </label>
               <div className="product-tools product-tools-row">
-                <span>{isToolsCategory ? `共 ${visibleTools.length} 个工具` : showGroupedCatalog ? `共 ${visibleTools.length} 个工具 · ${visible.length} 件商品` : `共 ${visible.length} 件`}</span>
+                <span>{t(isToolsCategory ? `共 ${visibleTools.length} 个工具` : showGroupedCatalog ? `共 ${visibleTools.length} 个工具 · ${visible.length} 件商品` : `共 ${visible.length} 件`)}</span>
               </div>
             </div>
             {!isToolsCategory && category !== "全部商品" && availableSubcategories.length > 1 && (
               <nav
                 className="subcategory-tabs"
-                aria-label={`${category}二级分类`}
+                aria-label={t(`${category}二级分类`)}
               >
                 {availableSubcategories.map((item) => (
                   <button
@@ -520,7 +521,7 @@ export default function StorePage() {
                       setPage(1);
                     }}
                   >
-                    {item}
+                    {t(item)}
                   </button>
                 ))}
               </nav>
@@ -528,7 +529,7 @@ export default function StorePage() {
             {!isToolsCategory && subcategory !== "全部" && availableThirdCategories.length > 1 && (
               <nav
                 className="subcategory-tabs third-category-tabs"
-                aria-label={`${subcategory}三级分类`}
+                aria-label={t(`${subcategory}三级分类`)}
               >
                 {availableThirdCategories.map((item) => (
                   <button
@@ -540,24 +541,24 @@ export default function StorePage() {
                       setPage(1);
                     }}
                   >
-                    {item}
+                    {t(item)}
                   </button>
                 ))}
               </nav>
             )}
           </div>
 
-          {!isToolsCategory && productsError && <p className="catalog-load-error" role="alert">{productsError}。请稍后刷新，或联系客服。</p>}
+          {!isToolsCategory && productsError && <p className="catalog-load-error" role="alert">{t(productsError)}{t("。请稍后刷新，或联系客服。")}</p>}
           {isToolsCategory ? <ToolDirectory key={query} tools={visibleTools} loading={toolsLoading} error={toolsError} /> : showGroupedCatalog ? (
             <HomepageCatalog products={visible} tools={visibleTools} settings={homepageDisplay} loading={toolsLoading} error={toolsError} query={query} renderProduct={renderProductCard} />
           ) : (
-            <><div className="catalog-list-heading"><h2>{thirdCategory !== '全部' ? thirdCategory : subcategory !== '全部' ? subcategory : category}</h2><Link className="catalog-more-link" href={`/products?${moreProductsParams}`}>更多商品 →</Link></div><div className="product-grid refined-grid homepage-product-grid">{pagedProducts.map(renderProductCard)}</div><CatalogPagination page={currentPage} totalPages={totalPages} onChange={setPage} label="商品分页" /></>
+            <><div className="catalog-list-heading"><h2>{t(thirdCategory !== '全部' ? thirdCategory : subcategory !== '全部' ? subcategory : category)}</h2><Link className="catalog-more-link" href={`/products?${moreProductsParams}`}>{t("更多商品 →")}</Link></div><div className="product-grid refined-grid homepage-product-grid">{t(pagedProducts.map(renderProductCard))}</div><CatalogPagination page={currentPage} totalPages={totalPages} onChange={setPage} label={t("商品分页")} /></>
           )}
           {showCatalogEmpty && (
             <div className="empty refined-empty">
               <span>⌕</span>
-              <h3>{showGroupedCatalog ? '没有找到相关商品或工具' : '没有找到相关商品'}</h3>
-              <p>试试更短的关键词，或返回查看全部商品。</p>
+              <h3>{t(showGroupedCatalog ? '没有找到相关商品或工具' : '没有找到相关商品')}</h3>
+              <p>{t("试试更短的关键词，或返回查看全部商品。")}</p>
               <button
                 onClick={() => {
                   setQuery("");
@@ -567,8 +568,7 @@ export default function StorePage() {
                   setPage(1);
                 }}
               >
-                查看全部商品
-              </button>
+                {t("查看全部商品")}</button>
             </div>
           )}
 
@@ -576,11 +576,11 @@ export default function StorePage() {
             <div>
               <span>?</span>
               <div>
-                <b>{isToolsCategory ? '工具使用遇到问题？' : '购买前还有疑问？'}</b>
-                <p>{isToolsCategory ? '联系在线客服，了解工具入口与使用方式。' : '查看购买说明，或联系售后确认商品是否适合你。'}</p>
+                <b>{t(isToolsCategory ? '工具使用遇到问题？' : '购买前还有疑问？')}</b>
+                <p>{t(isToolsCategory ? '联系在线客服，了解工具入口与使用方式。' : '查看购买说明，或联系售后确认商品是否适合你。')}</p>
               </div>
             </div>
-            <button onClick={() => setServiceOpen(true)}>在线微信客服</button>
+            <button onClick={() => setServiceOpen(true)}>{t("在线微信客服")}</button>
           </section>
           </>}
 
@@ -589,25 +589,24 @@ export default function StorePage() {
               <header className="technical-services-heading">
                 <div>
                   <span className="section-kicker">TECHNICAL SERVICES</span>
-                  <h2 id="technical-services-title">上门技术服务</h2>
-                  <p>认证技术人才 · 固定价格或价格面议 · 在线沟通与到场服务</p>
+                  <h2 id="technical-services-title">{t("上门技术服务")}</h2>
+                  <p>{t("认证技术人才 · 固定价格或价格面议 · 在线沟通与到场服务")}</p>
                 </div>
-                <div><span>共 {homepageTechnicalProviderCount} 位服务者</span><button type="button" className="catalog-more-link" onClick={() => { setShowAllTechnical(!showAllTechnical); setTechnicalPage(1); }}>{showAllTechnical ? "返回首页推荐 →" : "更多服务 →"}</button></div>
+                <div><span>{t("共 ")}{t(homepageTechnicalProviderCount)}{t(" 位服务者")}</span><button type="button" className="catalog-more-link" onClick={() => { setShowAllTechnical(!showAllTechnical); setTechnicalPage(1); }}>{t(showAllTechnical ? "返回首页推荐 →" : "更多服务 →")}</button></div>
               </header>
               <div className="technical-services-grid">
-                {technicalResult.items.map(renderTechnicalServiceCard)}
+                {t(technicalResult.items.map(renderTechnicalServiceCard))}
               </div>
-              {!homepageTechnicalServices.length && <p className="tool-directory-empty">暂无可展示的技术服务。</p>}
-              <CatalogPagination page={technicalResult.page} totalPages={technicalResult.totalPages} onChange={setTechnicalPage} label="技术服务分页" />
+              {!homepageTechnicalServices.length && <p className="tool-directory-empty">{t("暂无可展示的技术服务。")}</p>}
+              <CatalogPagination page={technicalResult.page} totalPages={technicalResult.totalPages} onChange={setTechnicalPage} label={t("技术服务分页")} />
               <section className="talent-entry" id="talent-entry">
                 <div>
                   <span>TECH TALENT</span>
-                  <h3>你是技术服务者？</h3>
-                  <p>发布擅长服务、服务方式和价格，面向真实需求在线接单。</p>
+                  <h3>{t("你是技术服务者？")}</h3>
+                  <p>{t("发布擅长服务、服务方式和价格，面向真实需求在线接单。")}</p>
                 </div>
                 <button type="button" onClick={() => setProviderApplicationOpen(true)}>
-                  申请技术人才入驻
-                </button>
+                  {t("申请技术人才入驻")}</button>
               </section>
             </section>
           )}
@@ -622,26 +621,26 @@ export default function StorePage() {
             <span className="brand-mark">
               <Image
                 src="/yxstar_logo.png"
-                alt="宇星脉通 Logo"
+                alt={t("宇星脉通 Logo")}
                 fill
                 sizes="34px"
               />
             </span>
-            <span>宇星脉通</span>
+            <span>{t("宇星脉通")}</span>
           </a>
-          <p>简单、透明、可靠的数字商品购买体验。</p>
+          <p>{t("简单、透明、可靠的数字商品购买体验。")}</p>
         </div>
         <div>
-          <b>购买帮助</b>
-          <a href="#services">发货说明</a>
-          <a href="#services">售后保障</a>
+          <b>{t("购买帮助")}</b>
+          <a href="#services">{t("发货说明")}</a>
+          <a href="#services">{t("售后保障")}</a>
         </div>
         <div>
-          <b>商城信息</b>
+          <b>{t("商城信息")}</b>
           {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- 工具跨页入口使用原生导航，避免客户端路由异常时点击无反应。 */}
-          <a href="/tools">工具服务</a>
-          {isAdmin && <a href="/admin">管理后台</a>}
-          <span>© 2026 宇星脉通</span>
+          <a href="/tools">{t("工具服务")}</a>
+          {isAdmin && <a href="/admin">{t("管理后台")}</a>}
+          <span>{t("© 2026 宇星脉通")}</span>
         </div>
       </footer>
 
@@ -662,28 +661,28 @@ export default function StorePage() {
           <section
             className="service-panel"
             role="dialog"
-            aria-label="在线微信客服"
+            aria-label={t("在线微信客服")}
           >
             <button
               className="service-close"
-              aria-label="关闭在线客服"
+              aria-label={t("关闭在线客服")}
               onClick={() => setServiceOpen(false)}
             >
               ×
             </button>
             <span className="service-panel-kicker">ONLINE SERVICE</span>
-            <b>在线微信客服</b>
-            <p>扫码联系 7 × 24 小时人工客服</p>
+            <b>{t("在线微信客服")}</b>
+            <p>{t("扫码联系 7 × 24 小时人工客服")}</p>
             <div className="service-qr service-qr-image">
               <Image
                 unoptimized
                 src="/customer-service-wechat.png"
-                alt="在线微信客服二维码"
+                alt={t("在线微信客服二维码")}
                 width={190}
                 height={242}
               />
             </div>
-            <small>扫码添加客服后，请说明订单号</small>
+            <small>{t("扫码添加客服后，请说明订单号")}</small>
           </section>
         )}
         <button
@@ -707,8 +706,8 @@ export default function StorePage() {
               <circle cx="16" cy="13.3" r=".8" fill="#22b96d" />
             </svg>
           </span>
-          <b>在线微信客服</b>
-          <small>微信扫码联系</small>
+          <b>{t("在线微信客服")}</b>
+          <small>{t("微信扫码联系")}</small>
         </button>
       </div>
 
@@ -727,7 +726,7 @@ export default function StorePage() {
           >
             <button
               className="modal-close"
-              aria-label="关闭"
+              aria-label={t("关闭")}
               onClick={() => setAuthOpen(false)}
             >
               ×
@@ -736,17 +735,16 @@ export default function StorePage() {
               <span className="brand-mark">
                 <Image
                   src="/yxstar_logo.png"
-                  alt="宇星脉通 Logo"
+                  alt={t("宇星脉通 Logo")}
                   fill
                   sizes="34px"
                 />
               </span>
             </div>
-            <h2 id="auth-title">手机号登录 / 注册</h2>
-            <p className="modal-sub">获取验证码后自动识别登录或注册</p>
+            <h2 id="auth-title">{t("手机号登录 / 注册")}</h2>
+            <p className="modal-sub">{t("获取验证码后自动识别登录或注册")}</p>
             <label>
-              登录手机号
-              <div className="phone-field">
+              {t("登录手机号")}<div className="phone-field">
                 <span>+86</span>
                 <input
                   value={phone}
@@ -758,42 +756,39 @@ export default function StorePage() {
                     setCode("");
                     setAuthNotice("");
                   }}
-                  placeholder="请输入手机号"
+                  placeholder={t("请输入手机号")}
                   inputMode="numeric"
                   autoComplete="tel"
                 />
               </div>
             </label>
             <label>
-              短信验证码
-              <div className="code-field">
+              {t("短信验证码")}<div className="code-field">
                 <input
                   value={code}
                   maxLength={6}
                   onChange={(event) =>
                     setCode(event.target.value.replace(/\D/g, ""))
                   }
-                  placeholder="6 位验证码"
+                  placeholder={t("6 位验证码")}
                   inputMode="numeric"
                   autoComplete="one-time-code"
                 />
                 <button onClick={sendCode} disabled={Boolean(codeCooldown)}>
-                  {codeCooldown ? `${codeCooldown}s 后重试` : "获取验证码"}
+                  {t(codeCooldown ? `${codeCooldown}s 后重试` : "获取验证码")}
                 </button>
               </div>
             </label>
             {phoneRegistered === true && (
               <div className="new-user-tip">
-                <span>✓</span> 该手机号已注册，验证验证码后即可登录
-              </div>
+                <span>✓</span>{t(" 该手机号已注册，验证验证码后即可登录")}</div>
             )}
             {phoneRegistered === false && (
               <>
                 <div className="new-user-tip">
-                  <span>i</span> 新手机号，请填写订单接收邮箱后完成注册
-                </div>
+                  <span>i</span>{t(" 新手机号，请填写订单接收邮箱后完成注册")}</div>
                 <label>
-                  接收订单的邮箱 <span>新用户必填</span>
+                  {t("接收订单的邮箱 ")}<span>{t("新用户必填")}</span>
                   <input
                     value={email}
                     onChange={(event) => setEmail(event.target.value)}
@@ -806,28 +801,27 @@ export default function StorePage() {
             )}
             {authError && (
               <p className="form-error" role="alert">
-                {authError}
+                {t(authError)}
               </p>
             )}
-            {authNotice && <p className="new-user-tip" role="status">{authNotice}</p>}
+            {authNotice && <p className="new-user-tip" role="status">{t(authNotice)}</p>}
             <button
               className="primary-wide"
               onClick={signIn}
               disabled={authLoading || phoneRegistered === null}
             >
-              {authLoading
+              {t(authLoading
                 ? "正在验证…"
                 : phoneRegistered === null
                   ? "请先获取验证码"
                   : phoneRegistered === false
                     ? "注册并继续"
-                    : "验证并登录"}{" "}
+                    : "验证并登录")}{t(" ")}
               <span>→</span>
             </button>
             <small className="agreement">
-              继续即表示同意《用户协议》和《隐私政策》
-            </small>
-            <small className="demo-login-note">短信服务异常时将自动使用演示验证码</small>
+              {t("继续即表示同意《用户协议》和《隐私政策》")}</small>
+            <small className="demo-login-note">{t("短信服务异常时将自动使用演示验证码")}</small>
           </section>
         </div>
       )}

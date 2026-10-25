@@ -1,8 +1,11 @@
 "use client";
+import { useI18n } from '@/components/language-provider';
+
 
 import { useEffect, useState } from "react";
 
 function FeatureIcon({ kind }: { kind: "shield" | "mail" | "support" | "location" | "chat" }) {
+  const { t } = useI18n();
   const paths = {
     shield: <><path d="m12 3 8 3v5c0 5-8 10-8 10S4 16 4 11V6l8-3Z" /><path d="m8 12 3 3 5-6" /></>,
     mail: <><rect x="3" y="5" width="18" height="14" rx="3" /><path d="m4 7 8 6 8-6" /></>,
@@ -10,7 +13,7 @@ function FeatureIcon({ kind }: { kind: "shield" | "mail" | "support" | "location
     location: <><path d="M19 10c0 5-7 11-7 11S5 15 5 10a7 7 0 0 1 14 0Z" /><circle cx="12" cy="10" r="2.5" /></>,
     chat: <><path d="M21 11a8 8 0 0 1-8 8H7l-4 3V11a9 9 0 0 1 18 0Z" /><path d="M7 10h10M7 14h6" /></>,
   };
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">{paths[kind]}</svg>;
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">{t(paths[kind])}</svg>;
 }
 
 function DigitalIllustration() {
@@ -95,6 +98,7 @@ function TechnicalIllustration() {
 }
 
 export function StorefrontBanners() {
+  const { t } = useI18n();
   const [slide, setSlide] = useState(0);
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
@@ -113,27 +117,27 @@ export function StorefrontBanners() {
   }, [hovered, focused]);
 
   const slides = ["AI数字服务", "在线与上门技术服务"];
-  return <section className={`storefront-banners banner-theme-${slide === 0 ? "digital" : "service"}`} aria-label="宇星脉通服务介绍" aria-roledescription="轮播图" onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)} onFocusCapture={() => setFocused(true)} onBlurCapture={event => { if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false); }}>
+  return <section className={`storefront-banners banner-theme-${slide === 0 ? "digital" : "service"}`} aria-label={t("宇星脉通服务介绍")} aria-roledescription="轮播图" onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)} onFocusCapture={() => setFocused(true)} onBlurCapture={event => { if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false); }}>
     <div className="storefront-banner-track" style={{ transform: `translateX(-${slide * 50}%)` }}>
-      <div id="storefront-banner-digital" className="storefront-banner storefront-banner-digital" role="group" aria-roledescription="幻灯片" aria-label="第 1 张，共 2 张：AI数字服务" aria-hidden={slide !== 0}>
+      <div id="storefront-banner-digital" className="storefront-banner storefront-banner-digital" role="group" aria-roledescription="幻灯片" aria-label={t("第 1 张，共 2 张：AI数字服务")} aria-hidden={slide !== 0}>
         <div className="storefront-banner-copy">
-          <span className="storefront-banner-eyebrow"><b>宇星脉通</b><i />AI数字服务</span>
-          <h1>AI 会员与实用工具<br /><em>一站选购，省心使用</em></h1>
-          <p>会员账号、充值服务、效率工具，一站选购。<br className="banner-desktop-break" />清晰交付，人工售后，让每一次使用都更省心。</p>
-          <div className="storefront-banner-features"><span><FeatureIcon kind="shield" />丰富数字商品</span><span><FeatureIcon kind="mail" />订单邮箱交付</span><span><FeatureIcon kind="support" />人工售后保障</span></div>
+          <span className="storefront-banner-eyebrow"><b>{t("宇星脉通")}</b><i />{t("AI数字服务")}</span>
+          <h1>{t("AI 会员与实用工具")}<br /><em>{t("一站选购，省心使用")}</em></h1>
+          <p>{t("会员账号、充值服务、效率工具，一站选购。")}<br className="banner-desktop-break" />{t("清晰交付，人工售后，让每一次使用都更省心。")}</p>
+          <div className="storefront-banner-features"><span><FeatureIcon kind="shield" />{t("丰富数字商品")}</span><span><FeatureIcon kind="mail" />{t("订单邮箱交付")}</span><span><FeatureIcon kind="support" />{t("人工售后保障")}</span></div>
         </div>
         <DigitalIllustration />
       </div>
-      <div id="storefront-banner-service" className="storefront-banner storefront-banner-service" role="group" aria-roledescription="幻灯片" aria-label="第 2 张，共 2 张：在线与上门技术服务" aria-hidden={slide !== 1}>
+      <div id="storefront-banner-service" className="storefront-banner storefront-banner-service" role="group" aria-roledescription="幻灯片" aria-label={t("第 2 张，共 2 张：在线与上门技术服务")} aria-hidden={slide !== 1}>
         <div className="storefront-banner-copy">
-          <span className="storefront-banner-eyebrow"><b>宇星脉通</b><i />在线与上门技术服务</span>
-          <h2>在线解答，上门服务<br /><em>技术问题，交给专业</em></h2>
-          <p>从远程协助到上门技术服务，找到适合的技术人员。<br className="banner-desktop-break" />让专业支持离你更近，工作生活更轻松。</p>
-          <div className="storefront-banner-features"><span><FeatureIcon kind="chat" />在线技术咨询</span><span><FeatureIcon kind="location" />上门技术服务</span><span><FeatureIcon kind="support" />7 × 24 人工客服</span></div>
+          <span className="storefront-banner-eyebrow"><b>{t("宇星脉通")}</b><i />{t("在线与上门技术服务")}</span>
+          <h2>{t("在线解答，上门服务")}<br /><em>{t("技术问题，交给专业")}</em></h2>
+          <p>{t("从远程协助到上门技术服务，找到适合的技术人员。")}<br className="banner-desktop-break" />{t("让专业支持离你更近，工作生活更轻松。")}</p>
+          <div className="storefront-banner-features"><span><FeatureIcon kind="chat" />{t("在线技术咨询")}</span><span><FeatureIcon kind="location" />{t("上门技术服务")}</span><span><FeatureIcon kind="support" />{t("7 × 24 人工客服")}</span></div>
         </div>
         <TechnicalIllustration />
       </div>
     </div>
-    <div className="storefront-banner-dots" role="group" aria-label="切换宣传内容">{slides.map((name, index) => <button type="button" key={name} aria-label={`切换到第 ${index + 1} 张：${name}`} aria-pressed={slide === index} aria-controls={index === 0 ? "storefront-banner-digital" : "storefront-banner-service"} onClick={() => setSlide(index)} />)}</div>
+    <div className="storefront-banner-dots" role="group" aria-label={t("切换宣传内容")}>{slides.map((name, index) => <button type="button" key={name} aria-label={t(`切换到第 ${index + 1} 张：${name}`)} aria-pressed={slide === index} aria-controls={index === 0 ? "storefront-banner-digital" : "storefront-banner-service"} onClick={() => setSlide(index)} />)}</div>
   </section>;
 }

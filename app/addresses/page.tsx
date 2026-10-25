@@ -1,4 +1,6 @@
 "use client";
+import { useI18n } from '@/components/language-provider';
+
 
 import { StorefrontHeader } from "../../components/storefront-header";
 import { AccountShell } from "../../components/account-shell";
@@ -49,6 +51,7 @@ export default function AddressesPage() {
 }
 
 function AddressBook() {
+  const { t } = useI18n();
   const [items,setItems] = useState<Address[]>([]);
   const [loading,setLoading] = useState(true);
   const [unauthorized,setUnauthorized] = useState(false);
@@ -115,7 +118,7 @@ function AddressBook() {
   }
 
   async function remove(id:number) {
-    if (!window.confirm("确认删除这个地址吗？历史服务订单中的地址快照不会受影响。")) return;
+    if (!window.confirm(t("确认删除这个地址吗？历史服务订单中的地址快照不会受影响。"))) return;
     const response = await fetch("/api/addresses?id="+id,{ method:"DELETE" });
     const result = await response.json() as { message?:string };
     if (!response.ok) setMessage(result.message || "地址删除失败");
@@ -127,43 +130,43 @@ function AddressBook() {
 
     <section className="customer-address-wrap">
       <div className="customer-address-head">
-        <div><span className="section-kicker">ADDRESS BOOK</span><h1>我的地址</h1><p>管理上门技术服务常用地址，下单时可直接选择。</p></div>
-        {!unauthorized && <button type="button" onClick={() => setEditing({ ...emptyForm, isDefault: items.length === 0 })}>新增地址</button>}
+        <div><span className="section-kicker">ADDRESS BOOK</span><h1>{t("我的地址")}</h1><p>{t("管理上门技术服务常用地址，下单时可直接选择。")}</p></div>
+        {!unauthorized && <button type="button" onClick={() => setEditing({ ...emptyForm, isDefault: items.length === 0 })}>{t("新增地址")}</button>}
       </div>
 
-      {message && <div className="customer-address-message">{message}</div>}
-      {loading ? <div className="orders-empty">正在读取地址…</div> :
-       unauthorized ? <div className="orders-empty"><b>登录后管理地址</b><p>请先使用商城手机号登录。</p><Link href="/">返回商城登录</Link></div> :
-       items.length === 0 ? <div className="orders-empty"><b>还没有常用地址</b><p>新增地址后，购买上门服务时可直接选择。</p><button type="button" onClick={() => setEditing({ ...emptyForm, isDefault:true })}>新增第一个地址</button></div> :
+      {message && <div className="customer-address-message">{t(message)}</div>}
+      {loading ? <div className="orders-empty">{t("正在读取地址…")}</div> :
+       unauthorized ? <div className="orders-empty"><b>{t("登录后管理地址")}</b><p>{t("请先使用商城手机号登录。")}</p><Link href="/">{t("返回商城登录")}</Link></div> :
+       items.length === 0 ? <div className="orders-empty"><b>{t("还没有常用地址")}</b><p>{t("新增地址后，购买上门服务时可直接选择。")}</p><button type="button" onClick={() => setEditing({ ...emptyForm, isDefault:true })}>{t("新增第一个地址")}</button></div> :
        <div className="customer-address-list">{items.map((address) => <article key={address.id}>
-         <header><div><b>{address.contact_name}</b><span>{address.contact_phone}</span></div>{Number(address.is_default) === 1 && <em>默认地址</em>}</header>
+         <header><div><b>{address.contact_name}</b><span>{t(address.contact_phone)}</span></div>{Number(address.is_default) === 1 && <em>{t("默认地址")}</em>}</header>
          <p>{fullAddress(address)}</p>
          <footer>
            <button type="button" onClick={() => setEditing({
              id:address.id,contactName:address.contact_name,contactPhone:address.contact_phone,
              province:address.province,city:address.city,district:address.district,detailAddress:address.detail_address,
              isDefault:Number(address.is_default) === 1,
-           })}>编辑</button>
-           {Number(address.is_default) !== 1 && <button type="button" onClick={() => void setDefault(address.id)}>设为默认</button>}
-           <button type="button" className="danger" onClick={() => void remove(address.id)}>删除</button>
+           })}>{t("编辑")}</button>
+           {Number(address.is_default) !== 1 && <button type="button" onClick={() => void setDefault(address.id)}>{t("设为默认")}</button>}
+           <button type="button" className="danger" onClick={() => void remove(address.id)}>{t("删除")}</button>
          </footer>
        </article>)}</div>}
     </section>
 
     {editing && <div className="technical-modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && setEditing(null)}>
-      <section className="customer-address-modal" role="dialog" aria-modal="true" aria-label={editing.id ? "编辑地址" : "新增地址"}>
-        <button className="modal-close" aria-label="关闭" onClick={() => setEditing(null)}>×</button>
-        <header><span>ADDRESS</span><h2>{editing.id ? "编辑地址" : "新增地址"}</h2><p>请填写真实可联系的上门服务地址。</p></header>
+      <section className="customer-address-modal" role="dialog" aria-modal="true" aria-label={t(editing.id ? "编辑地址" : "新增地址")}>
+        <button className="modal-close" aria-label={t("关闭")} onClick={() => setEditing(null)}>×</button>
+        <header><span>ADDRESS</span><h2>{editing.id ? "编辑地址" : "新增地址"}</h2><p>{t("请填写真实可联系的上门服务地址。")}</p></header>
         <div className="customer-address-form">
-          <label><span>联系人</span><input value={editing.contactName} onChange={(e) => setEditing({...editing,contactName:e.target.value})} /></label>
-          <label><span>联系电话</span><input value={editing.contactPhone} onChange={(e) => setEditing({...editing,contactPhone:e.target.value})} /></label>
-          <label><span>省</span><input value={editing.province} onChange={(e) => setEditing({...editing,province:e.target.value})} placeholder="例如：上海市" /></label>
-          <label><span>市</span><input value={editing.city} onChange={(e) => setEditing({...editing,city:e.target.value})} placeholder="例如：上海市" /></label>
-          <label><span>区 / 县</span><input value={editing.district} onChange={(e) => setEditing({...editing,district:e.target.value})} placeholder="例如：浦东新区" /></label>
-          <label className="wide"><span>详细地址</span><textarea value={editing.detailAddress} onChange={(e) => setEditing({...editing,detailAddress:e.target.value})} placeholder="街道、小区、楼栋、门牌号等" /></label>
-          <label className="customer-address-default"><input type="checkbox" checked={editing.isDefault} onChange={(e) => setEditing({...editing,isDefault:e.target.checked})} /><span>设为默认上门地址</span></label>
+          <label><span>{t("联系人")}</span><input value={editing.contactName} onChange={(e) => setEditing({...editing,contactName:e.target.value})} /></label>
+          <label><span>{t("联系电话")}</span><input value={editing.contactPhone} onChange={(e) => setEditing({...editing,contactPhone:e.target.value})} /></label>
+          <label><span>{t("省")}</span><input value={editing.province} onChange={(e) => setEditing({...editing,province:e.target.value})} placeholder={t("例如：上海市")} /></label>
+          <label><span>{t("市")}</span><input value={editing.city} onChange={(e) => setEditing({...editing,city:e.target.value})} placeholder={t("例如：上海市")} /></label>
+          <label><span>{t("区 / 县")}</span><input value={editing.district} onChange={(e) => setEditing({...editing,district:e.target.value})} placeholder={t("例如：浦东新区")} /></label>
+          <label className="wide"><span>{t("详细地址")}</span><textarea value={editing.detailAddress} onChange={(e) => setEditing({...editing,detailAddress:e.target.value})} placeholder={t("街道、小区、楼栋、门牌号等")} /></label>
+          <label className="customer-address-default"><input type="checkbox" checked={editing.isDefault} onChange={(e) => setEditing({...editing,isDefault:e.target.checked})} /><span>{t("设为默认上门地址")}</span></label>
         </div>
-        <div className="customer-address-modal-actions"><button type="button" className="secondary" onClick={() => setEditing(null)}>取消</button><button type="button" disabled={saving} onClick={() => void save()}>{saving ? "保存中…" : "保存地址"}</button></div>
+        <div className="customer-address-modal-actions"><button type="button" className="secondary" onClick={() => setEditing(null)}>{t("取消")}</button><button type="button" disabled={saving} onClick={() => void save()}>{t(saving ? "保存中…" : "保存地址")}</button></div>
       </section>
     </div>}
   </div>;

@@ -1,3 +1,6 @@
+import { localizeMetadata } from '@/lib/i18n-server';
+
+import { getI18n } from '@/lib/i18n-server';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { StorefrontHeader } from '@/components/storefront-header';
@@ -9,9 +12,10 @@ import { CatalogPagination } from '@/components/catalog-pagination';
 import { matchesProductCategory } from '@/lib/categories';
 
 export const dynamic = 'force-dynamic';
-export const metadata: Metadata = { title: '商品目录｜宇星脉通', description: '浏览宇星脉通的会员、账号及数字服务，按类型查找所需商品。' };
+const pageMetadata: Metadata = { title: '商品目录｜宇星脉通', description: '浏览宇星脉通的会员、账号及数字服务，按类型查找所需商品。' };
 
 export default async function ProductsPage({ searchParams }: { searchParams: Promise<{ category?: string; secondary?: string; third?: string; q?: string; page?: string }> }) {
+  const { t } = await getI18n();
   const [products, categories, config, params] = await Promise.all([getPublishedProducts(), getPublishedCategories(), getHomepageDisplay(), searchParams]);
   const category = params.category || '', query = (params.q || '').trim();
   const secondary = params.secondary || '全部', third = params.third || '全部';
@@ -22,5 +26,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
   if (secondary !== '全部') base.set('secondary', secondary);
   if (third !== '全部') base.set('third', third);
   if (query) base.set('q', query);
-  return <><StorefrontHeader /><main className="product-directory-page"><div className="product-directory-heading"><div><h1>{third !== '全部' ? third : secondary !== '全部' ? secondary : category || '全部商品'}</h1><p>共 {filtered.length} 件商品 · 每页 12 件</p></div><Link className="catalog-more-link" href="/products">全部商品 →</Link></div><form className="product-directory-search" action="/products">{category && <input type="hidden" name="category" value={category} />}{secondary !== '全部' && <input type="hidden" name="secondary" value={secondary} />}{third !== '全部' && <input type="hidden" name="third" value={third} />}<input name="q" defaultValue={query} placeholder="搜索商品" aria-label="搜索商品" /><button type="submit">搜索</button></form><div className="product-grid refined-grid homepage-product-grid">{result.items.map(product => <StoreProductCard key={product.id} product={product} />)}</div>{!filtered.length && <p className="tool-directory-empty">暂无匹配商品。</p>}<CatalogPagination page={result.page} totalPages={result.totalPages} href={`/products${base.size ? `?${base}` : ''}`} label="商品目录分页" /></main></>;
+  return <><StorefrontHeader /><main className="product-directory-page"><div className="product-directory-heading"><div><h1>{t(third !== '全部' ? third : secondary !== '全部' ? secondary : category || '全部商品')}</h1><p>{t("共 ")}{t(filtered.length)}{t(" 件商品 · 每页 12 件")}</p></div><Link className="catalog-more-link" href="/products">{t("全部商品 →")}</Link></div><form className="product-directory-search" action="/products">{category && <input type="hidden" name="category" value={category} />}{secondary !== '全部' && <input type="hidden" name="secondary" value={secondary} />}{third !== '全部' && <input type="hidden" name="third" value={third} />}<input name="q" defaultValue={query} placeholder={t("搜索商品")} aria-label={t("搜索商品")} /><button type="submit">{t("搜索")}</button></form><div className="product-grid refined-grid homepage-product-grid">{result.items.map(product => <StoreProductCard key={product.id} product={product} />)}</div>{!filtered.length && <p className="tool-directory-empty">{t("暂无匹配商品。")}</p>}<CatalogPagination page={result.page} totalPages={result.totalPages} href={`/products${base.size ? `?${base}` : ''}`} label={t("商品目录分页")} /></main></>;
 }
+
+export async function generateMetadata() { return localizeMetadata(pageMetadata); }

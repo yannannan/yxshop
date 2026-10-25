@@ -1,4 +1,6 @@
 "use client";
+import { useI18n } from '@/components/language-provider';
+
 
 import { StorefrontHeader } from "../../../components/storefront-header";
 import Link from "next/link";
@@ -38,6 +40,7 @@ const statusInfo: Record<string, { label: string; description: string }> = {
 };
 
 export default function TechnicalServiceOrderPage() {
+  const { t } = useI18n();
   const params = useParams<{ id: string }>();
   const [order, setOrder] = useState<ServiceOrder | null>(null);
   const [loading, setLoading] = useState(true);
@@ -144,45 +147,45 @@ export default function TechnicalServiceOrderPage() {
   return <main className="technical-order-page">
     <StorefrontHeader channel="technical" />
     <section className="technical-order-wrap">
-      {loading ? <div className="orders-empty">正在读取服务订单…</div> : !order ? <div className="orders-empty"><b>无法读取服务订单</b><p>{message}</p><Link href="/?channel=technical">返回技术服务</Link></div> : <>
+      {loading ? <div className="orders-empty">{t("正在读取服务订单…")}</div> : !order ? <div className="orders-empty"><b>{t("无法读取服务订单")}</b><p>{t(message)}</p><Link href="/?channel=technical">{t("返回技术服务")}</Link></div> : <>
         <div className="technical-order-head">
-          <div><span className="section-kicker">SERVICE ORDER</span><h1>{order.service_title}</h1><p>订单编号：{order.id}</p></div>
-          <span className={`technical-order-status ${order.status}`}>{status?.label}</span>
+          <div><span className="section-kicker">SERVICE ORDER</span><h1>{order.service_title}</h1><p>{t("订单编号：")}{order.id}</p></div>
+          <span className={`technical-order-status ${order.status}`}>{t(status?.label)}</span>
         </div>
         <div className="technical-order-layout">
           <section className="technical-order-card">
             <div className="technical-order-progress">
-              <b>{status?.label}</b>
+              <b>{t(status?.label)}</b>
               <p>{status?.description}</p>
             </div>
             <dl className="technical-order-facts">
-              <div><dt>技术人员</dt><dd>{order.provider_name} · {order.provider_city}</dd></div>
-              <div><dt>服务方式</dt><dd>{order.delivery_mode === "onsite" ? "上门服务" : "在线服务"}</dd></div>
-              <div><dt>预约时间</dt><dd>{String(order.scheduled_at).replace("T"," ").slice(0,16)}</dd></div>
-              {order.delivery_mode === "onsite" && <div><dt>上门地址</dt><dd>{order.service_address || "待确认"}</dd></div>}
-              <div><dt>服务金额</dt><dd className="money">{order.amount === null ? "待报价" : `¥${order.amount}`}</dd></div>
-              <div><dt>需求说明</dt><dd>{order.requirement_text || "未填写补充需求"}</dd></div>
+              <div><dt>{t("技术人员")}</dt><dd>{order.provider_name} · {t(order.provider_city)}</dd></div>
+              <div><dt>{t("服务方式")}</dt><dd>{t(order.delivery_mode === "onsite" ? "上门服务" : "在线服务")}</dd></div>
+              <div><dt>{t("预约时间")}</dt><dd>{t(String(order.scheduled_at).replace("T"," ").slice(0,16))}</dd></div>
+              {order.delivery_mode === "onsite" && <div><dt>{t("上门地址")}</dt><dd>{t(order.service_address || "待确认")}</dd></div>}
+              <div><dt>{t("服务金额")}</dt><dd className="money">{t(order.amount === null ? "待报价" : `¥${order.amount}`)}</dd></div>
+              <div><dt>{t("需求说明")}</dt><dd>{t(order.requirement_text || "未填写补充需求")}</dd></div>
             </dl>
-            {!!order.service_logs?.length && <section className="technical-service-log-view"><h2>服务记录</h2>{order.service_logs.map((log) => <article key={log.id}><div><b>{log.log_type === "start" ? "开始服务" : log.log_type === "finish" ? "服务完成说明" : "服务记录"}</b><small>{String(log.created_at).replace("T"," ").slice(0,16)}</small></div><p>{log.content}</p></article>)}</section>}
-            {order.status === "awaiting_acceptance" && <section className="technical-customer-acceptance"><span>服务验收</span><h2>技术人员已完成本次服务</h2><p>请确认服务结果是否符合约定。点击确认后订单将正式完成，并可提交服务评价。</p><button disabled={serviceActionLoading} onClick={() => void serviceAction("accept-service")}>{serviceActionLoading ? "提交中…" : "确认服务完成"}</button></section>}
-            {order.status === "completed" && <section className="technical-customer-review"><span>SERVICE REVIEW</span><h2>{order.review ? "我的服务评价" : "评价本次服务"}</h2>{order.review ? <div className="technical-review-result"><b>{"★".repeat(Number(order.review.rating))}{"☆".repeat(5-Number(order.review.rating))}</b><p>{order.review.content || "已完成评分"}</p><small>{String(order.review.created_at).replace("T"," ").slice(0,16)}</small></div> : <><div className="technical-rating">{[1,2,3,4,5].map((star) => <button key={star} className={star <= rating ? "active" : ""} onClick={() => setRating(star)}>★</button>)}</div><textarea value={reviewContent} onChange={(e) => setReviewContent(e.target.value)} placeholder="可以简单说说本次服务体验（选填）" /><button disabled={serviceActionLoading} onClick={() => void serviceAction("submit-review")}>{serviceActionLoading ? "提交中…" : "提交评价"}</button></>}</section>}
+            {!!order.service_logs?.length && <section className="technical-service-log-view"><h2>{t("服务记录")}</h2>{order.service_logs.map((log) => <article key={log.id}><div><b>{t(log.log_type === "start" ? "开始服务" : log.log_type === "finish" ? "服务完成说明" : "服务记录")}</b><small>{t(String(log.created_at).replace("T"," ").slice(0,16))}</small></div><p>{log.content}</p></article>)}</section>}
+            {order.status === "awaiting_acceptance" && <section className="technical-customer-acceptance"><span>{t("服务验收")}</span><h2>{t("技术人员已完成本次服务")}</h2><p>{t("请确认服务结果是否符合约定。点击确认后订单将正式完成，并可提交服务评价。")}</p><button disabled={serviceActionLoading} onClick={() => void serviceAction("accept-service")}>{t(serviceActionLoading ? "提交中…" : "确认服务完成")}</button></section>}
+            {order.status === "completed" && <section className="technical-customer-review"><span>SERVICE REVIEW</span><h2>{t(order.review ? "我的服务评价" : "评价本次服务")}</h2>{order.review ? <div className="technical-review-result"><b>{t("★".repeat(Number(order.review.rating)))}{t("☆".repeat(5-Number(order.review.rating)))}</b><p>{order.review.content || t("已完成评分")}</p><small>{t(String(order.review.created_at).replace("T"," ").slice(0,16))}</small></div> : <><div className="technical-rating">{[1,2,3,4,5].map((star) => <button key={star} className={star <= rating ? "active" : ""} onClick={() => setRating(star)}>★</button>)}</div><textarea value={reviewContent} onChange={(e) => setReviewContent(e.target.value)} placeholder={t("可以简单说说本次服务体验（选填）")} /><button disabled={serviceActionLoading} onClick={() => void serviceAction("submit-review")}>{t(serviceActionLoading ? "提交中…" : "提交评价")}</button></>}</section>}
             {["pending_payment","payment_review"].includes(order.status) && order.amount !== null && <section className="technical-service-payment">
-              <header><div><span>PAYMENT</span><h2>{order.status === "payment_review" ? "支付核验中" : "服务付款"}</h2></div><b>¥{order.amount}</b></header>
-              <div className="technical-service-pay-methods"><button className={payMethod === "wechat" ? "active" : ""} onClick={() => setPayMethod("wechat")}>微信支付</button><button className={payMethod === "alipay" ? "active" : ""} onClick={() => setPayMethod("alipay")}>支付宝</button></div>
-              {paymentQr?.imageUrl ? <div className="technical-service-pay-qr"><img src={paymentQr.imageUrl} alt={payMethod === "wechat" ? "微信收款二维码" : "支付宝收款二维码"} /><small>请支付 ¥{order.amount}，转账备注填写服务订单编号：{order.id}</small></div> : <div className="technical-service-pay-empty"><b>暂未配置{payMethod === "wechat" ? "微信" : "支付宝"}收款码</b><p>{paymentQrError || "请联系在线技术支持确认付款方式。"}</p></div>}
-              {order.status === "pending_payment" ? <button className="technical-service-paid-button" disabled={submittingPayment} onClick={() => void submitPaymentReview()}>{submittingPayment ? "正在提交…" : "我已完成支付，提交核验"}</button> : <p className="technical-service-payment-reviewing">平台正在核验收款，确认后订单会自动进入“已支付”。</p>}
+              <header><div><span>PAYMENT</span><h2>{t(order.status === "payment_review" ? "支付核验中" : "服务付款")}</h2></div><b>¥{t(order.amount)}</b></header>
+              <div className="technical-service-pay-methods"><button className={payMethod === "wechat" ? "active" : ""} onClick={() => setPayMethod("wechat")}>{t("微信支付")}</button><button className={payMethod === "alipay" ? "active" : ""} onClick={() => setPayMethod("alipay")}>{t("支付宝")}</button></div>
+              {paymentQr?.imageUrl ? <div className="technical-service-pay-qr"><img src={paymentQr.imageUrl} alt={t(payMethod === "wechat" ? "微信收款二维码" : "支付宝收款二维码")} /><small>{t("请支付 ¥")}{t(order.amount)}{t("，转账备注填写服务订单编号：")}{order.id}</small></div> : <div className="technical-service-pay-empty"><b>{t("暂未配置")}{t(payMethod === "wechat" ? "微信" : "支付宝")}{t("收款码")}</b><p>{t(paymentQrError || "请联系在线技术支持确认付款方式。")}</p></div>}
+              {order.status === "pending_payment" ? <button className="technical-service-paid-button" disabled={submittingPayment} onClick={() => void submitPaymentReview()}>{t(submittingPayment ? "正在提交…" : "我已完成支付，提交核验")}</button> : <p className="technical-service-payment-reviewing">{t("平台正在核验收款，确认后订单会自动进入“已支付”。")}</p>}
             </section>}
-            {message && <div className="technical-service-order-message">{message}</div>}
+            {message && <div className="technical-service-order-message">{t(message)}</div>}
             <div className="technical-order-actions">
-              <Link href={`/service/${order.service_slug}?consult=1`}>在线沟通服务细节</Link>
-              <Link className="primary" href={`/service/${order.service_slug}`}>查看服务详情</Link>
+              <Link href={`/service/${order.service_slug}?consult=1`}>{t("在线沟通服务细节")}</Link>
+              <Link className="primary" href={`/service/${order.service_slug}`}>{t("查看服务详情")}</Link>
             </div>
           </section>
           <aside className="technical-order-help">
-            <span>7 × 24 小时人工在线服务</span>
-            <h2>服务过程中遇到问题？</h2>
-            <p>可随时返回服务详情进入在线免费技术支持，与技术人员或平台继续沟通。</p>
-            <Link href={`/service/${order.service_slug}?consult=1`}>进入在线技术支持</Link>
+            <span>{t("7 × 24 小时人工在线服务")}</span>
+            <h2>{t("服务过程中遇到问题？")}</h2>
+            <p>{t("可随时返回服务详情进入在线免费技术支持，与技术人员或平台继续沟通。")}</p>
+            <Link href={`/service/${order.service_slug}?consult=1`}>{t("进入在线技术支持")}</Link>
           </aside>
         </div>
       </>}
