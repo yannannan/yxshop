@@ -1,5 +1,6 @@
 "use client";
 
+import { StorefrontHeader } from "../../../components/storefront-header";
 import Image from "next/image";
 import { useParams, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -110,12 +111,12 @@ export default function TechnicalServiceDetailPage() {
 
   if (!service) {
     return (
-      <main className="simple-page">
+      <><StorefrontHeader channel="technical" /><main className="simple-page">
         <div className="not-found">
           <h1>服务不存在</h1>
           <a href="/">返回商城</a>
         </div>
-      </main>
+      </main></>
     );
   }
 
@@ -201,27 +202,7 @@ export default function TechnicalServiceDetailPage() {
 
   return (
     <main className="technical-detail-page">
-      <header className="technical-detail-header">
-        <a className="brand" href="/" aria-label="宇星商城首页">
-          <span className="brand-mark">
-            <Image
-              src="/yxstar_logo.png"
-              alt="宇星商城 Logo"
-              fill
-              sizes="34px"
-            />
-          </span>
-          <span>宇星商城</span>
-        </a>
-        <nav aria-label="服务导航">
-          <a href="/">AI商城服务</a>
-          <a className="active" href="/?channel=technical">
-            上门技术服务
-          </a>
-          <a href="/orders">我的订单</a>
-        </nav>
-        <a href="/">返回商城</a>
-      </header>
+      <StorefrontHeader channel="technical" />
 
       <div className="technical-detail-shell">
         <nav className="technical-breadcrumb" aria-label="面包屑">

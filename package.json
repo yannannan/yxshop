@@ -17,6 +17,7 @@
     "uploads:migrate": "node scripts/migrate-r2-images.mjs"
   },
   "dependencies": {
+    "@heroicons/react": "^2.2.0",
     "@puppeteer/browsers": "3.2.6",
     "@resvg/resvg-wasm": "^2.6.2",
     "ali-oss": "6.23.0",

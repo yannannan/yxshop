@@ -1,6 +1,7 @@
 'use client';
 
 import { useParams } from 'next/navigation';
+import { StorefrontHeader } from "../../../components/storefront-header";
 import Image from 'next/image';
 import { toolPlanKey, toolPlanQuery, toolPlanLabel, toolPagePath, toolPlanPrice } from '../../../lib/tool-services';
 import { useEffect, useState } from 'react';
@@ -15,8 +16,8 @@ export default function ProductDetailPage() {
   const [selectedCycle, setSelectedCycle] = useState('');
   const [selectedPlan, setSelectedPlan] = useState('');
   useEffect(() => { fetch(`/api/products?id=${params.id}`, { cache: 'no-store' }).then(async (response) => { if (!response.ok) { setNotFound(true); return; } const data = await response.json() as CatalogProduct; if (data.productType === 'tool' && data.toolChargeType === 'points' && data.toolSlug) { window.location.replace(toolPagePath(data.toolSlug)); return; } setProduct(data); setSelectedCycle(new URLSearchParams(window.location.search).get('cycle') || ''); setSelectedPlan(new URLSearchParams(window.location.search).get('plan') || ''); }).catch(() => setNotFound(true)); }, [params.id]);
-  if (notFound) return <main className="simple-page"><div className="not-found"><h1>商品不存在</h1><a href="/">返回商城</a></div></main>;
-  if (!product) return <main className="simple-page"><div className="not-found"><h1>正在读取商品…</h1></div></main>;
+  if (notFound) return <><StorefrontHeader /><main className="simple-page"><div className="not-found"><h1>商品不存在</h1><a href="/">返回商城</a></div></main></>;
+  if (!product) return <><StorefrontHeader /><main className="simple-page"><div className="not-found"><h1>正在读取商品…</h1></div></main></>;
   const plan = product.toolPlans?.find(plan => toolPlanKey(plan) === selectedPlan) || product.toolPlans?.find(plan => plan.cycle === selectedCycle) || product.toolPlans?.[0];
   const billingCycle = plan?.cycle || product.billingCycle || defaultBillingCycle(product.id);
   const price = plan?.price ?? product.price;
@@ -36,7 +37,7 @@ export default function ProductDetailPage() {
   }
 
   return <main className="simple-page">
-    <header className="inner-header"><a className="brand" href="/"><span className="brand-mark"><Image src="/yxstar_logo.png" alt="宇星商城 Logo" fill sizes="34px" /></span><span>宇星商城</span></a><div className="stepper"><span className="done">1</span><b>确认商品</b><i></i><span>2</span><b>扫码支付</b><i></i><span>3</span><b>完成订单</b></div><a href="/">返回商城</a></header>
+    <StorefrontHeader /><div className="checkout-progress"><span className="done">1</span><b>确认商品</b><i></i><span>2</span><b>扫码支付</b><i></i><span>3</span><b>完成订单</b></div>
     <nav className="breadcrumb" aria-label="面包屑"><a href="/">商城首页</a><span>›</span><a href="/">{product.category}</a><span>›</span><b>{product.name}</b></nav>
     <div className="detail-wrap">
       <div className="detail-media"><div className={`detail-visual product-visual ${product.tone}${product.detailImage || product.coverImage ? ' has-upload-image' : ''}`}><span className="badge">热销</span>{product.detailImage || product.coverImage ? <Image className="product-upload-image" unoptimized src={product.detailImage || product.coverImage || ''} alt={product.name} fill sizes="(max-width: 760px) 100vw, 720px" /> : <span className="product-logo">{product.initial}</span>}</div><div className="detail-mini-note"><span>✓</span><div><b>官方渠道核验</b><small>商品信息经过人工检查</small></div></div><a className="detail-home-link" href="/"><span>←</span> 返回商城首页</a></div>

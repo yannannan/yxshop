@@ -7,6 +7,7 @@ import ts from 'typescript';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import * as helpers from '../lib/homepage-display.ts';
+import * as accountHelpers from '../lib/account.ts';
 import * as toolHelpers from '../lib/tool-services.ts';
 import * as categoryHelpers from '../lib/categories.ts';
 import * as catalogHelpers from '../lib/catalog.ts';
@@ -21,7 +22,7 @@ function load(file, mocks = {}, globals = {}) {
   vm.runInNewContext(code, {
     exports, Response, URL, URLSearchParams, console: { error() {} }, ...globals,
     require(name) {
-      if (name in mocks) return mocks[name];
+      if (name in mocks) return mocks[name]; if (name === '../lib/account') return accountHelpers; if (name === '../lib/account-client') return { notifyAccountChanged() {} }; if (name === './account-menu') return { AccountMenu: () => null }; if (name === '../../../components/storefront-header') return { StorefrontHeader: () => null };
       if (['react', 'react/jsx-runtime'].includes(name)) return require(name);
       throw new Error(`Unexpected module: ${name}`);
     },
@@ -276,15 +277,19 @@ function textOf(node) {
   if (Array.isArray(node)) return node.map(textOf).join('');
   return React.isValidElement(node) ? textOf(node.props.children) : typeof node === 'string' || typeof node === 'number' ? String(node) : '';
 }
-test('独立页面导航自动读取真实管理员会话，普通用户不出现后台入口',async()=>{
-  for(const isAdmin of [false,true]){
-    const host=hookHost('../components/storefront-header.tsx','StorefrontHeader',{'next/link':Link,'next/image':Image},{fetch:async url=>{assert.equal(url,'/api/auth/session');return Response.json({authenticated:true,isAdmin,isTechnician:false});}});
-    assert.ok(!markup(host.render({})).includes('进入管理后台'));host.mountEffects();await new Promise(resolve=>setImmediate(resolve));assert.equal(markup(host.render({})).includes('进入管理后台'),isAdmin);
+test('独立页面与首页统一委托账户菜单，导航不再单独读取或假定角色', () => {
+  const menu = () => null;
+  const host = hookHost('../components/storefront-header.tsx', 'StorefrontHeader', { 'next/image': Image, './account-menu': { AccountMenu: menu } }, { fetch() { throw Error('导航不得重复读取身份'); } });
+  for (const props of [{}, { isAdmin: true, isTechnician: false }]) {
+    const tree = host.render(props); assert.equal(elements(tree).filter(node => node.type === menu).length, 1); host.mountEffects();
   }
 });
-test('显式传入角色的首页导航沿用受控身份，不重复请求身份接口',()=>{
-  const host=hookHost('../components/storefront-header.tsx','StorefrontHeader',{'next/link':Link,'next/image':Image},{fetch:()=>{throw Error('不应重复查询');}});
-  assert.ok(markup(host.render({isAdmin:true,isTechnician:false})).includes('进入管理后台'));host.mountEffects();
+
+test('首页登录和退出回调交由统一账户菜单，原生频道导航继续保留', () => {
+  const menu = () => null, onSignIn = () => {}, onSignedOut = () => {};
+  const host = hookHost('../components/storefront-header.tsx', 'StorefrontHeader', { 'next/image': Image, './account-menu': { AccountMenu: menu } });
+  const element = elements(host.render({ onSignIn, onSignedOut })).find(node => node.type === menu);
+  assert.equal(element.props.onSignIn, onSignIn); assert.equal(element.props.onSignedOut, onSignedOut);
 });
 
 test('软路由不可用时商城Logo和跨页主导航仍为原生链接，独立页面不拦截点击', () => {
@@ -294,10 +299,10 @@ test('软路由不可用时商城Logo和跨页主导航仍为原生链接，独�
   const logo = elements(tree).find(node => node.props.className === 'brand');
   assert.equal(logo.type, 'a'); assert.equal(logo.props.href, '/'); assert.equal(logo.props.onClick, undefined);
   const html = markup(tree); assert.ok(html.includes('宇星商城首页'));
-  for (const label of ['AI商城服务', '上门技术服务', '技术人才入驻']) {
+  for (const label of ['AI商城服务', '上门技术服务', 'AI智能获客', 'AI运营工具']) {
     const link = elements(tree).find(node => node.type === 'a' && textOf(node) === label);
     assert.ok(link); let prevented = false;
-    link.props.onClick({ button: 0, preventDefault() { prevented = true; } });
+    link.props.onClick?.({ button: 0, preventDefault() { prevented = true; } });
     assert.equal(prevented, false);
   }
 });
@@ -318,6 +323,7 @@ test('订单、地址、后台、技术人员和工具介绍等页面的商城Lo
     const source = ts.createSourceFile(name, readFileSync(new URL(`../app/${name}`, import.meta.url), 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
     let count = 0;
     function visit(node) {
+      if (ts.isJsxSelfClosingElement(node) && node.tagName.getText(source) === 'StorefrontHeader') count++;
       if (ts.isJsxOpeningElement(node)) {
         const attrs = node.attributes.properties.filter(ts.isJsxAttribute);
         const className = attrs.find(attr => attr.name.getText(source) === 'className')?.initializer;
@@ -329,7 +335,7 @@ test('订单、地址、后台、技术人员和工具介绍等页面的商城Lo
       }
       ts.forEachChild(node, visit);
     }
-    visit(source); assert.equal(count, 1, name);
+    visit(source); assert.ok(count >= 1, name);
   }
 });
 
@@ -377,10 +383,10 @@ test('首页页脚的工具入口不依赖客户端路由，工具分类仍可�
   assert.ok(elements(tree).some(node => node.type === directory.ToolDirectory));
 });
 
-test('首页有有效管理员 Cookie 即显示入口，无需 localStorage 手机号；全部同时保留工具和普通商品',async()=>{
+test('首页有有效管理员 Cookie 保留角色和页脚管理入口；全部同时保留工具和普通商品',async()=>{
   const host=storefrontHost({window:{localStorage:{getItem:()=>null},location:{search:'',hash:''}},fetch:async url=>Response.json(url==='/api/auth/session'?{authenticated:true,phone:'13800000000',isAdmin:true,isTechnician:false}:url==='/api/products'?products:url==='/api/tools'?tools:url==='/api/homepage-display'?{mode:'grouped',sectionOrder:['tools'],itemOrder:[]}:[])});
   host.render();host.mountEffects();await new Promise(resolve=>setImmediate(resolve));const html=markup(host.render());
-  assert.ok(html.includes('进入管理后台'));assert.ok(html.includes('138 **** 0000'));assert.equal((html.match(/class="product-card refined-card"/g)||[]).length,24);assert.equal((html.match(/class="tool-entry-card"/g)||[]).length,6);
+  assert.ok(html.includes('管理后台'));assert.equal(elements(host.render()).find(node => node.type === storefrontHeader.StorefrontHeader).props.isAdmin,true);assert.equal((html.match(/class="product-card refined-card"/g)||[]).length,24);assert.equal((html.match(/class="tool-entry-card"/g)||[]).length,6);
 });
 test('商品接口 HTTP 500 时首页明确提示读取失败，不能静默显示成只有工具',async()=>{
   const host=storefrontHost({window:{localStorage:{getItem:()=>null},location:{search:'',hash:''}},fetch:async url=>url==='/api/products'?new Response('server error',{status:500}):Response.json(url==='/api/tools'?tools:url==='/api/auth/session'?{authenticated:false}:[])});

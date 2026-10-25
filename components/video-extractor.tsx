@@ -5,6 +5,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { toolPlanKey, toolPlanLabel, toolPlanPrice, toolPlanQuery, type ToolService } from '../lib/tool-services';
 import { videoDuration, videoLogin, videoSize, type VideoAccess, type VideoPreview, type VideoTask } from '../lib/video-options';
+import { notifyAccountChanged } from '../lib/account-client';
 
 const endpoint = '/api/tools/video-extractor';
 const active = (task: VideoTask | null) => task?.status === 'queued' || task?.status === 'processing';
@@ -32,8 +33,9 @@ export function VideoExtractor({ tool }: { tool: ToolService }) {
   useEffect(() => {
     // 刷新页面只恢复同一任务，不重新发起提取或扣费。
     try {
-      const id = sessionStorage.getItem('yxstar-video-task');
-      if (id) void videoJson<{ task: VideoTask }>(`${endpoint}?task=${encodeURIComponent(id)}`).then(data => setTask(data.task)).catch(() => {});
+      const requested = new URLSearchParams(window.location.search).get('task');
+      const id = requested || sessionStorage.getItem('yxstar-video-task');
+      if (id) void videoJson<{ task: VideoTask }>(`${endpoint}?task=${encodeURIComponent(id)}`).then(data => setTask(data.task)).catch(error => { if (requested) setMessage((error as Error).message || '任务读取失败'); });
     } catch { /* 禁用本地存储时仍可通过历史记录恢复。 */ }
   }, []);
   useEffect(() => {
@@ -45,7 +47,7 @@ export function VideoExtractor({ tool }: { tool: ToolService }) {
         if (disposed) return;
         setTask(data.task); setPollError('');
         if (active(data.task)) timer = setTimeout(poll, 1800);
-        else { void refresh(); }
+        else { void refresh(); if (data.task.status === 'ready') notifyAccountChanged(); }
       } catch (error) {
         if (!disposed) { setPollError(`${(error as Error).message}。任务不会因此重复提交，可稍后查询。`); timer = setTimeout(poll, 6000); }
       }
@@ -73,7 +75,7 @@ export function VideoExtractor({ tool }: { tool: ToolService }) {
       const data = await videoJson<{ task: VideoTask }>(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'extract', id, previewId: preview.id, formatId }) });
       setTask(data.task);
       try { sessionStorage.setItem('yxstar-video-task', id); } catch { /* 历史记录仍保存在服务端。 */ }
-      if (!active(data.task)) void refresh();
+      if (!active(data.task)) { void refresh(); if (data.task.status === 'ready') notifyAccountChanged(); }
     } catch (error) {
       // 响应丢失时先查询原任务；重试继续使用同一个编号。
       try { const data = await videoJson<{ task: VideoTask }>(`${endpoint}?task=${id}`); setTask(data.task); }

@@ -19,7 +19,7 @@ const require = createRequire(import.meta.url);
 function load(file, mocks = {}, globals = {}) {
   const exports = {};
   const code = ts.transpileModule(readFileSync(new URL(file, import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText;
-  vm.runInNewContext(code, { exports, Response, Request, URL, Buffer, crypto: webcrypto, console: { error() {} }, ...globals, require(name) { if (name in mocks) return mocks[name]; if (name === '@/components/video-extractor') return { VideoExtractor: () => null }; if (name === '@/lib/points') return points; if (['@/lib/points-service', './points-service'].includes(name)) return { PointsError: class extends Error {} }; if (name === '@/lib/tool-points-usage') return {};  if (['react', 'react/jsx-runtime', 'node:crypto'].includes(name)) return require(name); throw new Error(`Unexpected module: ${name}`); } });
+  vm.runInNewContext(code, { exports, Response, Request, URL, URLSearchParams, AbortController, Buffer, crypto: webcrypto, console: { error() {} }, ...globals, require(name) { if (name in mocks) return mocks[name]; if (name === '../lib/account-client') return { notifyAccountChanged() {} }; if (name === './account-menu') return { AccountMenu: () => null }; if (name === '../../../components/storefront-header') return { StorefrontHeader: () => null }; if (name === '@/components/video-extractor') return { VideoExtractor: () => null }; if (name === '@/lib/points') return points; if (['@/lib/points-service', './points-service'].includes(name)) return { PointsError: class extends Error {} }; if (name === '@/lib/tool-points-usage') return {};  if (['react', 'react/jsx-runtime', 'node:crypto'].includes(name)) return require(name); throw new Error(`Unexpected module: ${name}`); } });
   return exports;
 }
 const pureEntitlements = load('../lib/tool-entitlements.ts', { '@/db/mysql-runtime': { env: {} }, './tool-services': tools });
@@ -449,7 +449,7 @@ test('预览失败后可单独重试相同参数，成功后清除错误，始�
   let cursor = 0;
   const react = { ...React, useState(initial) { const i = cursor++; if (!(i in slots)) slots[i] = typeof initial === 'function' ? initial() : initial; return [slots[i], value => { slots[i] = typeof value === 'function' ? value(slots[i]) : value; }]; }, useRef(initial) { const i = cursor++; return slots[i] ??= { current: initial }; }, useCallback: fn => fn, useEffect: fn => effects.push(fn) };
   const workspace = load('../components/stamp-maker.tsx', { react, 'next/link': () => null, 'next/image': () => null, '../lib/stamp-options': options, '../lib/tool-services': tools }, {
-    window: { setTimeout(fn) { queueMicrotask(fn); return 1; }, clearTimeout() {} }, AbortController,
+    window: { location: { search: '' }, setTimeout(fn) { queueMicrotask(fn); return 1; }, clearTimeout() {} }, AbortController,
     async fetch(url, config) {
       assert.equal(url, '/api/tools/stamp-maker/preview');
       requests.push(JSON.parse(config.body));
@@ -458,13 +458,13 @@ test('预览失败后可单独重试相同参数，成功后清除错误，始�
   });
   const render = () => { cursor = 0; effects.length = 0; return workspace.StampMaker({ tool: { id: 40, name: '印章在线制作', chargeType: 'free', plans: [], detail: '' } }); };
   const all = node => Array.isArray(node) ? node.flatMap(all) : React.isValidElement(node) ? [node, ...all(node.props.children)] : [];
-  render(); effects[1](); await new Promise(resolve => setImmediate(resolve));
+  render(); effects[2](); await new Promise(resolve => setImmediate(resolve));
   const retry = all(render()).find(node => node.type === 'button' && node.props.children === '重新预览');
   assert.ok(retry); retry.props.onClick();
-  render(); effects[1](); await new Promise(resolve => setImmediate(resolve));
+  render(); effects[2](); await new Promise(resolve => setImmediate(resolve));
   assert.ok(!all(render()).some(node => node.type === 'button' && node.props.children === '重新预览'));
   assert.equal(requests.length, 2); assert.deepEqual(requests[0], requests[1]);
-  effects[2]()();
+  effects[3]()();
 });
 
 test('客户端网络重试保留同一任务编号，即使刷新权益后剩余为零也能恢复成品', async () => {
@@ -474,7 +474,7 @@ test('客户端网络重试保留同一任务编号，即使刷新权益后剩�
   const Link = ({ href, children, ...props }) => React.createElement('a', { href, ...props }, children);
   const Image = ({ src, alt }) => React.createElement('img', { src, alt });
   const workspace = load('../components/stamp-maker.tsx', { react, 'next/link': Link, 'next/image': Image, '../lib/stamp-options': options, '../lib/tool-services': tools }, {
-    window: { setTimeout(fn, delay) { if (!delay) queueMicrotask(fn); return 1; }, clearTimeout() {} }, AbortController,
+    window: { location: { search: '' }, setTimeout(fn, delay) { if (!delay) queueMicrotask(fn); return 1; }, clearTimeout() {} }, AbortController,
     async fetch(_, config) {
       if (config?.method === 'POST') {
         const body = JSON.parse(config.body); requests.push(body.id);

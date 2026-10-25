@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import { StorefrontHeader } from "../../../components/storefront-header";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -142,12 +142,7 @@ export default function TechnicalServiceOrderPage() {
   const status = order ? statusInfo[order.status] || { label: order.status, description: "订单状态已更新。" } : null;
 
   return <main className="technical-order-page">
-    <header className="inner-header">
-      {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- 首页入口采用原生导航，保证软路由异常时仍可返回商城。 */}
-      <a className="brand" href="/"><span className="brand-mark"><Image src="/yxstar_logo.png" alt="宇星商城 Logo" fill sizes="34px" /></span><span>宇星商城</span></a>
-      <span className="orders-header-label">技术服务订单</span>
-      <Link href="/?channel=technical">返回上门服务</Link>
-    </header>
+    <StorefrontHeader channel="technical" />
     <section className="technical-order-wrap">
       {loading ? <div className="orders-empty">正在读取服务订单…</div> : !order ? <div className="orders-empty"><b>无法读取服务订单</b><p>{message}</p><Link href="/?channel=technical">返回技术服务</Link></div> : <>
         <div className="technical-order-head">

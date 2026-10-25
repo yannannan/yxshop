@@ -1,5 +1,17 @@
 # Design QA
 
+## Current iteration — personal account center, 2026-10-25
+
+- Selected visual target: the first displayed personal-center design, `C:/Users/Administrator/.codex/generated_images/01a16199-c23a-7443-8df4-a3163cfdc134/exec-26a6d6ac-8865-4e77-b75e-8c30191ae3b0.png`.
+- Implemented structure: left account navigation, identity and remaining-points summary, recent tool / order rows, global avatar account dropdown; responsive horizontal account navigation on mobile.
+- User refinement: points only; replace the top talent-entry link with AI lead generation and AI operations destinations. Existing talent application business remains available in the technical-services section.
+- Evidence: source target inspected, real default-avatar asset generated, isolated ownership / save / identity-state checks and direct production-handler rendering performed. No browser or application preview server was started.
+- Per the user's standing project instructions, local runtime and visual/browser acceptance belong to the user. No implementation screenshot exists, so a same-viewport source-versus-render comparison cannot be claimed.
+- Visual comparison final result: **blocked — pending user browser acceptance**. This is not a failed source build or a claim that real business data was tested.
+- Deployment and acceptance checklist: `docs/个人中心设计与部署.md`.
+
+The sections below describe older technical-service iterations and do not override this current account-center status.
+
 ## Comparison target
 
 - Source visual truth: the approved technical-service detail mock, `C:\Users\Administrator\.codex\generated_images\01a03be2-e2ca-73f2-932e-0964fdd0169f\exec-71ab7aa1-7efd-4660-b372-26a7bb2ce4bb.png`.

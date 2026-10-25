@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { AccountMenu } from "../../components/account-menu";
 import Image from 'next/image';
 import { PointsManagement } from '../../components/admin-points-management';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -501,7 +502,7 @@ export default function AdminPage() {
       <div className="admin-user"><span>管</span><div><b>{adminSession.admin.displayName}</b><small>{adminSession.admin.username}</small></div></div>
     </aside>
     <section className="admin-main">
-      <header><div><span className="section-kicker">STORE CONSOLE</span><h1>{currentMenu?.menu_name || tabs.find((item) => item.key === active)?.label || '宇星商城'}</h1></div><div><Link href="/" target="_blank" rel="noopener noreferrer">查看商城</Link><button disabled={refreshing || systemLoading} onClick={() => { void load(true); if (adminSession.superAdmin || adminSession.menuCodes.some((code) => code.startsWith('system-'))) void loadSystem(); }}>{refreshing || systemLoading ? '正在刷新…' : '↻ 刷新数据'}</button><button className="admin-logout-button" onClick={() => void adminLogout()}>退出后台</button></div></header>
+      <header><div><span className="section-kicker">STORE CONSOLE</span><h1>{currentMenu?.menu_name || tabs.find((item) => item.key === active)?.label || '宇星商城'}</h1></div><div><Link href="/" target="_blank" rel="noopener noreferrer">查看商城</Link><button disabled={refreshing || systemLoading} onClick={() => { void load(true); if (adminSession.superAdmin || adminSession.menuCodes.some((code) => code.startsWith('system-'))) void loadSystem(); }}>{refreshing || systemLoading ? '正在刷新…' : '↻ 刷新数据'}</button><button className="admin-logout-button" onClick={() => void adminLogout()}>退出后台</button><AccountMenu /></div></header>
       {active === 'orders' ? <div className="order-stat-grid">{orderStatTabs.map((tab) => <button type="button" key={tab.key} className={`order-stat-card ${tab.key}${orderListTab === tab.key ? ' active' : ''}`} onClick={() => setOrderListTab(tab.key)}><span>{tab.label}</span><b>{tab.key === 'all' ? data.orders.filter((order) => text(order.status) !== 'closed').length : data.orders.filter((order) => text(order.status) === tab.key).length}</b><small>{orderStatDescription[tab.key]}</small><i>→</i></button>)}</div> : showStoreStats ? <div className="stat-grid"><article><span>商品总数</span><b>{data.products.filter((item) => item.status !== 'closed').length}</b><small>在售 {data.products.filter((item) => item.status === 'active').length} 件</small></article><article><span>分类数量</span><b>{data.categories.length}</b><small>支持一级、二级分类</small></article><article><span>待处理订单</span><b>{pendingOrders}</b><small>请及时核对支付</small></article><article><span>可用卡密</span><b>{availableCards}</b><small>库存不足请补充</small></article></div> : null}
       <div className="admin-panel">
         {notice && <div className="admin-message">{notice}</div>}

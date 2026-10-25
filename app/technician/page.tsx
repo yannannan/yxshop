@@ -1,5 +1,6 @@
 "use client";
 
+import { AccountMenu } from "../../components/account-menu";
 import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -103,7 +104,7 @@ export default function TechnicianPage() {
     </aside>
 
     <section className="technician-main">
-      <header><div><span>TECHNICIAN WORKBENCH</span><h1>{tab==="profile"?"我的资料":"技术服务工作台"}</h1></div><div><b>{data.provider.onlineStatus==="online"?"可服务":"暂停服务"}</b><small>{data.user.phone}</small></div></header>
+      <header><div><span>TECHNICIAN WORKBENCH</span><h1>{tab==="profile"?"我的资料":"技术服务工作台"}</h1></div><div><b>{data.provider.onlineStatus==="online"?"可服务":"暂停服务"}</b><small>{data.user.phone}</small></div><AccountMenu /></header>
       {message&&<div className="technician-notice">{message}</div>}
 
       {tab!=="profile"&&tab!=="consultations"&&<>

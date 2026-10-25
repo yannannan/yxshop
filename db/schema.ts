@@ -22,6 +22,12 @@ export const users = sqliteTable('users', {
   createdAt: text('created_at').notNull(),
 });
 
+export const userProfiles = sqliteTable('yxshop_user_profiles', {
+  userId: integer('user_id').primaryKey(), nickname: text('nickname').notNull().default(''),
+  avatarData: text('avatar_data').notNull(), avatarMime: text('avatar_mime').notNull().default(''), avatarVersion: text('avatar_version').notNull().default(''),
+  createdAt: text('created_at').notNull(), updatedAt: text('updated_at').notNull(),
+});
+
 export const products = sqliteTable('products', {
   id: integer('id').primaryKey(),
   name: text('name').notNull(),

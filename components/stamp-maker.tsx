@@ -2,6 +2,7 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
+import { notifyAccountChanged } from '../lib/account-client';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { defaultStampOptions, parseStampOptions, stampFonts, stampFormats, stampPresets, stampSizes, type StampAccess, type StampOptions, type StampResult } from '../lib/stamp-options';
 import { toolBillingLabels, toolPlanPrice, toolPlanKey, toolPlanQuery, toolPlanLabel, type ToolService } from '../lib/tool-services';
@@ -57,6 +58,16 @@ export function StampMaker({ tool }: { tool: ToolService }) {
   }, []);
   useEffect(() => { const timer = window.setTimeout(() => void refresh(), 0); return () => window.clearTimeout(timer); }, [refresh]);
   useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get('result');
+    const controller = new AbortController();
+    if (id) void fetch(`/api/tools/stamp-maker?result=${encodeURIComponent(id)}`, { cache: 'no-store', signal: controller.signal }).then(async response => {
+      const data = await response.json() as { result?: StampResult; message?: string };
+      if (!response.ok || !data.result) throw new Error(data.message || '成品读取失败');
+      if (!controller.signal.aborted) { setResult(data.result); setMessageSuccess(true); setMessage('已打开已制作的成品，重复下载不扣次。'); }
+    }).catch(error => { if (!controller.signal.aborted) setMessage((error as Error).message || '成品读取失败'); });
+    return () => controller.abort();
+  }, []);
+  useEffect(() => {
     if (!signature) return;
     const controller = new AbortController();
     const timer = window.setTimeout(async () => {
@@ -86,6 +97,7 @@ export function StampMaker({ tool }: { tool: ToolService }) {
       const data = await response.json() as { result?: StampResult; message?: string };
       if (!response.ok || !data.result) { setRetryPending(response.status >= 500); setMessage(data.message || '制作失败，请重试'); return; }
       setResult({ ...data.result, signature });
+      notifyAccountChanged();
       setRetryPending(false);
       setMessageSuccess(true);
       setMessage(data.result.reused ? '已恢复这次制作的成品，没有重复扣次。' : data.result.pointsSpent ? `制作成功，已消耗 ${data.result.pointsSpent} 积分，剩余 ${data.result.pointsBalance} 积分。` : data.result.charged ? '制作成功，已使用 1 次权益。可以重复下载此成品。' : '制作成功，可以下载高清印章。');

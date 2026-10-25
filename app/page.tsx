@@ -8,6 +8,8 @@ import { TechnicalProviderApplication } from "../components/technical-provider-a
 import { ToolDirectory } from "../components/tool-directory";
 import { StorefrontBanners } from "../components/storefront-banners";
 import { StorefrontHeader } from "../components/storefront-header";
+import { accountReturnPath } from "../lib/account";
+import { notifyAccountChanged } from "../lib/account-client";
 import { StoreProductCard } from "../components/store-product-card";
 import { HomepageCatalog } from "../components/homepage-catalog";
 import { CatalogPagination } from "../components/catalog-pagination";
@@ -84,7 +86,7 @@ export default function StorePage() {
       const searchParams = new URLSearchParams(window.location.search);
       if (searchParams.get("channel") === "technical") setChannel("technical");
       if (searchParams.get("allServices") === "1") setShowAllTechnical(true);
-      if (["/points", "/tools/video-extractor.html"].includes(searchParams.get("returnTo") || "")) setAuthOpen(true);
+      if (accountReturnPath(searchParams.get("returnTo"))) setAuthOpen(true);
       const requested = Number(searchParams.get("product"));
       if (requested) { setPendingProduct(requested); setAuthOpen(true); }
     });
@@ -395,14 +397,13 @@ export default function StorePage() {
     window.localStorage.setItem("mall_phone", phone);
     setLoggedIn(true);
     setAuthOpen(false);
-    const returnTo = new URLSearchParams(window.location.search).get("returnTo");
-    if (returnTo && ["/points", "/tools/video-extractor.html"].includes(returnTo)) { window.location.assign(returnTo); return; }
+    notifyAccountChanged();
+    const returnTo = accountReturnPath(new URLSearchParams(window.location.search).get("returnTo"));
+    if (returnTo) { window.location.assign(returnTo); return; }
     if (pendingProduct) { const params = new URLSearchParams(window.location.search); const selected = new URLSearchParams(); for (const key of ["cycle", "plan"]) { const value = params.get(key); if (value) selected.set(key, value); } window.location.href = `/product/${pendingProduct}${selected.size ? `?${selected}` : ""}`; }
   }
 
-  async function signOut() {
-    await fetch("/api/auth/logout", { method: "POST" }).catch(() => null);
-    window.localStorage.removeItem("mall_phone");
+  function signOut() {
     setLoggedIn(false);
     setIsAdmin(false);
     setIsTechnician(false);
@@ -414,28 +415,7 @@ export default function StorePage() {
 
   return (
     <main className="store-shell refined-store">
-      <StorefrontHeader channel={channel} onNavigate={switchChannel} isAdmin={isAdmin} isTechnician={isTechnician}>
-        <div className="account-actions">
-          {loggedIn ? (
-            <>
-              <a className="orders-link" href="/points">我的积分 / 充值</a>
-              <a className="orders-link" href="/orders">
-                我的订单
-              </a>
-              <div className="account-chip">
-                <span>
-                  {phone.slice(0, 3)} **** {phone.slice(-4)}
-                </span>
-                <button onClick={signOut}>退出</button>
-              </div>
-            </>
-          ) : (
-            <button className="login-btn" onClick={() => setAuthOpen(true)}>
-              登录 / 注册
-            </button>
-          )}
-        </div>
-      </StorefrontHeader>
+      <StorefrontHeader channel={channel} onNavigate={switchChannel} isAdmin={isAdmin} isTechnician={isTechnician} onSignIn={() => setAuthOpen(true)} onSignedOut={signOut} />
 
       <div className="store-layout refined-layout no-sidebar-layout">
         <section className="content refined-content">

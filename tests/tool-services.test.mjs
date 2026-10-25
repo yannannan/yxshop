@@ -18,7 +18,7 @@ const require = createRequire(import.meta.url);
 function load(file, mocks, globals = {}) {
   const code = ts.transpileModule(readFileSync(new URL(file, import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText;
   const exports = {};
-  vm.runInNewContext(code, { exports, Response, URL, crypto: webcrypto, console: { error() {} }, ...globals, require(name) { if (name in mocks) return mocks[name]; if (name === '@/components/video-extractor') return { VideoExtractor: () => null }; if (name === '@/lib/points') return points; if (['@/lib/points-service', './points-service'].includes(name)) return { PointsError: class extends Error {} }; if (name === '@/lib/tool-points-usage') return {};  if (['react', 'react/jsx-runtime'].includes(name)) return require(name); throw new Error(`Unexpected module: ${name}`); } });
+  vm.runInNewContext(code, { exports, Response, URL, crypto: webcrypto, console: { error() {} }, ...globals, require(name) { if (name in mocks) return mocks[name]; if (name === '../lib/account-client') return { notifyAccountChanged() {} }; if (name === './account-menu') return { AccountMenu: () => null }; if (name === '../../../components/storefront-header') return { StorefrontHeader: () => null }; if (name === '@/components/video-extractor') return { VideoExtractor: () => null }; if (name === '@/lib/points') return points; if (['@/lib/points-service', './points-service'].includes(name)) return { PointsError: class extends Error {} }; if (name === '@/lib/tool-points-usage') return {};  if (['react', 'react/jsx-runtime'].includes(name)) return require(name); throw new Error(`Unexpected module: ${name}`); } });
   return exports;
 }
 
@@ -201,7 +201,7 @@ test('跨页客户端路由不可用时，工具工作台、积分及购买页�
       '@/components/stamp-maker': { StampMaker: () => null }, '@/lib/tool-services': helpers, '@/lib/tool-service-data': data,
     });
     const html = renderToStaticMarkup(await page.default({ params: Promise.resolve({ slug: 'sample-tool.html' }) }));
-    assert.equal((html.match(/<a\b[^>]*href="\/tools"/g) || []).length, 2);
+    assert.equal((html.match(/<a\b[^>]*href="\/tools"/g) || []).length, 1);
   });
   await t.test('tool-purchase', () => {
     const product = { ...tool, productType: 'tool', toolSlug: tool.slug, attributesJson: '[]', billingCycle: 'once' };

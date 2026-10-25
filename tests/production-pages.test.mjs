@@ -69,7 +69,7 @@ console.log(JSON.stringify({ pages, errors, queries }));
 const needsBuild = !existsSync(entry) ? '请先执行 pnpm build 生成生产包' : false;
 
 test('生产包在严格依赖边界下渲染首页、目录和匿名工具页，无端口、无登录和真实数据库', { skip: needsBuild }, async () => {
-  const result = await renderPages(['/', '/orders', '/points', '/tools', '/tools/video-extractor.html', '/tools/stamp-maker.html']);
+  const result = await renderPages(['/', '/orders', '/points', '/addresses', '/product/1', '/checkout/test-order', '/account', '/account/profile', '/account/orders', '/account/activity', '/ai-leads', '/ai-operations', '/tools', '/tools/video-extractor.html', '/tools/stamp-maker.html']);
   assert.deepEqual(result.errors, []);
   for (const page of result.pages) {
     assert.equal(page.status, 200, JSON.stringify({ page, errors: result.errors }));
@@ -89,4 +89,10 @@ test('严格解析拦截缺失 ipaddr.js，真实生产渲染重现页面 500，
 test('生产云视频下载路由可在严格依赖下加载官方 OSS SDK，匿名请求返回 401', { skip: needsBuild }, async () => {
   const result = await renderPages(['/api/tools/video-extractor/download?id=11111111-1111-4111-8111-111111111111']);
   assert.equal(result.pages[0].status, 401); assert.equal(result.pages[0].failed, false); assert.deepEqual(result.errors, []);
+});
+
+test('生产个人中心 API 匿名不读取业务数据，记录与头像必须登录', { skip: needsBuild }, async () => {
+  const result = await renderPages(['/api/account', '/api/account/records?kind=orders&userId=2', '/api/account/avatar?userId=2']);
+  assert.deepEqual(result.pages.map(page => page.status), [200, 401, 401]);
+  assert.deepEqual(result.errors, []); assert.equal(result.queries, 0);
 });

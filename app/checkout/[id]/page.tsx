@@ -1,6 +1,8 @@
 "use client";
 
 import { useParams } from "next/navigation";
+import { StorefrontHeader } from "../../../components/storefront-header";
+import { notifyAccountChanged } from '../../../lib/account-client';
 import Image from "next/image";
 import Link from "next/link";
 import { toolBillingLabels, isToolBillingCycle, toolPagePath } from '../../../lib/tool-services';
@@ -55,6 +57,7 @@ export default function CheckoutPage() {
     if (order?.status === "pending_delivery" || (order?.product_type === 'tool' && ['paid', 'delivered'].includes(order.status)) || (order?.product_type === 'points' && ['paid', 'delivered'].includes(order.status))) {
       setPaid(true);
       setPaymentVerifying(false);
+      if (order?.product_type === 'points') notifyAccountChanged();
     }
   }, [order?.status, order?.product_type]);
   useEffect(() => {
@@ -177,23 +180,7 @@ export default function CheckoutPage() {
 
   return (
     <main className="checkout-page refined-checkout">
-      <header className="inner-header">
-        <a className="brand" href="/">
-          <span className="brand-mark">
-            <Image
-              src="/yxstar_logo.png"
-              alt="宇星商城 Logo"
-              fill
-              sizes="34px"
-            />
-          </span>
-          <span>宇星商城</span>
-        </a>
-        <span className="secure-pay">
-          <i>✓</i> 安全收银台
-        </span>
-        <a className="checkout-home-link" href="/" onClick={(event) => { event.preventDefault(); window.location.assign("/"); }}>返回商城</a>
-      </header>
+      <StorefrontHeader />
       <div className="checkout-progress">
         <span className="done">1</span>
         <b>确认订单</b>

@@ -39,11 +39,11 @@ export default async function ToolPage({ params }: Props) {
   if (slug === 'stamp-maker') return <><StorefrontHeader /><StampMaker tool={tool} /><script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData).replace(/</g, '\\u003c') }} /></>;
   if (slug === 'video-extractor') return <><StorefrontHeader /><VideoExtractor tool={tool} /><script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData).replace(/</g, '\\u003c') }} /></>;
   // eslint-disable-next-line @next/next/no-html-link-for-pages -- 工具跨页入口使用原生导航，避免客户端路由异常时点击无反应。
-  return <main className="tools-page"><header className="tools-page-header"><a className="tools-brand" href="/">宇星商城</a><a href="/tools">全部工具</a></header>
+  return <><StorefrontHeader /><main className="tools-page">
     {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- 工具跨页入口使用原生导航，避免客户端路由异常时点击无反应。 */}
     <nav className="tool-breadcrumb" aria-label="面包屑"><a href="/">商城首页</a><span>›</span><a href="/tools">工具服务</a><span>›</span><span>{tool.name}</span></nav>
     <article className="tool-detail"><div className="tool-detail-intro">{tool.logo ? <Image unoptimized src={tool.logo} alt="" width={80} height={80} /> : <span className="tool-logo-fallback">{tool.name.slice(0, 1)}</span>}<span className={`tool-charge-badge ${tool.chargeType}`}>{toolChargeLabels[tool.chargeType]}{tool.chargeType === 'points' ? ` · ${tool.pointsCost} 积分 / 次` : tool.chargeType === 'paid' ? ` · ${toolPriceSummary(tool)}` : ''}</span><h1>{tool.name}</h1><p>{tool.description}</p>{tool.chargeType === 'paid' && <ul className="tool-plan-summary">{tool.plans.map(plan => <li key={toolPlanKey(plan)}>{toolPlanLabel(plan)}：{toolPlanPrice(plan)}</li>)}</ul>}<ToolLaunch tool={tool} /></div>
       <section className="tool-detail-content"><h2>工具介绍</h2>{(tool.detail || tool.description || '工具介绍待补充。').split(/\r?\n/).filter(Boolean).map((paragraph, index) => <p key={index}>{paragraph}</p>)}<h2>使用方式</h2><p>{!tool.entryConfigured ? '该工具的使用入口正在准备中，配置完成后可在本页进入。' : tool.chargeType === 'paid' ? '购买并完成支付核验后，回到本页点击“进入工具”。' : tool.chargeType === 'pending' ? '收费方式确认后，将在本页开放工具入口。' : '点击“进入工具”打开工具，按工具页面的提示操作。'}</p></section>
     </article><script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData).replace(/</g, '\\u003c') }} />
-  </main>;
+  </main></>;
 }

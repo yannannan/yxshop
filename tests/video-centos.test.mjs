@@ -18,7 +18,7 @@ function load(file, mocks, processMock = process, globals = {}) {
 const publicPages = load('../lib/video-public-pages.ts', {});
 const source = 'https://www.douyin.com/video/7692515320217407402';
 const video = { aweme_id: '7692515320217407402', desc: '匿名公开视频', video: { duration: 5000, play_addr: { url_list: ['https://cdn.example/public.mp4'] } } };
-function harness({ data = { aweme_detail: video }, root = false, launchError = false, coldStart = false, initialPage = true, createError = false, authenticationStatus = 200, realProfiles = false, bodyError = false, timing, scriptHtml = '', pageState = {}, networkErrors = false, snapshotLatency = 0 } = {}) {
+function harness({ data = { aweme_detail: video }, root = false, launchError = false, coldStart = false, initialPage = true, createError = false, authenticationStatus = 200, realProfiles = false, bodyError = false, timing, fixedClock = false, scriptHtml = '', pageState = {}, networkErrors = false, snapshotLatency = 0 } = {}) {
   const state = { browserClosed: 0, contextClosed: 0, proxyClosed: 0, removed: [], navigations: [], budgets: [], diagnostics: [], newPageCalls: 0, launches: 0, fullPageReads: 0, dataScriptReads: 0 };
   const timers = new Map(); let now = 0, sequence = 0, readyAt = Infinity, emitted = false, requestAt = Infinity;
   function advance(ms) {
@@ -62,6 +62,7 @@ function harness({ data = { aweme_detail: video }, root = false, launchError = f
   }, { ...process, platform: root ? 'linux' : 'win32', getuid: () => root ? 0 : 1000, env: { MOZ_DISABLE_CONTENT_SANDBOX: '1' } }, {
     AbortSignal: { timeout: value => { state.budgets.push(value); if (!timing) return AbortSignal.timeout(value); const controller = new AbortController(); fakeTimeout(() => controller.abort(), value); return controller.signal; } },
     console: { ...console, error: value => state.diagnostics.push(value) },
+    ...(fixedClock ? { Date: class extends Date { static now() { return 0; } } } : {}),
     ...(timing ? { Date: { now: () => now }, setTimeout: fakeTimeout, clearTimeout: id => timers.delete(id) } : {}),
   });
   return state;
@@ -115,7 +116,7 @@ test('代理握手失败不访问视频源站，释放本次进程、代理及�
 });
 
 test('冷启动自检不再用10秒会话限制，允许60秒握手且总预算90秒', async () => {
-  const state = harness({ coldStart: true });
+  const state = harness({ coldStart: true, fixedClock: true });
   const result = await state.api.inspectFirefoxVideo(source, { executable: '/project/firefox' }, 12000, true);
   assert.equal(result.referer, 'about:blank'); assert.equal(state.launch.timeout, 60000); assert.equal(state.launch.protocolTimeout, 60000);
   assert.deepEqual(state.budgets, [90000]); assert.equal(state.launch.signal.aborted, false);
@@ -123,7 +124,7 @@ test('冷启动自检不再用10秒会话限制，允许60秒握手且总预算9
 });
 
 test('实际解析遵守调用方传入的预算，协议操作不超过该预算', async () => {
-  const state = harness({ coldStart: true }); await state.api.inspectFirefoxVideo(source, { executable: '/project/firefox' }, 24000);
+  const state = harness({ coldStart: true, fixedClock: true }); await state.api.inspectFirefoxVideo(source, { executable: '/project/firefox' }, 24000);
   assert.equal(state.launch.timeout, 24000); assert.equal(state.launch.protocolTimeout, 24000); assert.deepEqual(state.budgets, [24000]);
   assert.equal(state.launch.dumpio, false); assert.deepEqual(state.diagnostics, []);
 });
@@ -199,7 +200,7 @@ test('作品接口已发出但响应慢于12秒时不刷新中断，仍可在预
 });
 
 test('显式真实解析诊断显示作品接口与阶段，不启用原始stderr或泄漏源地址和Cookie', async () => {
-  const state = harness(); await state.api.inspectFirefoxVideo(source, { executable: '/project/firefox' }, 24000, false, true);
+  const state = harness({ fixedClock: true }); await state.api.inspectFirefoxVideo(source, { executable: '/project/firefox' }, 24000, false, true);
   assert.equal(state.launch.dumpio, false); assert.deepEqual(state.budgets, [24000]);
   const output = state.diagnostics.join('\n');
   assert.match(output, /Firefox解析诊断/); assert.match(output, /视频页面导航响应 200/); assert.match(output, /匹配媒体 1 个/); assert.match(output, /最后已采集页面状态/);

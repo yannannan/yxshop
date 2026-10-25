@@ -3,8 +3,15 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { initialPoints, pointsLedgerLabels, type PointsAccount } from '../lib/points';
+import { notifyAccountChanged, useAccount } from '../lib/account-client';
 
-export function PointsCenter() {
+// 切换账户时重新挂载积分内容，避免短暂显示上一账户的明细。
+export function AccountPointsCenter() {
+  const { account } = useAccount();
+  return <PointsCenter key={account?.user?.id ?? (account ? 'guest' : 'loading')} embedded />;
+}
+
+export function PointsCenter({ embedded = false }: { embedded?: boolean }) {
   const [account, setAccount] = useState<PointsAccount | null>(null);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
@@ -17,6 +24,7 @@ export function PointsCenter() {
       const data = await response.json() as PointsAccount & { message?: string };
       if (!response.ok) throw new Error(data.message || '积分读取失败');
       setAccount(data);
+      if (data.signedIn) notifyAccountChanged();
     } catch (error) { setMessage(error instanceof Error ? error.message : '积分读取失败，请稍后重试'); }
     finally { setLoading(false); }
   }, [page]);
@@ -32,7 +40,8 @@ export function PointsCenter() {
     } catch (error) { setMessage(error instanceof Error ? error.message : '连接失败，请稍后重试'); }
     finally { setBuying(0); }
   }
-  return <main className="points-page">
+  const Container = embedded ? 'div' : 'main';
+  return <Container className="points-page">
     <header className="points-hero"><div><span className="section-kicker">YXSTAR POINTS</span><h1>一份积分，多种可能</h1><p>全站支持积分的工具共用余额，按各工具标明的积分数使用。</p><small>每位用户赠送 {initialPoints} 积分 · 成功处理后扣分 · 充值积分无到期时间</small></div><div className="points-balance"><span>我的可用积分</span><strong>{account?.signedIn ? account.balance.toLocaleString('zh-CN') : '—'}</strong>{account?.signedIn ? <button disabled={loading} onClick={() => void load()}>{loading ? '刷新中…' : '刷新余额 ↻'}</button> : <Link href="/?returnTo=/points">登录领取 {initialPoints} 积分 →</Link>}</div></header>
     {message && <p className="points-message" role="alert">{message}<button onClick={() => void load()}>重新读取</button></p>}
     <section aria-labelledby="points-packs-title"><div className="points-section-title"><div><h2 id="points-packs-title">选择积分充值套餐</h2><p>微信 / 支付宝扫码支付，管理员核验收款后到账。</p></div><Link href="/orders">查看充值订单 →</Link></div>
@@ -41,5 +50,5 @@ export function PointsCenter() {
     <section className="points-how"><article><b>01</b><h3>充值到账</h3><p>选择套餐并付款，核验后积分进入当前账号。</p></article><article><b>02</b><h3>自由选工具</h3><p>每个工具独立标价，使用同一个积分余额。</p></article><article><b>03</b><h3>成功才扣分</h3><p>有效的原会员与按次权益优先使用，重复下载不扣分。</p></article></section>
     {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- 工具跨页入口使用原生导航，避免客户端路由异常时点击无反应。 */}
     <section className="points-records" aria-labelledby="points-records-title"><div className="points-section-title"><h2 id="points-records-title">积分明细</h2><a href="/tools">发现实用工具 →</a></div>{account?.signedIn ? <><div className="table-wrap"><table><thead><tr><th>时间</th><th>类型 / 工具</th><th>积分变动</th><th>变动后余额</th><th>关联订单</th></tr></thead><tbody>{account.ledger.map(row => <tr key={row.operation_id}><td>{new Date(row.created_at).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false })}</td><td>{pointsLedgerLabels[row.kind] || row.kind}{row.product_name && <small>{row.product_name}</small>}</td><td className={Number(row.delta) > 0 ? 'points-credit' : ''}>{Number(row.delta) > 0 ? '+' : ''}{row.delta}</td><td>{row.balance_after}</td><td>{row.order_id ? <Link href={`/checkout/${encodeURIComponent(row.order_id)}`}>查看订单</Link> : '—'}</td></tr>)}</tbody></table></div>{!account.ledger.length && <p>暂无积分记录</p>}<div className="points-pagination"><button disabled={loading || page <= 1} onClick={() => setPage(page - 1)}>上一页</button><span>第 {account.page} / {Math.max(1, Math.ceil(account.total / 20))} 页</span><button disabled={loading || page >= Math.ceil(account.total / 20)} onClick={() => setPage(page + 1)}>下一页</button></div></> : <p>登录后查看自己的积分余额与明细。</p>}</section>
-  </main>;
+  </Container>;
 }

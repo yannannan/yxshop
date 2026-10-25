@@ -1,6 +1,9 @@
 "use client";
 
-import Image from "next/image";
+import { StorefrontHeader } from "../../components/storefront-header";
+import { AccountShell } from "../../components/account-shell";
+import { useAccount } from "../../lib/account-client";
+
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
@@ -41,6 +44,11 @@ function fullAddress(address: Address) {
 }
 
 export default function AddressesPage() {
+  const { account } = useAccount();
+  return <><StorefrontHeader /><AccountShell section="addresses"><AddressBook key={account?.user?.id ?? "guest"} /></AccountShell></>;
+}
+
+function AddressBook() {
   const [items,setItems] = useState<Address[]>([]);
   const [loading,setLoading] = useState(true);
   const [unauthorized,setUnauthorized] = useState(false);
@@ -114,13 +122,8 @@ export default function AddressesPage() {
     else await load();
   }
 
-  return <main className="customer-address-page">
-    <header className="inner-header">
-      {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- 首页入口采用原生导航，保证软路由异常时仍可返回商城。 */}
-      <a className="brand" href="/"><span className="brand-mark"><Image src="/yxstar_logo.png" alt="宇星商城 Logo" fill sizes="34px" /></span><span>宇星商城</span></a>
-      <span className="orders-header-label">我的地址</span>
-      <div className="orders-header-actions"><Link href="/orders">订单中心</Link><Link href="/">返回商城</Link></div>
-    </header>
+  return <div className="customer-address-page">
+
 
     <section className="customer-address-wrap">
       <div className="customer-address-head">
@@ -163,5 +166,5 @@ export default function AddressesPage() {
         <div className="customer-address-modal-actions"><button type="button" className="secondary" onClick={() => setEditing(null)}>取消</button><button type="button" disabled={saving} onClick={() => void save()}>{saving ? "保存中…" : "保存地址"}</button></div>
       </section>
     </div>}
-  </main>;
+  </div>;
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import { StorefrontHeader } from "../../components/storefront-header";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
@@ -39,12 +39,7 @@ export default function TechnicalServiceOrdersPage() {
   const visible = orders.filter((order) => !["closed","cancelled"].includes(order.status));
 
   return <main className="simple-page orders-page">
-    <header className="inner-header">
-      {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- 首页入口采用原生导航，保证软路由异常时仍可返回商城。 */}
-      <a className="brand" href="/"><span className="brand-mark"><Image src="/yxstar_logo.png" alt="宇星商城 Logo" fill sizes="34px" /></span><span>宇星商城</span></a>
-      <span className="orders-header-label">技术服务订单</span>
-      <div className="orders-header-actions"><Link href="/addresses">我的地址</Link><Link href="/orders">商城订单</Link></div>
-    </header>
+    <StorefrontHeader channel="technical" />
     <section className="orders-wrap">
       <div className="orders-title"><div><span className="section-kicker">SERVICE ORDER CENTER</span><h1>我的技术服务订单</h1><p>查看购买、支付和技术服务进度</p></div><Link href="/?channel=technical">继续选择技术服务 →</Link></div>
       {loading ? <div className="orders-empty">正在读取技术服务订单…</div> : unauthorized ? <div className="orders-empty"><b>登录后查看技术服务订单</b><p>请使用商城手机号登录后再查看。</p><Link href="/?channel=technical">返回技术服务</Link></div> : !visible.length ? <div className="orders-empty"><b>暂时没有技术服务订单</b><p>购买技术服务后，订单会显示在这里。</p><Link href="/?channel=technical">选择技术服务</Link></div> : <div className="orders-list">{visible.map((order) => <article className="order-card" key={order.id}>
