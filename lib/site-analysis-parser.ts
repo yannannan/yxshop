@@ -1,5 +1,5 @@
 import { load, loadBuffer } from 'cheerio';
-import type { RankRecord, SiteKeyword, SitePage } from './site-analysis';
+import type { EngineId, RankRecord, SiteKeyword, SitePage } from './site-analysis';
 
 const clean = (text: string, size = 500) => text.replace(/\s+/g, ' ').trim().slice(0, size);
 export function parseSitePage(bytes: Buffer, url: string, status = 200, contentType = ''): SitePage {
@@ -7,9 +7,11 @@ export function parseSitePage(bytes: Buffer, url: string, status = 200, contentT
   let $;
   try { $ = charset ? load(new TextDecoder(charset).decode(bytes)) : loadBuffer(bytes, { encoding: { defaultEncoding: 'utf-8' } }); } catch { $ = loadBuffer(bytes, { encoding: { defaultEncoding: 'utf-8' } }); }
   const meta = (name: string) => clean($(`meta[name="${name}" i]`).first().attr('content') || '', 1000);
+  const directives = (name: string) => $(`meta[name="${name}" i]`).map((_, node) => $(node).attr('content') || '').get().join(',');
   const links: string[] = [];
   $('a[href]').each((_, el) => { try { const link = new URL($(el).attr('href')!, url); if (['https:', 'http:'].includes(link.protocol) && !link.username && !link.password && !link.port) { link.hash = ''; links.push(link.href); } } catch { /* Invalid links remain excluded. */ } });
-  const page = { url, status, title: clean($('title').first().text()), description: meta('description'), language: clean($('html').attr('lang') || '', 32), h1: $('h1').map((_, e) => clean($(e).text())).get().slice(0, 10), canonical: '', noindex: /(?:^|[,\s])noindex(?:$|[,\s])/i.test(meta('robots')), words: 0, links: [...new Set(links)].slice(0, 500), declared: [...new Set(meta('keywords').split(/[,，;；|]/).map(k => clean(k, 80)).filter(Boolean))].slice(0, 30), text: '', fetchedAt: new Date().toISOString() };
+  const noindex = (value: string) => /(?:^|[,\s])(?:noindex|none)(?:$|[,\s])/i.test(value);
+  const page: SitePage = { url, status, title: clean($('title').first().text()), description: meta('description'), language: clean($('html').attr('lang') || '', 32), h1: $('h1').map((_, e) => clean($(e).text())).get().slice(0, 10), canonical: '', noindex: noindex(directives('robots')), engineNoindex: { baidu: noindex(directives('baiduspider')), bing: noindex(directives('bingbot')), google: noindex(directives('googlebot')) }, words: 0, links: [...new Set(links)].slice(0, 500), declared: [...new Set(meta('keywords').split(/[,，;；|]/).map(k => clean(k, 80)).filter(Boolean))].slice(0, 30), text: '', fetchedAt: new Date().toISOString() };
   try { const canonical = $('link[rel="canonical"]').first().attr('href'); if (canonical) page.canonical = new URL(canonical, url).href; } catch { /* Non-URL canonical is not fetched. */ }
   $('script,style,noscript,svg,nav,footer,header,form').remove();
   page.text = clean($('main,article').first().text() || $('body').text(), 24000); page.words = page.text.length;
@@ -39,22 +41,27 @@ export function extractSiteKeywords(pages: SitePage[], manual: string[]): SiteKe
   }
   return [...words.values()].sort((a,b) => b.score - a.score || a.word.localeCompare(b.word)).slice(0, 200);
 }
-export function parseSearchResults(engine: 'baidu' | 'bing', bytes: Buffer, source: string, keyword: string, host: string): RankRecord {
+export function parseSearchResults(engine: EngineId, bytes: Buffer, source: string, keyword: string, host: string): RankRecord {
   const $ = loadBuffer(bytes, { encoding: { defaultEncoding: 'utf-8' } }), checkedAt = new Date().toISOString();
-  if (/验证码|安全验证|异常流量|verify you are|captcha|unusual traffic/i.test($('title').text() + $('body').text().slice(0, 1000))) return { engine, keyword, state: 'restricted', position: null, url: '', checkedAt, source, message: '搜索引擎要求验证，已停止本次查询' };
-  const rows = engine === 'bing' ? $('#b_results > li.b_algo') : $('#content_left > .result, #content_left > .result-op');
+  if (/验证码|安全验证|异常流量|verify you are|captcha|unusual traffic|before you continue to google/i.test($('title').text() + $('body').text().slice(0, 1000))) return { engine, keyword, state: 'restricted', position: null, url: '', checkedAt, source, message: '搜索引擎要求验证，已停止本次查询' };
+  const rows = engine === 'bing' ? $('#b_results > li.b_algo') : engine === 'google' ? $('#rso h3, #search h3') : $('#content_left > .result, #content_left > .result-op');
   const urls: string[] = [];
+  const anchors = new Set<unknown>();
   rows.each((_, el) => {
     const node = $(el); if (node.find('[data-tuiguang],.ec_tuiguang_pplink').length || /广告/.test(node.find('.ec-tuiguang,.ec-tuiguang-new').text())) return;
-    const anchor = node.find('h2 a,h3 a').first(); let target = anchor.attr('href') || '';
+    if (engine === 'google' && node.closest('[data-text-ad],[data-ad-slot],#tads,#bottomads').length) return;
+    const anchor = engine === 'google' ? node.closest('a[href]') : node.find('h2 a,h3 a').first();
+    if (anchor.length && anchors.has(anchor.get(0))) return;
+    if (anchor.length) anchors.add(anchor.get(0));
+    let target = anchor.attr('href') || '';
     if (engine === 'baidu') target = node.attr('mu') || node.attr('data-landurl') || target;
-    try { const parsed = new URL(target, source); if (parsed.hostname === 'www.bing.com' && parsed.pathname.startsWith('/ck/')) { const encoded = parsed.searchParams.get('u'); if (encoded?.startsWith('a1')) target = Buffer.from(encoded.slice(2), 'base64').toString('utf8'); } } catch { /* Opaque links are treated as unverified, not as missed ranks. */ }
+    try { const parsed = new URL(target, source); if (parsed.hostname === 'www.bing.com' && parsed.pathname.startsWith('/ck/')) { const encoded = parsed.searchParams.get('u'); if (encoded?.startsWith('a1')) target = Buffer.from(encoded.slice(2), 'base64').toString('utf8'); } else if (engine === 'google' && /^(?:www\.)?google\.com$/.test(parsed.hostname) && parsed.pathname === '/url') target = parsed.searchParams.get('q') || parsed.searchParams.get('url') || target; } catch { /* Opaque links are treated as unverified, not as missed ranks. */ }
     urls.push(target);
   });
   let opaque = false;
   for (let index = 0; index < Math.min(urls.length, 10); index++) {
-    try { const url = new URL(urls[index]); if (/^(?:www\.)?(?:baidu|bing)\.com$/.test(url.hostname)) opaque = true;
-      if (url.hostname === host || url.hostname.replace(/^www\./, '') === host.replace(/^www\./, '')) return { engine, keyword, state: 'found', position: index + 1, url: url.href, checkedAt, source, message: '' };
+    try { const url = new URL(urls[index]); if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || /^(?:www\.)?(?:baidu|bing|google)\.com$/.test(url.hostname)) opaque = true;
+      if (!opaque && (url.hostname === host || url.hostname.replace(/^www\./, '') === host.replace(/^www\./, ''))) return { engine, keyword, state: 'found', position: index + 1, url: url.href, checkedAt, source, message: '' };
     } catch { opaque = true; }
   }
   return { engine, keyword, state: rows.length >= 10 && urls.length >= 10 && !opaque ? 'not_found' : 'failed', position: null, url: '', checkedAt, source, message: rows.length >= 10 && urls.length >= 10 && !opaque ? '本次前10条结果未命中' : '结果不足或无法验证落地地址，不能判断排名' };

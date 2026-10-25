@@ -2,7 +2,7 @@ import robotsParser from 'robots-parser';
 import { loadBuffer } from 'cheerio';
 import { normalizeSite, registrationData, siteDns, siteRequest } from './site-analysis-network';
 import { extractSiteKeywords, parseSearchResults, parseSitePage } from './site-analysis-parser';
-import { engineDefinitions, type AnalysisOptions, type SiteReport, type AnalysisStage, type StageState, type SitePage, type SiteIssue } from './site-analysis';
+import { engineDefinitions, engineSearchUrl, type AnalysisOptions, type SiteReport, type AnalysisStage, type StageState, type SitePage, type SiteIssue } from './site-analysis';
 
 export type AnalysisIO = {
   request: typeof siteRequest; dns: typeof siteDns; registration: typeof registrationData;
@@ -10,7 +10,7 @@ export type AnalysisIO = {
 };
 const defaultIO: AnalysisIO = { request: siteRequest, dns: siteDns, registration: registrationData, async render(url, signal) { const { renderSitePage } = await import('./site-analysis-browser'); return renderSitePage(url, signal); } };
 export function blankReport(host: string, options: AnalysisOptions): SiteReport {
-  return { version: 1, host, collectedAt: new Date().toISOString(), options, profile: { host, domain: normalizeSite(host).domain, finalUrl: '', name: '', title: '', description: '', language: '', industry: '', industrySource: '', addresses: [], cname: [], nameservers: [], registrar: '', registrant: '', registeredAt: '', expiresAt: '', domainStatus: [], registrationSource: '', registrationState: 'pending', httpStatus: null, https: null }, stages: [], pages: [], keywords: [], rankings: [], engines: engineDefinitions.map(e => ({ id: e.id, state: e.available ? 'skipped' : 'unavailable', queried: 0, hits: null, top10: null, checkedAt: '', message: e.available ? '未启用本轮查询' : '尚未接入可用数据来源' })), issues: [], coverage: { discovered: 0, fetched: 0, limited: false }, comparison: null };
+  return { version: 1, host, collectedAt: new Date().toISOString(), options, profile: { host, domain: normalizeSite(host).domain, finalUrl: '', name: '', title: '', description: '', language: '', industry: '', industrySource: '', addresses: [], cname: [], nameservers: [], registrar: '', registrant: '', registeredAt: '', expiresAt: '', domainStatus: [], registrationSource: '', registrationState: 'pending', httpStatus: null, https: null }, stages: [], pages: [], keywords: [], rankings: [], engines: engineDefinitions.map(e => ({ id: e.id, state: options.engines.includes(e.id) ? 'pending' : 'skipped', queried: 0, hits: null, top10: null, checkedAt: '', message: options.engines.includes(e.id) ? '等待查询' : '未启用本轮查询' })), issues: [], coverage: { discovered: 0, fetched: 0, limited: false }, comparison: null };
 }
 export async function collectSiteReport(input: string, options: AnalysisOptions, onProgress: (report: SiteReport, progress: number) => Promise<void>, io: AnalysisIO = defaultIO, signal = AbortSignal.timeout(180000)) {
   const site = normalizeSite(input), report = blankReport(site.host, options), bot = 'YxstarSiteBot';
@@ -47,32 +47,50 @@ export async function collectSiteReport(input: string, options: AnalysisOptions,
     if (rulesResponse.status !== 404 && rulesResponse.status !== 410 && rulesResponse.status !== 200) throw new Error('robots 规则暂不可用');
     const finalOrigin = new URL(rulesResponse.url).origin;
     if (normalizeSite(finalOrigin).host.replace(/^www\./, '') !== site.host.replace(/^www\./, '')) throw new Error('站点跳转超出当前域名范围');
-    const origin = finalOrigin, policy = robotsParser(`${origin}/robots.txt`, rulesResponse.status === 200 ? rulesResponse.bytes.toString('utf8') : '');
+    let origin = finalOrigin, policy = robotsParser(`${origin}/robots.txt`, rulesResponse.status === 200 ? rulesResponse.bytes.toString('utf8') : '');
+    const recordSitePolicy = () => { for (const engine of report.engines) { engine.siteRobotsAllowed = policy.isAllowed(`${origin}/`, { baidu: 'Baiduspider', bing: 'bingbot', google: 'Googlebot' }[engine.id]) !== false; engine.siteCheckedAt = new Date().toISOString(); } };
+    recordSitePolicy();
     const allowed = (url: string) => eligible(url, origin) && policy.isAllowed(url, bot) !== false;
-    const delay = Math.max(500, Number(policy.getCrawlDelay(bot) || 0) * 1000);
+    let delay = Math.max(500, Number(policy.getCrawlDelay(bot) || 0) * 1000);
     let lastRead = 0;
-    const politeRead = async (url: string, limit?: number) => {
+    const politeRead = async (url: string, limit?: number, canonicalHome = false) => {
       if (!allowed(url)) throw new Error('robots 规则不允许采集此页面');
       const pause = Math.max(0, lastRead + delay - Date.now());
       if (pause) await new Promise<void>((resolve, reject) => { const done = () => { clearTimeout(timer); signal.removeEventListener('abort', abort); }; const abort = () => { done(); reject(new Error('采集超时')); }; const timer = setTimeout(() => { done(); resolve(); }, pause); signal.addEventListener('abort', abort, { once: true }); if (signal.aborted) abort(); });
       signal.throwIfAborted(); lastRead = Date.now(); const result = await read(url, limit);
-      if (new URL(result.url).origin !== origin || !allowed(result.url)) throw new Error('站点跳转超出允许采集范围');
+      if (new URL(result.url).origin !== origin) {
+        if (!canonicalHome || normalizeSite(result.url).host.replace(/^www\./, '') !== site.host.replace(/^www\./, '')) throw new Error('站点跳转超出允许采集范围');
+        const nextOrigin = new URL(result.url).origin, nextRules = await read(`${nextOrigin}/robots.txt`, 256 * 1024);
+        if (![200, 404, 410].includes(nextRules.status)) throw new Error('robots 规则暂不可用');
+        if (new URL(nextRules.url).origin !== nextOrigin) throw new Error('站点跳转超出允许采集范围');
+        origin = nextOrigin; policy = robotsParser(`${origin}/robots.txt`, nextRules.status === 200 ? nextRules.bytes.toString('utf8') : '');
+        delay = Math.max(500, Number(policy.getCrawlDelay(bot) || 0) * 1000); recordSitePolicy();
+      }
+      if (!allowed(result.url)) throw new Error('robots 规则不允许采集此页面');
       return result;
     };
-    const home = await politeRead(`${origin}/`);
+    const home = await politeRead(`${origin}/`, undefined, true);
     report.profile.httpStatus = home.status; report.profile.finalUrl = home.url; report.profile.https = home.url.startsWith('https:');
     if (home.status < 200 || home.status >= 300 || !/html/i.test(home.contentType)) throw new Error('首页暂不可访问');
     let first = parseSitePage(home.bytes, home.url, home.status, home.contentType);
     if (/验证码|安全验证|access denied|just a moment/i.test(first.title)) throw new Error('网站要求访问验证');
+    Object.assign(report.profile, { name: first.title.split(/[|｜—]/)[0].trim(), title: first.title, description: first.description, language: first.language });
+    report.pages.push(first); report.coverage = { discovered: 1, fetched: 1, limited: false };
+    await stage('pages', 'running', '已读取首页基础信息，正在补充页面内容', 23);
     if (first.words < 60 && /<script\b/i.test(home.bytes.toString('utf8')) && io.render) {
-      try { first = { ...parseSitePage(await io.render(home.url, AbortSignal.any([signal, AbortSignal.timeout(45000)])), home.url), rendered: true }; }
+      try {
+        const rendered = parseSitePage(await io.render(home.url, AbortSignal.any([signal, AbortSignal.timeout(45000)])), home.url);
+        if (/验证码|安全验证|access denied|just a moment/i.test(rendered.title)) throw new Error('网站要求访问验证');
+        first = { ...rendered, rendered: true, title: rendered.title || first.title, description: rendered.description || first.description, language: rendered.language || first.language, canonical: rendered.canonical || first.canonical, declared: rendered.declared.length ? rendered.declared : first.declared, noindex: first.noindex || rendered.noindex, engineNoindex: Object.fromEntries(engineDefinitions.map(e => [e.id, Boolean(first.engineNoindex?.[e.id] || rendered.engineNoindex?.[e.id])])) };
+      }
       catch { crawlIncomplete = true; report.issues.push({ code: 'dynamic', severity: 'medium', title: '动态内容未完整读取', url: home.url, advice: '浏览器渲染暂不可用，已保留静态页面信息' }); }
     }
     Object.assign(report.profile, { name: first.title.split(/[|｜—]/)[0].trim(), title: first.title, description: first.description, language: first.language });
+    for (const engine of report.engines) engine.htmlIndexAllowed = !first.noindex && !first.engineNoindex?.[engine.id];
     const industryRules: [string, RegExp][] = [['电子商务', /商城|购物|电商|ecommerce|shopping/i], ['软件与技术', /软件|开发|编程|software|developer/i], ['教育培训', /培训|课程|教育|education|training/i], ['金融财经', /金融|财经|投资|finance|investment/i], ['医疗健康', /医疗|健康|health|medical/i]];
     report.profile.industry = industryRules.find(([, expression]) => expression.test(`${first.title} ${first.description}`))?.[0] || '';
     report.profile.industrySource = report.profile.industry ? '根据网站标题和描述推测' : '';
-    report.pages.push(first);
+    report.pages[0] = first;
     const pending = [...first.links.filter(link => allowed(link))], discovered = new Set([home.url, ...pending]);
     const sitemaps = [...new Set([...policy.getSitemaps(), `${origin}/sitemap.xml`])].filter(url => eligible(url, origin)).slice(0, 3);
     for (let index = 0; index < sitemaps.length; index++) {
@@ -109,35 +127,40 @@ export async function collectSiteReport(input: string, options: AnalysisOptions,
   const seeds = report.keywords.slice(0, 5).map(k => k.word);
   for (const engine of options.engines) {
     const summary = report.engines.find(e => e.id === engine)!;
-    if (engine === 'google') continue;
-    await stage(`engine:${engine}`, 'running', '正在查询所选引擎的公开搜索结果', 68);
-    if (!seeds.length) { summary.state = 'unavailable'; summary.message = '暂无可查询关键词'; await stage(`engine:${engine}`, 'unavailable', summary.message, 80); continue; }
-    const base = engine === 'baidu' ? 'https://www.baidu.com' : 'https://www.bing.com';
+    const engineSignal = AbortSignal.any([signal, AbortSignal.timeout(35000)]);
+    const engineRead = (url: string, limit?: number) => io.request(url, AbortSignal.any([engineSignal, AbortSignal.timeout(15000)]), limit);
+    const progress = 68 + Math.floor(options.engines.indexOf(engine) * 19 / options.engines.length), finishedProgress = 68 + Math.floor((options.engines.indexOf(engine) + 1) * 19 / options.engines.length);
+    summary.state = 'running'; summary.checkedAt = new Date().toISOString(); summary.message = '正在查询所选引擎的公开搜索结果';
+    await stage(`engine:${engine}`, 'running', summary.message, progress);
+    if (!seeds.length) { summary.state = 'unavailable'; summary.message = '暂无可查询关键词'; await stage(`engine:${engine}`, 'unavailable', summary.message, finishedProgress); continue; }
+    const base = new URL(engineSearchUrl(engine, '')).origin;
     try {
-      const rules = await read(`${base}/robots.txt`, 256 * 1024);
+      const rules = await engineRead(`${base}/robots.txt`, 256 * 1024);
+      if ([401, 403, 429].includes(rules.status)) { summary.state = 'restricted'; throw new Error('搜索引擎限制当前查询，请稍后再试'); }
       if (![200, 404].includes(rules.status)) throw new Error('搜索引擎采集规则暂不可用');
+      if (rules.status === 200 && /<html\b|<!doctype\s+html/i.test(rules.bytes.toString('utf8').slice(0, 1000))) { summary.state = 'restricted'; throw new Error('搜索引擎要求验证，已停止本次查询'); }
       const policy = robotsParser(`${base}/robots.txt`, rules.status === 200 ? rules.bytes.toString('utf8') : '');
       for (const keyword of seeds) {
-        const source = new URL(engine === 'baidu' ? '/s' : '/search', base); source.searchParams.set(engine === 'baidu' ? 'wd' : 'q', keyword);
-        if (engine === 'bing') { source.searchParams.set('count', '10'); source.searchParams.set('setlang', options.language); }
-        else source.searchParams.set('rn', '10');
+        engineSignal.throwIfAborted();
+        const source = new URL(engineSearchUrl(engine, keyword, options.language));
         if (policy.isAllowed(source.href, bot) === false) { summary.state = 'restricted'; summary.message = '搜索引擎 robots 规则限制自动查询'; break; }
         const pause = Math.max(1000, Number(policy.getCrawlDelay(bot) || 0) * 1000);
-        if (summary.queried) await new Promise<void>((resolve, reject) => { const abort = () => { clearTimeout(timer); reject(new Error('查询超时')); }; const timer = setTimeout(() => { signal.removeEventListener('abort', abort); resolve(); }, pause); signal.addEventListener('abort', abort, { once: true }); if (signal.aborted) abort(); });
-        const response = await read(source.href);
+        if (summary.queried) await new Promise<void>((resolve, reject) => { const abort = () => { clearTimeout(timer); reject(new Error('查询超时')); }; const timer = setTimeout(() => { engineSignal.removeEventListener('abort', abort); resolve(); }, pause); engineSignal.addEventListener('abort', abort, { once: true }); if (engineSignal.aborted) abort(); });
+        const response = await engineRead(source.href);
         summary.checkedAt = new Date().toISOString();
         if ([401, 403, 429].includes(response.status)) { summary.state = 'restricted'; summary.message = '搜索引擎限制当前查询，请稍后再试'; break; }
         if (response.status !== 200) throw new Error('搜索结果暂不可用');
         const record = parseSearchResults(engine, response.bytes, source.href, keyword, site.host); report.rankings.push(record); summary.queried++;
         if (record.state === 'restricted') { summary.state = 'restricted'; summary.message = record.message; break; }
+        await stage(`engine:${engine}`, 'running', summary.message, progress);
       }
       const records = report.rankings.filter(r => r.engine === engine), valid = records.filter(r => ['found', 'not_found'].includes(r.state));
       summary.hits = valid.length ? valid.filter(r => r.state === 'found').length : null; summary.top10 = summary.hits;
       if (summary.state !== 'restricted') { summary.state = valid.length === seeds.length ? 'complete' : valid.length ? 'partial' : 'unavailable'; summary.message = valid.length === seeds.length ? '已查询前10条自然结果' : '部分结果无法验证，未将其计为无排名'; }
-    } catch { summary.state = 'failed'; summary.message = signal.aborted ? '本轮查询超时' : '搜索引擎数据源暂不可用'; }
+    } catch (error) { const restricted = summary.state === 'restricted'; summary.state = restricted ? 'restricted' : 'failed'; summary.message = restricted ? (error as Error).message : signal.aborted ? '本轮查询超时' : engineSignal.aborted ? '本引擎查询超时，已保留其他采集结果' : '搜索引擎数据源暂不可用'; }
     const valid = report.rankings.filter(r => r.engine === engine && ['found','not_found'].includes(r.state));
     if (valid.length) { summary.hits = valid.filter(r => r.state === 'found').length; summary.top10 = summary.hits; if (summary.state === 'failed') summary.state = 'partial'; }
-    await stage(`engine:${engine}`, summary.state, summary.message, 87);
+    await stage(`engine:${engine}`, summary.state, summary.message, finishedProgress);
   }
   const issue = (page: SitePage, code: string, title: string, advice: string, severity: SiteIssue['severity'] = 'medium') => report.issues.push({ code, title, advice, url: page.url, severity });
   const titles = new Set<string>();

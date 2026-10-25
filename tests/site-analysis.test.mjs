@@ -75,7 +75,8 @@ test('域名规范化保留主机范围与协议，拒绝 IP、认证信息、�
 });
 test('采集参数限制页面数、关键词、引擎和当前支持设备；等价选项稳定序列化', () => {
   assert.equal(model.analysisOptions({}).maxPages, 20); assert.equal(JSON.stringify(model.analysisOptions({ engines:['bing','baidu','bing'] })), JSON.stringify(model.analysisOptions({ engines:['baidu','bing'] })));
-  for (const value of [{maxPages:5000},{engines:['google']},{keywords:['x'.repeat(81)]},{keywords:[42]},{device:'mobile'},{language:'bad'}]) assert.throws(() => model.analysisOptions(value));
+  assert.equal(model.analysisOptions({engines:['google']}).engines[0], 'google');
+  for (const value of [{maxPages:5000},{engines:['unknown']},{keywords:['x'.repeat(81)]},{keywords:[42]},{device:'mobile'},{language:'bad'}]) assert.throws(() => model.analysisOptions(value));
 });
 test('真实 HTML 解析保留标题、关键词、链接和索引声明，正文排除脚本及导航', () => {
   const page = parser.parseSitePage(Buffer.from(html), 'https://example.org/'); assert.equal(page.title, '宇星软件 | 示例网站'); assert.equal(page.language, 'zh-CN'); assert.ok(!page.text.includes('secret keyword')); assert.equal(page.declared.length, 2); assert.ok(page.links.includes('https://example.org/about'));
@@ -87,7 +88,7 @@ test('关键词跨来源去重并保留来源，网站声明词不会被直接�
 });
 test('网站采集完成基础报告，限制同源范围并保存缺省注册主体状态', async () => {
   const f = fakeIO(), snapshots = [], report = await collector.collectSiteReport('example.org', model.analysisOptions({maxPages:5}), async (value, progress) => snapshots.push({ value: clone(value), progress }), f.io);
-  assert.equal(report.pages.length, 2); assert.equal(report.profile.registrar, 'Registrar'); assert.equal(report.profile.registrant, ''); assert.equal(report.profile.registeredAt, '2020-01-01T00:00:00Z'); assert.ok(report.keywords.length); assert.equal(report.engines.find(e => e.id === 'google').state, 'unavailable'); assert.ok(!f.requests.some(url => /external|internal|\/admin/.test(url))); assert.equal(snapshots.at(-1).progress,95); assert.equal(report.stages.find(s=>s.key==='pages').state,'complete');
+  assert.equal(report.pages.length, 2); assert.equal(report.profile.registrar, 'Registrar'); assert.equal(report.profile.registrant, ''); assert.equal(report.profile.registeredAt, '2020-01-01T00:00:00Z'); assert.ok(report.keywords.length); assert.equal(report.engines.find(e => e.id === 'google').state, 'skipped'); assert.ok(!f.requests.some(url => /external|internal|\/admin/.test(url))); assert.equal(snapshots.at(-1).progress,95); assert.equal(report.stages.find(s=>s.key==='pages').state,'complete');
 });
 test('robots 禁止采集时不读取首页，不伪造内容；个别页面失败保留部分报告', async () => {
   const blocked = fakeIO({blocked:true}), report = await collector.collectSiteReport('example.org',model.analysisOptions({maxPages:5}),async()=>{},blocked.io); assert.equal(report.pages.length,0); assert.ok(!blocked.requests.includes('https://example.org/')); assert.equal(report.stages.find(s=>s.key==='pages').state,'failed');
@@ -97,6 +98,28 @@ test('动态首页通过注入的渲染器读取；渲染失败只保留静态�
   const f = fakeIO({dynamic:true}); let rendered = 0; f.io.render = async () => { rendered++; return Buffer.from(html); };
   const report = await collector.collectSiteReport('example.org',model.analysisOptions({maxPages:5}),async()=>{},f.io); assert.equal(rendered,1); assert.equal(report.pages[0].rendered,true);
   f.io.render = async () => { throw Error('browser unavailable'); }; const failed = await collector.collectSiteReport('example.org',model.analysisOptions({maxPages:5}),async()=>{},f.io); assert.ok(failed.issues.some(i=>i.code==='dynamic')); assert.equal(failed.stages.find(s=>s.key==='pages').state,'partial');
+});
+
+test('首页跳转到www规范域后重新核对robots，正常采集档案，跨站和最终禁止抓取不解析内容', async () => {
+  for (const mode of ['allowed','blocked','external']) {
+    const f=searchIO(), original=f.io.request;
+    f.io.request=async raw=>{const result=await original(raw), url=new URL(raw);if(raw==='https://example.org/')result.url=mode==='external'?'https://other.org/':'https://www.example.org/';if(url.host==='www.example.org'&&url.pathname==='/robots.txt')result.bytes=Buffer.from(mode==='blocked'?'User-agent: *\nDisallow: /':'User-agent: *\nAllow: /');return result;};
+    const report=await collector.collectSiteReport('example.org',model.analysisOptions({maxPages:5,engines:[]}),async()=>{},f.io);
+    if(mode==='allowed'){assert.equal(report.profile.title,'RankProbe');assert.equal(report.profile.finalUrl,'https://www.example.org/');assert.equal(report.pages.length,1);assert.ok(f.requests.includes('https://www.example.org/robots.txt'));}
+    else {assert.equal(report.pages.length,0);assert.equal(report.profile.title,'');assert.equal(report.stages.find(s=>s.key==='pages').state,'failed');}
+    if(mode==='external')assert.ok(!f.requests.some(url=>url.includes('other.org')));
+  }
+});
+
+test('静态title和描述先写入进度，动态渲染空元信息或验证页不覆盖已读数据', async () => {
+  for(const challenge of [false,true]) {
+    const f=searchIO(), original=f.io.request, snapshots=[];
+    f.io.request=async raw=>{const result=await original(raw);if(raw==='https://example.org/')result.bytes=Buffer.from('<html><head><title>静态网站名</title><meta name="description" content="静态描述"><meta name="keywords" content="原始关键词"><meta name="googlebot" content="noindex"></head><body><script src="/app.js"></script></body></html>');return result;};
+    f.io.render=async()=>{assert.ok(snapshots.some(r=>r.profile.title==='静态网站名'&&r.pages.length===1));return Buffer.from(challenge?'<title>安全验证</title>':'<html><body><main>Rendered content for a working website.</main></body></html>');};
+    const report=await collector.collectSiteReport('example.org',model.analysisOptions({maxPages:5,engines:[]}),async draft=>snapshots.push(clone(draft)),f.io);
+    assert.equal(report.profile.title,'静态网站名');assert.equal(report.profile.description,'静态描述');assert.equal(report.pages[0].declared[0],'原始关键词');assert.equal(report.engines.find(e=>e.id==='google').htmlIndexAllowed,false);
+    if(challenge)assert.ok(report.issues.some(i=>i.code==='dynamic'));
+  }
 });
 test('搜索采集被 robots 限制时记录受限，禁止继续查询和虚构零排名', async () => {
   const f = fakeIO({engineBlocked:true}), report = await collector.collectSiteReport('example.org',model.analysisOptions({maxPages:5,engines:['bing']}),async()=>{},f.io), engine = report.engines.find(e=>e.id==='bing');
@@ -108,6 +131,78 @@ test('自然结果解析区分命中、完整范围未命中、验证页和不�
   assert.equal(parser.parseSearchResults('bing',make(false),'https://www.bing.com/search?q=test','test','example.org').state,'not_found');
   assert.equal(parser.parseSearchResults('bing',make(false,true),'https://www.bing.com/search?q=test','test','example.org').state,'failed');
   assert.equal(parser.parseSearchResults('bing',Buffer.from('<title>安全验证</title>'),'https://www.bing.com/','test','example.org').state,'restricted');
+});
+
+function engineHtml(engine, target = true) {
+  const urls = Array.from({length:10}, (_, i) => i === 2 && target ? 'https://example.org/article' : `https://competitor${i}.org/`);
+  if (engine === 'google') return '<div id="search"><div id="rso">' + urls.map(url => `<div><a href="${url}"><h3>Result</h3></a></div>`).join('') + '</div></div>';
+  if (engine === 'bing') return '<ol id="b_results">' + urls.map(url => `<li class="b_algo"><h2><a href="${url}">Result</a></h2></li>`).join('') + '</ol>';
+  return '<div id="content_left">' + urls.map(url => `<div class="result" mu="${url}"><h3><a href="https://www.baidu.com/link?opaque">Result</a></h3></div>`).join('') + '</div>';
+}
+function searchIO({blocked = [], broken = [], challenge = [], forbidden = []} = {}) {
+  const requests = [], io = fakeIO().io;
+  io.request = async raw => {
+    requests.push(raw); const url = new URL(raw), engine = model.engineDefinitions.find(row => new URL(model.engineSearchUrl(row.id, '')).host === url.host)?.id;
+    if (engine && broken.includes(engine)) throw Error('mock source unavailable');
+    const rules = url.pathname === '/robots.txt', status = url.pathname === '/sitemap.xml' ? 404 : engine && !rules && forbidden.includes(engine) ? 403 : 200;
+    const body = rules ? engine && challenge.includes(engine) ? '<html><title>安全验证</title></html>' : engine && blocked.includes(engine) ? 'User-agent: *\nDisallow: /' : 'User-agent: *\nDisallow:' : engine ? engineHtml(engine) : '<html><title>RankProbe</title><body>RankProbe</body></html>';
+    return {url:raw,status,bytes:Buffer.from(body),contentType:rules?'text/plain':'text/html'};
+  };
+  return {io,requests};
+}
+
+test('三个引擎的选项、查询地址和等待状态一致，显式空选项保持原基础采集兼容', () => {
+  const ids = model.engineDefinitions.map(e=>e.id), options = model.analysisOptions({engines:ids});
+  assert.deepEqual(clone(options.engines), ['baidu','bing','google']);
+  const pending = collector.blankReport('example.org', options);assert.ok(pending.engines.every(e=>e.state==='pending'&&e.checkedAt===''&&e.hits===null));
+  const disabled = collector.blankReport('example.org', model.analysisOptions({engines:[]}));assert.ok(disabled.engines.every(e=>e.state==='skipped'));
+  for (const id of ids) { const source = new URL(model.engineSearchUrl(id,'site:example.org AI & 工具','en'));assert.equal(source.searchParams.get(id==='baidu'?'wd':'q'),'site:example.org AI & 工具');assert.equal(source.protocol,'https:'); }
+});
+
+test('Google自然结果解析排除广告、解包公开跳转；不足结果、验证和不明前序地址不会编造排名', () => {
+  const source = model.engineSearchUrl('google','RankProbe'), parse = body => parser.parseSearchResults('google',Buffer.from(body),source,'RankProbe','example.org');
+  const good = engineHtml('google');assert.equal(parse(good).state,'found');assert.equal(parse(good).position,3);
+  assert.equal(parse(good.replace('https://example.org/article','https://www.google.com/url?q=https%3A%2F%2Fexample.org%2Farticle')).position,3);
+  assert.equal(parse(good.replace('<div id="rso">','<div id="rso"><div data-text-ad="1"><a href="https://example.org/ad"><h3>Ad</h3></a></div>')).position,3);
+  assert.equal(parse(engineHtml('google',false)).state,'not_found');
+  assert.equal(parse('<div id="rso"><a href="https://competitor.org/"><h3>Only one</h3></a></div>').state,'failed');
+  assert.equal(parse(good.replace('https://competitor0.org/','/url?opaque')).state,'failed');
+  assert.equal(parse('<title>Before you continue to Google</title>').state,'restricted');
+});
+
+test('同一报告执行三个引擎并保存真实查询、排名、检查时间和分阶段状态', async () => {
+  const f=searchIO(), snapshots=[], options=model.analysisOptions({maxPages:5,engines:['baidu','bing','google']});
+  const report=await collector.collectSiteReport('example.org',options,async draft=>snapshots.push(clone(draft)),f.io);
+  assert.equal(report.rankings.length,3);assert.ok(report.engines.every(e=>e.state==='complete'&&e.queried===1&&e.hits===1&&e.top10===1&&e.checkedAt));
+  assert.ok(report.rankings.every(r=>r.state==='found'&&r.position===3&&r.source.startsWith('https://')));
+  assert.ok(snapshots.some(r=>r.engines.find(e=>e.id==='google').state==='running'));
+  assert.ok(f.requests.some(url=>url.startsWith('https://www.google.com/search?')));
+  assert.ok(report.stages.filter(s=>s.key.startsWith('engine:')).every(s=>s.state==='complete'));
+});
+
+test('三个引擎遵守禁止规则，受限记录检查时间但不发送搜索、不填零排名', async () => {
+  const f=searchIO({blocked:['baidu','bing','google']}), report=await collector.collectSiteReport('example.org',model.analysisOptions({maxPages:5,engines:['baidu','bing','google']}),async()=>{},f.io);
+  assert.ok(report.engines.every(e=>e.state==='restricted'&&e.queried===0&&e.hits===null&&e.top10===null&&e.checkedAt));
+  assert.equal(report.rankings.length,0);assert.equal(f.requests.filter(url=>url.includes('www.')&&!url.endsWith('/robots.txt')).length,0);
+  assert.ok(report.engines.every(e=>e.message.includes('robots')));
+  assert.ok(report.engines.every(e=>e.siteRobotsAllowed===true&&e.htmlIndexAllowed===true&&e.siteCheckedAt));
+});
+
+test('即使未选排名查询也采集网站对各引擎的抓取许可和HTML索引声明，不当成已收录', async () => {
+  const f=searchIO(), original=f.io.request;
+  f.io.request=async raw=>{const result=await original(raw), url=new URL(raw);if(url.hostname==='example.org')result.bytes=Buffer.from(url.pathname==='/robots.txt'?'User-agent: Googlebot\nDisallow: /\nUser-agent: *\nAllow: /':url.pathname==='/'?'<html><head><title>RankProbe</title><meta name="googlebot" content="noindex"></head><body>RankProbe</body></html>':result.bytes);return result;};
+  const report=await collector.collectSiteReport('example.org',model.analysisOptions({maxPages:5,engines:[]}),async()=>{},f.io), google=report.engines.find(e=>e.id==='google');
+  assert.equal(google.siteRobotsAllowed,false);assert.equal(google.htmlIndexAllowed,false);assert.equal(google.state,'skipped');assert.equal(google.top10,null);
+  assert.ok(report.engines.filter(e=>e.id!=='google').every(e=>e.siteRobotsAllowed&&e.htmlIndexAllowed));assert.ok(!f.requests.some(url=>url.includes('www.')));
+  const repeated=parser.parseSitePage(Buffer.from('<meta name="robots" content="index"><meta name="ROBOTS" content="NOINDEX,follow">'),'https://example.org/');assert.equal(repeated.noindex,true);
+  assert.equal(parser.parseSitePage(Buffer.from('<meta name="robots" content="none">'),'https://example.org/').noindex,true);
+});
+
+test('单引擎故障、规则验证页和搜索403分别记因，后续引擎继续执行', async () => {
+  const f=searchIO({broken:['baidu'],challenge:['bing']}), report=await collector.collectSiteReport('example.org',model.analysisOptions({maxPages:5,engines:['baidu','bing','google']}),async()=>{},f.io);
+  assert.equal(report.engines.find(e=>e.id==='baidu').state,'failed');assert.equal(report.engines.find(e=>e.id==='bing').state,'restricted');assert.equal(report.engines.find(e=>e.id==='google').state,'complete');
+  const denied=searchIO({forbidden:['google']}), next=await collector.collectSiteReport('example.org',model.analysisOptions({maxPages:5,engines:['google']}),async()=>{},denied.io);
+  assert.equal(next.engines.find(e=>e.id==='google').state,'restricted');assert.equal(next.engines.find(e=>e.id==='google').top10,null);
 });
 test('历史对比只比较相同条件与成功查询，失败不计为排名下降', () => {
   const first=collector.blankReport('example.org',model.analysisOptions({})), next=clone(first);
@@ -257,7 +352,9 @@ test('真实报告界面显示缺失/受限状态和业务原文，开始分析�
   const react={...React,useEffect(){},useRef:value=>({current:value}),useState:initial=>{const index=cursor++;if(!(index in slots))slots[index]=initial;return[slots[index],value=>{slots[index]=typeof value==='function'?value(slots[index]):value;}];}};
   const moduleLoader=loader({'./language-provider':{useI18n:()=>({locale:'en',t:translation.translator('en')})},'../lib/account-client':{useAccount:()=>({account:{authenticated:true,user:{id:1}},loading:false}),notifyAccountChanged(){}},react},{window:{location:{href:'https://shop.example/tools/webmaster-tools.html'},history:{replaceState(){}}},async fetch(_path,options){submitted=JSON.parse(options.body);return Response.json({run:{...run,id:otherId,status:'queued',report:null}});}});
   const {SiteAnalysisDashboard}=moduleLoader('components/site-analysis-dashboard.tsx');const tree=SiteAnalysisDashboard({tool:{id:50,slug:'webmaster-tools'}}), markup=renderToStaticMarkup(tree);
-  assert.ok(markup.includes('独有网站标题'));assert.ok(markup.includes('独有业务关键词'));assert.ok(markup.includes('Access restricted'));assert.ok(markup.includes('Unavailable'));assert.ok(markup.includes('Not connected')||markup.includes('No available data source connected'));
+  assert.ok(markup.includes('独有网站标题'));assert.ok(markup.includes('独有业务关键词'));assert.ok(markup.includes('Access restricted'));assert.ok(markup.includes('Unavailable'));assert.ok(markup.includes('Search this domain'));assert.ok(markup.includes('Engines not queried in this report'));
   function elements(node){if(Array.isArray(node))return node.flatMap(elements);return React.isValidElement(node)?[node,...elements(node.props.children)]:[];}
-  await elements(tree).find(n=>n.type==='form').props.onSubmit({preventDefault(){}});assert.equal(submitted.domain,'https://new.example.org/path');assert.equal(submitted.tool,50);assert.ok(submitted.id);assert.equal(submitted.userId,undefined);assert.equal(submitted.options.device,'desktop');assert.equal(submitted.options.maxPages,20);
+  const checkboxes=elements(tree).filter(n=>n.type==='input'&&n.props.type==='checkbox');assert.equal(checkboxes.length,3);assert.ok(checkboxes.every(node=>node.props.checked&&!node.props.disabled));
+  assert.ok(markup.includes('https://www.google.com/search?'));assert.ok(markup.includes('site%3Aexample.org'));assert.ok(markup.includes('New analyses select Baidu, Bing and Google by default'));
+  await elements(tree).find(n=>n.type==='form').props.onSubmit({preventDefault(){}});assert.equal(submitted.domain,'https://new.example.org/path');assert.equal(submitted.tool,50);assert.ok(submitted.id);assert.equal(submitted.userId,undefined);assert.equal(submitted.options.device,'desktop');assert.equal(submitted.options.maxPages,20);assert.deepEqual(submitted.options.engines,['baidu','bing','google']);
 });
