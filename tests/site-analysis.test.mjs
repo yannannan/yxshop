@@ -41,6 +41,33 @@ function fakeIO({ blocked = false, engineBlocked = false, brokenPage = false, dy
   return { io, requests };
 }
 const clone = value => JSON.parse(JSON.stringify(value));
+test('分析请求对HTML错误页和损坏JSON显示明确提示，保留业务错误与取消行为', async () => {
+  const invalid = '分析服务返回异常响应，请重试或联系管理员检查服务日志';
+  const english = loader()('lib/i18n.ts').translator('en');
+  assert.match(english(invalid), /invalid response/);
+  for (const response of [new Response('<!DOCTYPE html><title>Build error</title>', {status:500}), new Response('{broken', {status:502}), Response.json(null), Response.json([])]) {
+    const client = loader({}, {fetch: async () => response})('lib/site-analysis-client.ts');
+    await assert.rejects(client.siteAnalysisRequest('?tool=50'), error => error.message === invalid);
+  }
+  const failure = loader({}, {fetch: async () => Response.json({message:'站长分析尚未初始化，请管理员执行10号增量SQL'}, {status:503})})('lib/site-analysis-client.ts');
+  await assert.rejects(failure.siteAnalysisRequest('?tool=50'), /10号增量SQL/);
+  const malformed = loader({}, {fetch: async () => Response.json({message:{unsafe:'detail'}}, {status:500})})('lib/site-analysis-client.ts');
+  await assert.rejects(malformed.siteAnalysisRequest(''), /分析服务暂不可用/);
+  const aborted = new DOMException('Stopped', 'AbortError');
+  const cancelled = loader({}, {fetch: async () => ({json: async () => {throw aborted;}})})('lib/site-analysis-client.ts');
+  await assert.rejects(cancelled.siteAnalysisRequest(''), error => error === aborted);
+});
+
+test('分析请求保留JSON数据、私有读取与提交选项，不将错误当空列表', async () => {
+  const requests = [], payload = {authenticated:true,sites:[],history:[]};
+  const client = loader({}, {fetch: async (url, init) => {requests.push({url,init});return Response.json(payload);}})('lib/site-analysis-client.ts');
+  assert.deepEqual(clone(await client.siteAnalysisRequest('?tool=50')), payload);
+  const signal = new AbortController().signal;
+  await client.siteAnalysisRequest('', {method:'POST',body:'{"tool":50}',headers:{'Content-Type':'application/json'},signal});
+  assert.equal(requests[0].url, '/api/tools/site-analysis?tool=50');assert.equal(requests[0].init.cache,'no-store');
+  assert.equal(requests[1].init.method,'POST');assert.equal(requests[1].init.body,'{"tool":50}');assert.equal(requests[1].init.signal,signal);
+});
+
 test('域名规范化保留主机范围与协议，拒绝 IP、认证信息、本地名和特殊端口', () => {
   assert.equal(network.normalizeSite('example.co.uk/path?q=1').url, 'https://example.co.uk/'); assert.equal(network.normalizeSite('https://www.example.co.uk').domain, 'example.co.uk');
   assert.equal(network.normalizeSite('https://例子.com').host, 'xn--fsqu00a.com');

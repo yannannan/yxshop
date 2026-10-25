@@ -6,15 +6,12 @@ import { notifyAccountChanged, useAccount } from '../lib/account-client';
 import { accountLoginHref } from '../lib/account';
 import { engineDefinitions, siteRunLabels, stageLabels, type AnalysisSite, type EngineId, type SiteReport, type SiteRun } from '../lib/site-analysis';
 import { toolPagePath, type ToolService } from '../lib/tool-services';
+import { siteAnalysisRequest as api } from '../lib/site-analysis-client';
 
 type Workspace = { authenticated: boolean; sites: AnalysisSite[]; history: SiteRun[]; total: number; page: number; workerReady: boolean; access: { canAnalyze: boolean; chargeType: string; pointsCost: number; balance: number | null; hasMembership: boolean } };
 const kinds: Record<string, string> = { all: '全部来源', declared: '网站设置词', content: '内容提取词', manual: '用户添加词', search: '搜索发现词' };
 const stepNames: Record<string, string> = { dns: '域名解析', registration: '注册信息', pages: '网站页面', keywords: '网站关键词', 'engine:baidu': '百度', 'engine:bing': 'Bing', report: '生成报告', billing: '权益结算' };
 const safeLink = (value: string) => { try { const url = new URL(value); return ['https:', 'http:'].includes(url.protocol) && !url.username && !url.password ? url.href : undefined; } catch { return undefined; } };
-async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(`/api/tools/site-analysis${path}`, { cache: 'no-store', ...init });
-  const data = await response.json() as T & { message?: string }; if (!response.ok) throw new Error(data.message || '分析服务暂不可用，请稍后重试'); return data;
-}
 /* eslint-disable @next/next/no-html-link-for-pages -- 工具工作台的跨页导航沿用项目原生链接约定。 */
 export function SiteAnalysisDashboard({ tool }: { tool: ToolService }) {
   const { t, locale } = useI18n(), { account, loading: accountLoading } = useAccount();
