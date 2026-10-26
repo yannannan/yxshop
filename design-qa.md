@@ -129,3 +129,13 @@ final result for this refinement: blocked (visual verification only; code checks
 - Visual comparison remains **blocked / pending user acceptance** under the standing no-browser / no-preview instruction; no rendered breakpoint or screenshot acceptance is claimed.
 
 final result for this layout adjustment: blocked (visual verification only; code checks complete)
+
+## 2026-10-26 Overview grid and business keyword priority
+
+- Reference: `codex-clipboard-d54790c1-989e-428c-b813-38ed86445f7e.png`. The four overview panels now use two desktop columns and two rows, retaining a single column on small screens.
+- Keyword tags have a fixed 128px width, centered text, CSS ellipsis and a native full-text title. The actual full keyword remains available to assistive technology and the filtering callback; scroll and candidate totals remain.
+- A shared local rule ranks observed candidates using explicit user / metadata sources, titles, H1s, descriptions and the existing inferred industry. Generic words and repeated body frequency receive less weight. New collection prioritizes before the existing 200-candidate cap; existing reports sort both tags and detail rows without changing stored reports or issuing queries.
+- Verification: 49 analytics, 6 language and 8 production / development-module checks pass (63 total), including 3 new regressions for relevance, candidate retention and full-keyword interactions. Production build, changed-file ESLint and CSS syntax pass. The existing 20 unrelated TypeScript diagnostics remain.
+- Visual comparison is **blocked / pending user acceptance** under the standing instruction not to open browsers or start app / preview services. No live collection, business database access, rendered breakpoint or screenshot acceptance is claimed.
+
+final result for this overview refinement: blocked (visual verification only; code checks complete)

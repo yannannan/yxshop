@@ -122,7 +122,7 @@ export async function collectSiteReport(input: string, options: AnalysisOptions,
     await stage('pages', crawlIncomplete ? 'partial' : 'complete', crawlIncomplete ? '部分页面未完成，已保留可读取内容' : '已完成本轮范围内的网站采集', 58);
   } catch (e) { await stage('pages', 'failed', explain(e), 58); }
   await stage('keywords', 'running', '正在整理网站关键词', 60);
-  report.keywords = extractSiteKeywords(report.pages, options.keywords);
+  report.keywords = extractSiteKeywords(report.pages, options.keywords, report.profile);
   await stage('keywords', report.keywords.length ? 'complete' : 'unavailable', report.keywords.length ? '已整理关键词并保存来源' : '暂无足够内容提取关键词', 65);
   const seeds = [...new Set([...options.keywords, ...report.keywords.map(k => k.word)])].slice(0, 5);
   for (const engine of options.engines) {

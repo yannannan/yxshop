@@ -10,6 +10,7 @@ import { siteAnalysisRequest as api } from '../lib/site-analysis-client';
 import { SiteAnalysisProfile } from './site-analysis-profile';
 import { SearchEngineIdentity } from './search-engine-identity';
 import { SiteAnalysisOverviewPanels } from './site-analysis-overview-panels';
+import { prioritizeSiteKeywords } from '../lib/site-analysis-keywords';
 
 type Workspace = { authenticated: boolean; sites: AnalysisSite[]; history: SiteRun[]; total: number; page: number; workerReady: boolean; access: { canAnalyze: boolean; chargeType: string; pointsCost: number; balance: number | null; hasMembership: boolean } };
 const kinds: Record<string, string> = { all: '全部来源', declared: '网站设置词', content: '内容提取词', manual: '用户添加词', search: '搜索发现词' };
@@ -103,7 +104,7 @@ export function SiteAnalysisDashboard({ tool }: { tool: ToolService }) {
     const url = URL.createObjectURL(file), link = document.createElement('a'); link.href = url; link.download = `${run.host}-${run.id}.json`; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
   const showHistory = () => setView('history');
-  const filteredKeywords = report?.keywords.filter(k => (keywordFilter === 'all' || k.sources.some(s => s.kind === keywordFilter)) && k.word.toLowerCase().includes(keywordSearch.toLowerCase())) || [];
+  const filteredKeywords = report ? prioritizeSiteKeywords(report.keywords, report).filter(k => (keywordFilter === 'all' || k.sources.some(s => s.kind === keywordFilter)) && k.word.toLowerCase().includes(keywordSearch.toLowerCase())) : [];
   const wordsPage = Math.max(1, Math.min(Math.ceil(filteredKeywords.length / 10) || 1, keywordPage));
   const panels = [
     { key: 'overview', label: '综合看板', icon: Squares2X2Icon }, { key: 'keywords', label: '关键词挖掘', icon: MagnifyingGlassIcon }, { key: 'rankings', label: '搜索排名', icon: ChartBarIcon }, { key: 'competitors', label: '竞品对比', icon: ChartPieIcon }, { key: 'history', label: '分析记录', icon: DocumentChartBarIcon }, { key: 'sites', label: '站点管理', icon: WrenchScrewdriverIcon },

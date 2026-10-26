@@ -41,6 +41,7 @@ function fakeIO({ blocked = false, engineBlocked = false, brokenPage = false, dy
   return { io, requests };
 }
 const clone = value => JSON.parse(JSON.stringify(value));
+const { prioritizeSiteKeywords } = load('lib/site-analysis-keywords.ts');
 test('分析请求对HTML错误页和损坏JSON显示明确提示，保留业务错误与取消行为', async () => {
   const invalid = '分析服务返回异常响应，请重试或联系管理员检查服务日志';
   const english = loader()('lib/i18n.ts').translator('en');
@@ -85,6 +86,27 @@ test('真实 HTML 解析保留标题、关键词、链接和索引声明，正�
 test('关键词跨来源去重并保留来源，网站声明词不会被直接标成有排名', () => {
   const page = parser.parseSitePage(Buffer.from(html), 'https://example.org/'), rows = parser.extractSiteKeywords([page], ['网站分析','Website SEO']);
   const word = rows.find(w => w.word === '网站分析'); assert.equal(word.kind, 'manual'); assert.ok(word.sources.some(s => s.kind === 'declared')); assert.equal(rows.filter(w => w.word === '网站分析').length, 1); assert.ok(!rows.some(w => w.word === 'secret'));
+});
+
+test('关键词优先保留用户与站点声明，再按业务元信息和行业相关度排序，通用高频词降权且不改原始数据', () => {
+  const words = ['商品','正在','软件开发','AI获客','ChatGPT','无关话题','站点声明词','指定查询词'].map((word,index)=>({word,kind:index===6?'declared':index===7?'manual':'content',score:index<2?10000:1,sources:[{url:'https://example.org/',kind:index===6?'declared':index===7?'manual':'content'}]}));
+  const before=clone(words), context={profile:{title:'企业软件开发',description:'提供AI获客解决方案',industry:'软件与技术'},pages:[{status:200,h1:['AI获客']},{status:200,title:'ChatGPT服务',h1:['ChatGPT']}]};
+  const ordered=prioritizeSiteKeywords(words,context), index=word=>ordered.findIndex(item=>item.word===word);
+  assert.equal(ordered[0].word,'指定查询词');assert.equal(ordered[1].word,'站点声明词');
+  for(const core of ['软件开发','AI获客','ChatGPT'])for(const generic of ['商品','正在','无关话题'])assert.ok(index(core)<index(generic));
+  assert.deepEqual(clone(words),before);assert.deepEqual(ordered.map(word=>word.word).sort(),words.map(word=>word.word).sort());assert.equal(ordered.find(word=>word.word==='商品').score,10000);
+  const fallback=[{word:'AI',score:100},{word:'platform',score:1}];
+  assert.equal(prioritizeSiteKeywords(fallback,{profile:{title:'Email platform',industry:'constructor'}})[0].word,'platform');
+  assert.equal(prioritizeSiteKeywords([{word:'说明',score:10000},{word:'课程',score:1}],{profile:{industry:'教育培训'}})[0].word,'课程');
+  assert.deepEqual(prioritizeSiteKeywords([{word:'First'},{word:'Second'}]).map(word=>word.word),['First','Second']);
+});
+
+test('关键词截取前先按站点业务排序，重复页面正文不能挤掉核心词，仍保留200条上限与真实来源', () => {
+  const boilerplate=Array.from({length:260},(_,index)=>`candidate${index}`).join(' '), pages=[];
+  for(let index=0;index<5;index++)pages.push(parser.parseSitePage(Buffer.from(`<html><head><title>${index===0?'ChatGPT':''}</title></head><body><main>${Array(5).fill(boilerplate+' 商品 正在 说明').join(' ')}</main></body></html>`),`https://example.org/${index}`));
+  const rows=parser.extractSiteKeywords(pages,[],{title:'ChatGPT',description:'',industry:'软件与技术'});
+  assert.equal(rows.length,200);assert.equal(rows[0].word,'ChatGPT');assert.ok(rows[0].sources.some(source=>source.url==='https://example.org/0'));assert.equal(rows[0].kind,'content');
+  assert.ok(rows.some(word=>word.score>rows[0].score));
 });
 test('网站采集完成基础报告，限制同源范围并保存缺省注册主体状态', async () => {
   const f = fakeIO(), snapshots = [], report = await collector.collectSiteReport('example.org', model.analysisOptions({maxPages:5}), async (value, progress) => snapshots.push({ value: clone(value), progress }), f.io);
@@ -484,6 +506,21 @@ test('四个概况面板使用真实候选词，未知统计显示未接入，�
     assert.ok(markup.includes(locale==='en'?'DNS TXT record':'DNS TXT记录'));assert.ok(markup.includes(locale==='en'?'Verification itself does not collect visits':'验证本身不会收集访问数据'));
     assert.ok(markup.includes(locale==='en'?'Install the tracking script':'安装统计脚本'));assert.ok(!markup.includes('<script'));
     details.props.onToggle({currentTarget:{open:false}});assert.equal(open,false);
+  }
+});
+
+test('历史报告的核心关键词优先展示，长标签保留全文悬浮提示和完整筛选值，中文英文不改采集原文',()=>{
+  const translations=loader()('lib/i18n.ts'),report=collector.blankReport('example.org',model.analysisOptions({}));
+  const full='企业级AI运营自动化与行业精准获客解决方案（完整版本）';
+  report.profile.title=full;report.profile.industry='软件与技术';report.keywords=[{word:'正在',kind:'content',score:10000,sources:[]},{word:full,kind:'content',score:1,sources:[]}];
+  for(const locale of ['zh-CN','en']){
+    let selected='';
+    const ui=loader({'./language-provider':{useI18n:()=>({locale,t:translations.translator(locale)})},react:{...React,useState:()=>[false,()=>{}]}})('components/site-analysis-overview-panels.tsx');
+    const tree=ui.SiteAnalysisOverviewPanels({report,onKeyword:word=>{selected=word;}}),markup=renderToStaticMarkup(tree),$=require('cheerio').load(markup);
+    assert.deepEqual($('.seo-keyword-scroll button').map((_,node)=>$(node).text()).get(),[full,'正在']);
+    assert.equal($('.seo-keyword-scroll button').first().attr('title'),full);assert.equal($('.seo-panel-total').text(),'2');
+    uiElements(tree).find(node=>node.type==='button'&&node.props.title===full).props.onClick();assert.equal(selected,full);
+    assert.deepEqual(report.keywords.map(word=>word.word),['正在',full]);
   }
 });
 

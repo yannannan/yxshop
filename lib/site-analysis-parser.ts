@@ -1,5 +1,6 @@
 import { load, loadBuffer } from 'cheerio';
-import { engineDefinitions, type EngineId, type RankRecord, type SiteKeyword, type SitePage } from './site-analysis';
+import { engineDefinitions, type EngineId, type RankRecord, type SiteKeyword, type SitePage, type SiteProfile } from './site-analysis';
+import { prioritizeSiteKeywords } from './site-analysis-keywords';
 
 const clean = (text: string, size = 500) => text.replace(/\s+/g, ' ').trim().slice(0, size);
 export function parseSitePage(bytes: Buffer, url: string, status = 200, contentType = ''): SitePage {
@@ -18,7 +19,7 @@ export function parseSitePage(bytes: Buffer, url: string, status = 200, contentT
   return page;
 }
 const stopWords = new Set('首页 关于 我们 联系 更多 查看 点击 登录 注册 用户 服务 网站 文章 内容 分类 导航 返回 下一页 上一页 版权 所有 有限公司 有限 公司 产品 the and with this that from your you for are not more home contact about login copyright read learn'.split(' '));
-export function extractSiteKeywords(pages: SitePage[], manual: string[]): SiteKeyword[] {
+export function extractSiteKeywords(pages: SitePage[], manual: string[], profile?: Pick<SiteProfile, 'title' | 'description' | 'industry'>): SiteKeyword[] {
   const words = new Map<string, SiteKeyword>();
   const add = (word: string, kind: SiteKeyword['kind'], url: string, score: number) => {
     word = clean(word, 80).replace(/^[\s\p{P}]+|[\s\p{P}]+$/gu, ''); const key = word.toLowerCase();
@@ -39,7 +40,7 @@ export function extractSiteKeywords(pages: SitePage[], manual: string[]): SiteKe
       for (const [word, count] of occurrences) add(word, 'content', page.url, score * count);
     }
   }
-  return [...words.values()].sort((a,b) => b.score - a.score || a.word.localeCompare(b.word)).slice(0, 200);
+  return prioritizeSiteKeywords([...words.values()], { pages, profile }).slice(0, 200);
 }
 export function parseSearchResults(engine: EngineId, bytes: Buffer, source: string, keyword: string, host: string): RankRecord {
   const $ = loadBuffer(bytes, { encoding: { defaultEncoding: 'utf-8' } }), checkedAt = new Date().toISOString();
