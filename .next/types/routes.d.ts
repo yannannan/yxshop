@@ -20,15 +20,24 @@ declare global {
 }
 
 declare namespace VinextRouteTypes {
-  type PageRoute = "/" | "/addresses" | "/admin" | "/checkout/[id]" | "/orders" | "/points" | "/product/[id]" | "/products" | "/service-orders" | "/service-orders/[id]" | "/service/[slug]" | "/technician" | "/tools" | "/tools/[slug]";
-  type LayoutRoute = "/" | "/product/[id]";
-  type RouteHandlerRoute = "/api/addresses" | "/api/admin" | "/api/admin/homepage-display" | "/api/admin/onsite" | "/api/admin/points" | "/api/admin/session" | "/api/admin/summary" | "/api/admin/system" | "/api/admin/tools" | "/api/auth/logout" | "/api/auth/send-code" | "/api/auth/session" | "/api/auth/verify" | "/api/categories" | "/api/homepage-display" | "/api/order-notifications/reply" | "/api/orders" | "/api/payment-qrs" | "/api/points" | "/api/product-images" | "/api/products" | "/api/technical-consultations" | "/api/technical-payment-qrs" | "/api/technical-provider-applications" | "/api/technical-service-orders" | "/api/technical-services" | "/api/technician" | "/api/tools" | "/api/tools/access" | "/api/tools/stamp-maker" | "/api/tools/stamp-maker/preview" | "/api/tools/usage" | "/api/tools/video-extractor" | "/api/tools/video-extractor/download" | "/robots.txt" | "/sitemap.xml";
-  type AppRoute = "/" | "/addresses" | "/admin" | "/api/addresses" | "/api/admin" | "/api/admin/homepage-display" | "/api/admin/onsite" | "/api/admin/points" | "/api/admin/session" | "/api/admin/summary" | "/api/admin/system" | "/api/admin/tools" | "/api/auth/logout" | "/api/auth/send-code" | "/api/auth/session" | "/api/auth/verify" | "/api/categories" | "/api/homepage-display" | "/api/order-notifications/reply" | "/api/orders" | "/api/payment-qrs" | "/api/points" | "/api/product-images" | "/api/products" | "/api/technical-consultations" | "/api/technical-payment-qrs" | "/api/technical-provider-applications" | "/api/technical-service-orders" | "/api/technical-services" | "/api/technician" | "/api/tools" | "/api/tools/access" | "/api/tools/stamp-maker" | "/api/tools/stamp-maker/preview" | "/api/tools/usage" | "/api/tools/video-extractor" | "/api/tools/video-extractor/download" | "/checkout/[id]" | "/orders" | "/points" | "/product/[id]" | "/products" | "/robots.txt" | "/service-orders" | "/service-orders/[id]" | "/service/[slug]" | "/sitemap.xml" | "/technician" | "/tools" | "/tools/[slug]";
+  type PageRoute = "/" | "/account" | "/account/activity" | "/account/orders" | "/account/profile" | "/addresses" | "/admin" | "/ai-leads" | "/ai-operations" | "/checkout/[id]" | "/orders" | "/points" | "/product/[id]" | "/products" | "/service-orders" | "/service-orders/[id]" | "/service/[slug]" | "/technician" | "/tools" | "/tools/[slug]";
+  type LayoutRoute = "/" | "/account" | "/admin" | "/product/[id]";
+  type RouteHandlerRoute = "/api/account" | "/api/account/avatar" | "/api/account/records" | "/api/addresses" | "/api/admin" | "/api/admin/homepage-display" | "/api/admin/onsite" | "/api/admin/points" | "/api/admin/session" | "/api/admin/summary" | "/api/admin/system" | "/api/admin/tools" | "/api/auth/logout" | "/api/auth/send-code" | "/api/auth/session" | "/api/auth/verify" | "/api/categories" | "/api/homepage-display" | "/api/order-notifications/reply" | "/api/orders" | "/api/payment-qrs" | "/api/points" | "/api/product-images" | "/api/products" | "/api/site-tracker/[token]" | "/api/technical-consultations" | "/api/technical-payment-qrs" | "/api/technical-provider-applications" | "/api/technical-service-orders" | "/api/technical-services" | "/api/technician" | "/api/tools" | "/api/tools/access" | "/api/tools/site-analysis" | "/api/tools/stamp-maker" | "/api/tools/stamp-maker/preview" | "/api/tools/usage" | "/api/tools/video-extractor" | "/api/tools/video-extractor/download" | "/robots.txt" | "/s/[token]" | "/sitemap.xml";
+  type AppRoute = "/" | "/account" | "/account/activity" | "/account/orders" | "/account/profile" | "/addresses" | "/admin" | "/ai-leads" | "/ai-operations" | "/api/account" | "/api/account/avatar" | "/api/account/records" | "/api/addresses" | "/api/admin" | "/api/admin/homepage-display" | "/api/admin/onsite" | "/api/admin/points" | "/api/admin/session" | "/api/admin/summary" | "/api/admin/system" | "/api/admin/tools" | "/api/auth/logout" | "/api/auth/send-code" | "/api/auth/session" | "/api/auth/verify" | "/api/categories" | "/api/homepage-display" | "/api/order-notifications/reply" | "/api/orders" | "/api/payment-qrs" | "/api/points" | "/api/product-images" | "/api/products" | "/api/site-tracker/[token]" | "/api/technical-consultations" | "/api/technical-payment-qrs" | "/api/technical-provider-applications" | "/api/technical-service-orders" | "/api/technical-services" | "/api/technician" | "/api/tools" | "/api/tools/access" | "/api/tools/site-analysis" | "/api/tools/stamp-maker" | "/api/tools/stamp-maker/preview" | "/api/tools/usage" | "/api/tools/video-extractor" | "/api/tools/video-extractor/download" | "/checkout/[id]" | "/orders" | "/points" | "/product/[id]" | "/products" | "/robots.txt" | "/s/[token]" | "/service-orders" | "/service-orders/[id]" | "/service/[slug]" | "/sitemap.xml" | "/technician" | "/tools" | "/tools/[slug]";
 
   interface ParamMap {
     "/": {};
+    "/account": {};
+    "/account/activity": {};
+    "/account/orders": {};
+    "/account/profile": {};
     "/addresses": {};
     "/admin": {};
+    "/ai-leads": {};
+    "/ai-operations": {};
+    "/api/account": {};
+    "/api/account/avatar": {};
+    "/api/account/records": {};
     "/api/addresses": {};
     "/api/admin": {};
     "/api/admin/homepage-display": {};
@@ -50,6 +59,7 @@ declare namespace VinextRouteTypes {
     "/api/points": {};
     "/api/product-images": {};
     "/api/products": {};
+    "/api/site-tracker/[token]": { token: string; };
     "/api/technical-consultations": {};
     "/api/technical-payment-qrs": {};
     "/api/technical-provider-applications": {};
@@ -58,6 +68,7 @@ declare namespace VinextRouteTypes {
     "/api/technician": {};
     "/api/tools": {};
     "/api/tools/access": {};
+    "/api/tools/site-analysis": {};
     "/api/tools/stamp-maker": {};
     "/api/tools/stamp-maker/preview": {};
     "/api/tools/usage": {};
@@ -69,6 +80,7 @@ declare namespace VinextRouteTypes {
     "/product/[id]": { id: string; };
     "/products": {};
     "/robots.txt": {};
+    "/s/[token]": { token: string; };
     "/service-orders": {};
     "/service-orders/[id]": { id: string; };
     "/service/[slug]": { slug: string; };
@@ -80,6 +92,8 @@ declare namespace VinextRouteTypes {
 
   interface LayoutSlotMap {
     "/": never;
+    "/account": never;
+    "/admin": never;
     "/product/[id]": never;
   }
 }
