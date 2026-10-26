@@ -264,6 +264,66 @@
 .seo-verification-receipt.failed{border-color:#f0d8cf;background:#fff4ef;color:#a84332}
 .seo-site-install-notes{padding-left:21px;margin:21px 0 0;color:#65758a;font-size:13px;line-height:2}
 .seo-workspace .seo-country-table .seo-country-data td{padding:12px 10px;border-bottom:1px solid #e7edf4;font-size:14px}
+
+/* The workspace keeps two navigation levels; report tabs stay inside each page. */
+.seo-main{align-self:start;margin:0 auto}
+.seo-workspace-sidebar{padding-top:24px;overflow:hidden}
+.seo-workspace-sidebar .seo-sidebar-heading{padding-bottom:22px}
+.seo-workspace-sidebar .seo-sidebar-heading>span{font-size:11px;letter-spacing:1px}
+.seo-workspace-sidebar nav{gap:5px;flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;scrollbar-width:thin;padding:2px 0 12px}
+.seo-workspace-sidebar nav button{padding:12px 18px;gap:12px;font-size:15px;line-height:1.6;min-height:47px}
+.seo-workspace-sidebar .seo-menu-toggle>span{flex:1}
+.seo-workspace-sidebar .seo-menu-toggle>svg:last-child{width:15px;height:15px;transition:transform .15s}
+.seo-workspace-sidebar .seo-menu-toggle>svg.expanded{transform:rotate(180deg)}
+.seo-workspace-sidebar .seo-menu-group.current>.seo-menu-toggle{color:#b84316;font-weight:650}
+.seo-workspace-sidebar .seo-submenu{margin:1px 13px 7px 29px;border-left:1px solid #e4eaf0;padding:2px 0 2px 10px}
+.seo-workspace-sidebar .seo-submenu[hidden]{display:none}
+.seo-workspace-sidebar .seo-submenu button{font-size:15px;min-height:42px;padding:9px 10px;border:0;border-radius:7px;gap:10px;color:#56667a}
+.seo-workspace-sidebar .seo-submenu button.active{background:#fff1e7;color:#b84316}
+.seo-menu-dot{width:5px;height:5px;flex-shrink:0;background:#b6c2d0;border-radius:50%}
+.seo-submenu button.active .seo-menu-dot{background:#c64b18}
+.seo-workspace-sidebar .seo-return{margin-top:10px;padding-top:17px;flex-shrink:0}
+.seo-module-context{display:flex;align-items:center;gap:24px;padding:20px 24px;flex-wrap:wrap}
+.seo-module-context label{display:grid;gap:7px;min-width:240px}
+.seo-module-context>div{flex:1;min-width:160px}
+.seo-module-context :is(label>span,div>span){display:block;font-size:13px;color:#65758a}
+.seo-module-context strong{font-size:14px;font-weight:500;display:block;margin-top:7px}
+.seo-module-panel h3{font-size:17px;font-weight:650;margin:0 0 17px}
+.seo-module-tabs{display:flex;flex-wrap:wrap;gap:6px;border-bottom:1px solid #e4eaf0;margin:0 0 24px;padding-bottom:10px}
+.seo-module-tabs button{border:0;border-radius:7px;padding:10px 16px;background:transparent;color:#65758a;font-size:15px}
+.seo-module-tabs button[aria-selected=true]{color:#b84316;background:#fff1e7;font-weight:650}
+.seo-module-note{display:flex;align-items:flex-start;gap:9px;background:#f5f8fc;border:1px solid #e6edf5;color:#566b83;padding:12px 15px;border-radius:9px;font-size:14px;line-height:1.9;margin:0 0 22px}
+.seo-module-note>svg{width:18px;height:18px;margin-top:4px}
+.seo-module-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:15px;margin:23px 0}
+.seo-module-metrics>div{border:1px solid #e5eaf0;border-radius:10px;padding:20px;min-width:0}
+.seo-module-metrics span{display:block;font-size:14px;color:#65758a}
+.seo-module-metrics strong{display:block;font-size:25px;font-weight:650;line-height:1.5;margin-top:10px;overflow-wrap:anywhere}
+.seo-module-grid{display:grid;grid-template-columns:1.2fr 1fr;gap:32px;margin-top:30px}
+.seo-daily-chart{max-height:360px;overflow-y:auto;scrollbar-width:thin}
+.seo-daily-chart>div{display:grid;grid-template-columns:92px minmax(20px,1fr) 45px;align-items:center;gap:10px;margin:15px 0;font-size:12px;color:#65758a}
+.seo-daily-chart>div>div{height:8px;border-radius:4px;background:#f0f3f7;overflow:hidden}
+.seo-daily-chart>div>div>span{height:100%;display:block;background:#e87a48;border-radius:4px}
+.seo-daily-chart strong{text-align:right;font-size:13px;color:#28415d}
+.seo-module-toolbar{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin:18px 0}
+.seo-module-toolbar label{display:grid;gap:7px;font-size:13px;color:#65758a;min-width:230px}
+.seo-module-toolbar>span{font-size:13px;color:#65758a}
+.seo-module-path{display:block;color:#6a7e94;font-size:13px;margin-top:5px;overflow-wrap:anywhere;max-width:430px}
+.seo-module-empty{text-align:center;padding:40px 20px}
+.seo-module-empty>svg{width:42px;height:42px;color:#d67a4c}
+.seo-module-empty h2{font-size:21px;margin:15px 0 8px}
+.seo-module-empty p{font-size:15px;color:#65758a;margin-bottom:24px}
+.seo-module-planned{padding:32px;position:relative}
+.seo-module-planned>.seo-data-state{float:right}
+.seo-module-planned>svg{display:block;width:38px;height:38px;color:#bf7047;margin:9px 0 18px}
+.seo-module-planned h2{font-size:24px;margin:0 0 9px}
+.seo-module-planned>p{color:#65758a;font-size:15px;max-width:740px}
+.seo-module-capabilities{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:27px 0}
+.seo-module-capabilities>div{border:1px solid #e4eaf0;background:#f8fafc;border-radius:10px;padding:21px;display:grid;gap:12px}
+.seo-module-capabilities span{font-size:15px;color:#344e69}
+.seo-module-capabilities small{font-size:13px;color:#78899d}
+@media(max-width:1000px){.seo-module-grid{grid-template-columns:1fr}.seo-module-context{gap:16px}.seo-module-context label{min-width:180px}}
+@media(max-width:700px){.seo-workspace-sidebar{padding:14px 10px}.seo-workspace-sidebar nav{flex-direction:column;overflow-y:auto;max-height:340px;gap:1px}.seo-workspace-sidebar nav button{width:100%;padding:10px 14px;white-space:normal}.seo-workspace-sidebar .seo-submenu button{padding:8px 10px}.seo-workspace-sidebar .seo-return{margin:12px 12px 0;padding-top:12px}.seo-module-context{padding:18px}.seo-module-context label{width:100%}.seo-module-panel,.seo-module-planned{padding:20px}.seo-module-metrics{grid-template-columns:1fr 1fr}.seo-module-capabilities{grid-template-columns:1fr}.seo-module-toolbar label{min-width:0;width:100%}.seo-module-toolbar input{width:100%}.seo-module-metrics strong{font-size:21px}}
+@media(prefers-reduced-motion:reduce){.seo-workspace-sidebar .seo-menu-toggle>svg:last-child{transition:none}}
 .seo-workspace .seo-country-table .seo-country-data td:last-child{text-align:right}
 .seo-controls input[readonly]{background:#f5f7fa;color:#5d7189}
 @media(max-width:1100px){.seo-site-add{grid-template-columns:1fr auto}.seo-site-add>div{grid-column:1/-1}}

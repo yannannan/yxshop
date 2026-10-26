@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { AdjustmentsHorizontalIcon, ArrowDownTrayIcon, ArrowLeftIcon, ArrowPathIcon, ArrowRightIcon, ChartBarIcon, ChartPieIcon, CheckCircleIcon, ClockIcon, DocumentChartBarIcon, ExclamationTriangleIcon, GlobeAltIcon, InformationCircleIcon, MagnifyingGlassIcon, MinusCircleIcon, PrinterIcon, ShieldCheckIcon, Squares2X2Icon, WrenchScrewdriverIcon } from '@heroicons/react/24/outline';
+import { AdjustmentsHorizontalIcon, ArrowDownTrayIcon, ArrowPathIcon, ArrowRightIcon, CheckCircleIcon, ClockIcon, DocumentChartBarIcon, ExclamationTriangleIcon, GlobeAltIcon, InformationCircleIcon, MagnifyingGlassIcon, MinusCircleIcon, PrinterIcon, ShieldCheckIcon } from '@heroicons/react/24/outline';
 import { useI18n } from './language-provider';
 import { notifyAccountChanged, useAccount } from '../lib/account-client';
 import { accountLoginHref } from '../lib/account';
@@ -12,6 +12,9 @@ import { SearchEngineIdentity } from './search-engine-identity';
 import { SiteAnalysisOverviewPanels } from './site-analysis-overview-panels';
 import { prioritizeSiteKeywords } from '../lib/site-analysis-keywords';
 import { SiteManagement } from './site-management';
+import { SiteWorkspaceSidebar } from './site-workspace-sidebar';
+import { SiteWorkspaceModule } from './site-workspace-module';
+import { workspaceGroup, workspaceHref, workspacePages, workspaceView, type WorkspaceView } from '../lib/site-workspace';
 
 type Workspace = { authenticated: boolean; sites: AnalysisSite[]; history: SiteRun[]; total: number; page: number; workerReady: boolean; access: { canAnalyze: boolean; chargeType: string; pointsCost: number; balance: number | null; hasMembership: boolean } };
 const kinds: Record<string, string> = { all: '全部来源', declared: '网站设置词', content: '内容提取词', manual: '用户添加词', search: '搜索发现词' };
@@ -21,7 +24,7 @@ const safeLink = (value: string) => { try { const url = new URL(value); return [
 export function SiteAnalysisDashboard({ tool }: { tool: ToolService }) {
   const { t, locale } = useI18n(), { account, loading: accountLoading } = useAccount();
   const owner = account?.authenticated ? account.user?.id : undefined;
-  const [view, setView] = useState<'overview' | 'history' | 'sites'>('sites');
+  const [view, setView] = useState<WorkspaceView>('sites');
   const [siteId, setSiteId] = useState(''), [runId, setRunId] = useState(''), [page, setPage] = useState(1), [revision, setRevision] = useState(0);
   const [workspace, setWorkspace] = useState<{ owner?: number; data: Workspace | null }>({ data: null });
   const [record, setRecord] = useState<{ owner?: number; run: SiteRun | null }>({ run: null });
@@ -35,7 +38,11 @@ export function SiteAnalysisDashboard({ tool }: { tool: ToolService }) {
     const changed = identity.current !== owner && identity.current !== undefined; identity.current = owner; requestVersion.current++; post.current = null; draftTouched.current = false;
     void Promise.resolve().then(() => { setPending(false); if (changed) { setSiteId(''); setRunId(''); setDomain(''); setRecord({ run: null }); setWorkspace({ data: null }); setError(''); } });
   }, [owner]);
-  useEffect(() => { const id = new URLSearchParams(window.location.search).get('run'); if (id) void Promise.resolve().then(() => { setRunId(id); setView('overview'); }); }, []);
+  useEffect(() => {
+    let active = true;
+    const restore = () => { const query = new URLSearchParams(window.location.search), id = query.get('run') || '', site = query.get('site') || ''; void Promise.resolve().then(() => { if (!active) return; requestVersion.current++; setPending(false); draftTouched.current = Boolean(site); setSiteId(site); setDomain(''); setRunId(id); setView(workspaceView(window.location.search)); }); };
+    restore(); window.addEventListener('popstate',restore); return () => { active = false; window.removeEventListener('popstate',restore); };
+  }, []);
   useEffect(() => {
     if (!owner) return;
     const controller = new AbortController();
@@ -64,15 +71,22 @@ export function SiteAnalysisDashboard({ tool }: { tool: ToolService }) {
   const run = record.owner === owner && record.run?.id === runId ? record.run : null, report = run?.report;
   const busy = pending || Boolean(run && ['queued','running'].includes(run.status));
   const selectedSite = data?.sites.find(site => site.id === siteId && Boolean(site.verifiedAt));
-  const statisticsSite = report ? run?.siteId || '' : '';
+  const moduleView = !['sites','overview','history'].includes(view);
+  const moduleSite = data?.sites.find(site => site.id === siteId);
+  const moduleReport = run?.siteId === moduleSite?.id ? report : null;
+  const statisticsSite = view === 'overview' ? report ? run?.siteId || '' : '' : moduleView ? moduleSite?.id || '' : '';
   const statistics = statisticsRecord.owner === owner && statisticsRecord.siteId === statisticsSite ? statisticsRecord : null;
   useEffect(() => {
-    if (!owner || !statisticsSite || view !== 'overview') return;
-    const controller = new AbortController();
-    void api<{ statistics: SiteStatistics }>(`?tool=${tool.id}&statistics=${encodeURIComponent(statisticsSite)}`,{ signal: controller.signal }).then(result => {
-      if (!controller.signal.aborted && identity.current === owner) setStatisticsRecord({ owner, siteId: statisticsSite, data: result.statistics, error: '' });
-    }).catch(error => { if (!controller.signal.aborted && identity.current === owner) setStatisticsRecord({ owner, siteId: statisticsSite, data: null, error: error.message }); });
-    return () => controller.abort();
+    if (!owner || !statisticsSite || !['overview','traffic','realtime','pages'].includes(view)) return;
+    const controller = new AbortController(); let timer: ReturnType<typeof setTimeout>;
+    const load = async () => {
+      try {
+        const result = await api<{ statistics: SiteStatistics }>(`?tool=${tool.id}&statistics=${encodeURIComponent(statisticsSite)}`,{ signal: controller.signal });
+        if (!controller.signal.aborted && identity.current === owner) setStatisticsRecord({ owner, siteId: statisticsSite, data: result.statistics, error: '' });
+      } catch (error) { if (!controller.signal.aborted && identity.current === owner) setStatisticsRecord({ owner, siteId: statisticsSite, data: null, error: (error as Error).message }); }
+      finally { if (view === 'realtime' && !controller.signal.aborted) timer = setTimeout(load,15000); }
+    };
+    void load(); return () => { controller.abort(); clearTimeout(timer); };
   },[owner,statisticsSite,tool.id,revision,view]);
   useEffect(() => {
     if (!run || draftTouched.current) return;
@@ -84,9 +98,29 @@ export function SiteAnalysisDashboard({ tool }: { tool: ToolService }) {
     });
     return () => { active = false; };
   }, [run, data?.sites, owner]);
+  useEffect(() => {
+    const site = data?.sites.find(site => site.id === siteId);
+    if (!site || domain) return;
+    let active = true; const version = requestVersion.current;
+    void Promise.resolve().then(() => { if (active && identity.current === owner && requestVersion.current === version) setDomain(site.url); });
+    return () => { active = false; };
+  },[siteId,data?.sites,domain,owner]);
+  useEffect(() => {
+    if (!owner || !moduleView || !siteId || run?.siteId === siteId) return;
+    const controller = new AbortController();
+    void api<Workspace>(`?tool=${tool.id}&site=${encodeURIComponent(siteId)}&page=1`,{signal:controller.signal}).then(result => {
+      if (!controller.signal.aborted && identity.current === owner) {
+        const latest = result.history[0]?.id || ''; setRunId(latest);
+        const url = new URL(window.location.href);
+        if (url.searchParams.get('site') === siteId) { if (latest) url.searchParams.set('run',latest); else url.searchParams.delete('run'); window.history.replaceState(null,'',url); }
+      }
+    }).catch(error => { if (!controller.signal.aborted && identity.current === owner) setError(error.message); });
+    return () => controller.abort();
+  }, [owner,moduleView,siteId,run?.siteId,tool.id]);
   const date = (value: string) => { const stamp = new Date(value); return Number.isFinite(stamp.getTime()) ? stamp.toLocaleString(locale, { timeZone: 'Asia/Shanghai', hour12: false }) : t('尚未采集'); };
-  const selectSite = (id: string) => { const site = data?.sites.find(item => item.id === id); draftTouched.current = true; setSiteId(site?.id || ''); setDomain(site?.url || ''); post.current = null; };
-  const chooseRun = (id: string) => { requestVersion.current++; setPending(false); setRunId(id); setView('overview'); const target = data?.history.find(item => item.id === id); if (target) { draftTouched.current = true; setSiteId(target.siteId); setDomain(data?.sites.find(site => site.id === target.siteId)?.url || `https://${target.host}`); } const url = new URL(window.location.href); url.searchParams.set('run', id); window.history.replaceState(null, '', url); };
+  const selectSite = (id: string) => { const site = data?.sites.find(item => item.id === id); requestVersion.current++; setPending(false); draftTouched.current = true; setSiteId(site?.id || ''); setDomain(site?.url || ''); post.current = null; window.history.replaceState(null,'',workspaceHref(window.location.href,view,undefined,site?.id || '')); };
+  const navigate = (next: WorkspaceView, selected = siteId) => { setView(next); const url = workspaceHref(window.location.href,next,runId,selected); window.history.pushState(null,'',url); };
+  const chooseRun = (id: string, replace = false) => { requestVersion.current++; setPending(false); setRunId(id); setView('overview'); const target = data?.history.find(item => item.id === id); if (target) { draftTouched.current = true; setSiteId(target.siteId); setDomain(data?.sites.find(site => site.id === target.siteId)?.url || `https://${target.host}`); } window.history[replace ? 'replaceState' : 'pushState'](null,'',workspaceHref(window.location.href,'overview',id,target?.siteId || siteId)); };
   async function markIssue(code: string, url: string, state: string) {
     if (!run || !owner) return;
     const version = ++requestVersion.current; setPending(true);
@@ -107,30 +141,25 @@ export function SiteAnalysisDashboard({ tool }: { tool: ToolService }) {
     try {
       const result = await api<{ run: SiteRun }>('', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: post.current.id, tool: tool.id, domain: target, options }) });
       if (identity.current !== owner || requestVersion.current !== version) return;
-      setRecord({ owner, run: result.run }); setSiteId(result.run.siteId); setPage(1); chooseRun(result.run.id); setRevision(n => n + 1); post.current = null;
-    } catch (e) { if (identity.current === owner) setError((e as Error).message); }
-    finally { if (identity.current === owner) setPending(false); }
+      setRecord({ owner, run: result.run }); setSiteId(result.run.siteId); setPage(1); chooseRun(result.run.id,true); setRevision(n => n + 1); post.current = null;
+    } catch (e) { if (identity.current === owner && requestVersion.current === version) setError((e as Error).message); }
+    finally { if (identity.current === owner && requestVersion.current === version) setPending(false); }
   }
   function exportReport() {
     if (!report || !run) return;
     const file = new Blob([JSON.stringify({ id: run.id, status: run.status, report }, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(file), link = document.createElement('a'); link.href = url; link.download = `${run.host}-${run.id}.json`; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
-  const showHistory = () => setView('history');
+  const showHistory = () => navigate('history');
   const filteredKeywords = report ? prioritizeSiteKeywords(report.keywords, report).filter(k => (keywordFilter === 'all' || k.sources.some(s => s.kind === keywordFilter)) && k.word.toLowerCase().includes(keywordSearch.toLowerCase())) : [];
   const wordsPage = Math.max(1, Math.min(Math.ceil(filteredKeywords.length / 10) || 1, keywordPage));
-  const panels = [
-    { key: 'sites', label: '站点管理', icon: WrenchScrewdriverIcon }, { key: 'overview', label: '综合看板', icon: Squares2X2Icon }, { key: 'keywords', label: '关键词挖掘', icon: MagnifyingGlassIcon }, { key: 'rankings', label: '搜索排名', icon: ChartBarIcon }, { key: 'competitors', label: '竞品对比', icon: ChartPieIcon }, { key: 'history', label: '分析记录', icon: DocumentChartBarIcon },
-  ];
   return <div className="seo-workspace">
-    <aside className="seo-sidebar"><div className="seo-sidebar-heading"><span>SEO WORKSPACE</span><h2>{t('站长分析工具')}</h2></div>
-      <nav aria-label={t('站长分析导航')}>{panels.map(item => { const enabled = ['overview','history','sites'].includes(item.key); return <button key={item.key} className={view === item.key ? 'active' : ''} disabled={!enabled} aria-current={view === item.key ? 'page' : undefined} title={!enabled ? t('后续模块，待功能设计') : undefined} onClick={() => setView(item.key as typeof view)}><item.icon aria-hidden="true" /><span>{t(item.label)}</span>{!enabled && <small>{t('筹备中')}</small>}</button>; })}</nav>
-      <a className="seo-return" href="/tools"><ArrowLeftIcon aria-hidden="true" />{t('返回工具服务')}</a>
-    </aside>
+    <SiteWorkspaceSidebar view={view} onNavigate={navigate} />
     <main className="seo-main"><nav className="seo-breadcrumb" aria-label={t('面包屑')}><a href="/">{t('首页')}</a><span>/</span><a href="/tools">{t('工具服务')}</a><span>/</span><span>{t('站长分析工具')}</span></nav>
-      <div className="seo-title-row"><div><span className="seo-eyebrow">WEBSITE INTELLIGENCE</span><h1>{t(view === 'history' ? '分析记录' : view === 'sites' ? '站点管理' : '综合看板')}</h1><p>{t(view === 'sites' ? '配置域名、安装脚本与验证，统一管理站点接入。' : '从域名档案到搜索表现，记录每一次分析与变化。')}</p></div><button className="seo-quiet" onClick={() => setRevision(n => n + 1)}><ArrowPathIcon aria-hidden="true" />{t('刷新记录')}</button></div>
+      <div className="seo-title-row"><div><span className="seo-eyebrow">{t(moduleView || view === 'history' ? workspaceGroup(view).label : '站长运营工作台')}</span><h1>{t(workspacePages[view].label)}</h1><p>{t(workspacePages[view].description)}</p></div><button className="seo-quiet" onClick={() => setRevision(n => n + 1)}><ArrowPathIcon aria-hidden="true" />{t('刷新记录')}</button></div>
       {error && <p className="seo-alert" role="alert">{t(error)}<button onClick={() => setRevision(n => n + 1)}>{t('重试读取')}</button></p>}
       {!owner ? <section className="seo-card seo-welcome"><GlobeAltIcon aria-hidden="true" /><h2>{t('从一个域名，了解你的网站')}</h2><p>{t('登录后添加并验证站点，生成综合报告并保存分析历史。')}</p><a className="seo-primary" href={accountLoginHref(toolPagePath(tool.slug))}>{t(accountLoading ? '正在读取账户…' : '登录并开始分析')}</a><div className="seo-welcome-steps"><span>{t('域名档案')}</span><span>{t('关键词概况')}</span><span>{t('各引擎表现')}</span><span>{t('运营建议')}</span></div></section> : <>
+      {moduleView && <><section className="seo-card seo-module-context"><label><span>{t('当前网站')}</span><select aria-label={t('分析模块站点')} value={siteId} onChange={event => { selectSite(event.target.value); setRunId(''); }}><option value="">{t('选择已有站点')}</option>{data?.sites.map(site=><option key={site.id} value={site.id}>{site.host}{!site.verifiedAt ? ` · ${t('待验证')}` : ''}</option>)}</select></label><div><span>{t('报告时间')}</span><strong>{moduleReport ? date(moduleReport.collectedAt) : t('尚无本站采集报告')}</strong></div><button type="button" className="seo-quiet" onClick={() => navigate('overview')}>{t('打开完整报告')}<ArrowRightIcon aria-hidden="true" /></button></section>{!moduleSite ? <section className="seo-card seo-welcome"><GlobeAltIcon aria-hidden="true" /><h2>{t('请先选择站点')}</h2><p>{t('所有分析和运营数据均按所选站点展示。')}</p><button type="button" className="seo-primary" onClick={() => navigate('sites')}>{t('前往站点管理')}</button></section> : <SiteWorkspaceModule key={`${owner}:${view}:${siteId}`} view={view} report={moduleReport} statistics={statistics?.data} statisticsError={statistics?.error} statisticsLoading={['traffic','realtime','pages'].includes(view) && !statistics} date={date} onNavigate={navigate} onIssue={(code,url,state)=>void markIssue(code,url,state)} canEditIssues={Boolean(moduleReport && !busy && ['completed','partial'].includes(run?.status || ''))} />}</>}
       {view === 'overview' && <form className="seo-card seo-controls seo-console" onSubmit={analyze} aria-labelledby="seo-conditions-title">
         <div className="seo-console-heading"><span className="seo-heading-icon"><AdjustmentsHorizontalIcon aria-hidden="true" /></span><div><h2 id="seo-conditions-title">{t('分析条件')}</h2><p>{t('先在站点管理配置并验证域名，再选择站点开始分析。')}</p></div></div>
         <div className="seo-conditions-body">
@@ -142,7 +171,7 @@ export function SiteAnalysisDashboard({ tool }: { tool: ToolService }) {
             <button className="seo-primary" type="submit" disabled={busy || !selectedSite || !data?.access.canAnalyze || data.workerReady === false}><MagnifyingGlassIcon aria-hidden="true" />{t(busy ? '正在分析…' : run ? '重新分析' : '开始分析')}<ArrowRightIcon aria-hidden="true" /></button>
           </div>
           <p className="seo-keyword-help" id="seo-keyword-purpose">{t('填写你关心的搜索词，优先用于排名查询；留空则自动提取，不会修改网站的关键词设置。每轮最多查询前5个重点词。')}</p>
-        {data && !selectedSite && <p className="seo-inline-note">{t('请先选择已验证站点')} <button type="button" className="seo-text-button" onClick={() => setView('sites')}>{t('前往站点管理')}</button></p>}
+        {data && !selectedSite && <p className="seo-inline-note">{t('请先选择已验证站点')} <button type="button" className="seo-text-button" onClick={() => navigate('sites')}>{t('前往站点管理')}</button></p>}
         {data && !data.access.canAnalyze && <p className="seo-inline-note">{t(data.access.chargeType === 'pending' ? '收费方式待确认，暂未开放分析' : data.access.chargeType === 'points' ? '积分不足，请充值后分析' : '暂无有效套餐，请购买后分析')}<a href={data.access.chargeType === 'points' ? '/points' : `/product/${tool.id}`}>{t('查看权益')}</a></p>}
         {data?.access.chargeType === 'points' && <p className="seo-inline-note">{t('剩余积分')}：{data.access.balance ?? '—'} · {t('每份完整报告')}：{data.access.pointsCost} {t('积分')}{data.access.hasMembership && ` · ${t('有效套餐优先使用')}`}</p>}
         {data?.workerReady === false && <p className="seo-alert">{t('采集进程尚未就绪，请管理员检查站长采集日志')}</p>}
@@ -158,7 +187,7 @@ export function SiteAnalysisDashboard({ tool }: { tool: ToolService }) {
         </div>
         <div className="seo-control-meta"><span><ClockIcon aria-hidden="true" />{t('最近分析')}：{run ? date(run.createdAt) : t('尚未采集')}</span><span><ShieldCheckIcon aria-hidden="true" />{t('完整报告成功后使用权益，部分完成或失败不扣费。')}</span></div>
       </form>}
-      {view === 'history' ? <section className="seo-card"><div className="seo-section-title"><div><h2>{t('历史分析报告')}</h2><p>{t('每次分析独立保存，打开历史记录不会重新采集或扣费。')}</p></div><span>{data?.total ?? '—'} {t('份报告')}</span></div><div className="seo-table-wrap"><table><thead><tr><th>{t('网站')}</th><th>{t('分析时间')}</th><th>{t('状态')}</th><th>{t('积分消耗')}</th><th>{t('操作')}</th></tr></thead><tbody>{data?.history.map(item => <tr key={item.id}><td><strong>{item.host}</strong><small>{item.id.slice(0,8)}</small></td><td>{date(item.createdAt)}</td><td><span className={`seo-status ${item.status}`}>{t(siteRunLabels[item.status])}</span></td><td>{item.pointsSpent}</td><td><button className="seo-text-button" onClick={() => chooseRun(item.id)}>{t('查看报告')}</button></td></tr>)}</tbody></table></div>{!data?.history.length && <p className="seo-empty">{t('暂无分析记录，输入域名开始第一份报告。')}</p>}<div className="seo-pagination"><button disabled={page <= 1} onClick={() => setPage(n => n - 1)}>{t('上一页')}</button><span>{data?.page || 1} / {Math.max(1, Math.ceil((data?.total || 0) / 10))}</span><button disabled={page * 10 >= (data?.total || 0)} onClick={() => setPage(n => n + 1)}>{t('下一页')}</button></div></section> : view === 'sites' ? <SiteManagement key={owner} sites={data?.sites || []} toolId={tool.id} onChanged={() => { if (identity.current === owner) setRevision(n => n + 1); }} onAnalyze={site => { draftTouched.current = true; setSiteId(site.id); setDomain(site.url); setView('overview'); }} /> : <>
+      {view === 'history' ? <section className="seo-card"><div className="seo-section-title"><div><h2>{t('历史分析报告')}</h2><p>{t('每次分析独立保存，打开历史记录不会重新采集或扣费。')}</p></div><span>{data?.total ?? '—'} {t('份报告')}</span></div><div className="seo-table-wrap"><table><thead><tr><th>{t('网站')}</th><th>{t('分析时间')}</th><th>{t('状态')}</th><th>{t('积分消耗')}</th><th>{t('操作')}</th></tr></thead><tbody>{data?.history.map(item => <tr key={item.id}><td><strong>{item.host}</strong><small>{item.id.slice(0,8)}</small></td><td>{date(item.createdAt)}</td><td><span className={`seo-status ${item.status}`}>{t(siteRunLabels[item.status])}</span></td><td>{item.pointsSpent}</td><td><button className="seo-text-button" onClick={() => chooseRun(item.id)}>{t('查看报告')}</button></td></tr>)}</tbody></table></div>{!data?.history.length && <p className="seo-empty">{t('暂无分析记录，输入域名开始第一份报告。')}</p>}<div className="seo-pagination"><button disabled={page <= 1} onClick={() => setPage(n => n - 1)}>{t('上一页')}</button><span>{data?.page || 1} / {Math.max(1, Math.ceil((data?.total || 0) / 10))}</span><button disabled={page * 10 >= (data?.total || 0)} onClick={() => setPage(n => n + 1)}>{t('下一页')}</button></div></section> : view === 'sites' ? <SiteManagement key={owner} sites={data?.sites || []} toolId={tool.id} onChanged={() => { if (identity.current === owner) setRevision(n => n + 1); }} onAnalyze={site => { draftTouched.current = true; setSiteId(site.id); setDomain(site.url); navigate('overview',site.id); }} /> : view === 'overview' ? <>
         {run && <section className="seo-card seo-run-state seo-console" aria-live="polite" aria-labelledby="seo-run-title">
           <div className="seo-section-title"><div className="seo-run-identity"><span className="seo-heading-icon"><DocumentChartBarIcon aria-hidden="true" /></span><div><span className="seo-eyebrow">{t('任务进度与导出')}</span><h2 id="seo-run-title">{run.host}</h2></div></div><div className="seo-report-actions"><span className={`seo-status ${run.status}`}>{t(siteRunLabels[run.status])}</span><button className="seo-quiet" onClick={exportReport} disabled={!report || busy}><ArrowDownTrayIcon aria-hidden="true" />{t('导出JSON')}</button><button className="seo-quiet" onClick={() => window.print()} disabled={!report || busy}><PrinterIcon aria-hidden="true" />{t('打印报告')}</button></div></div>
           <dl className="seo-report-meta"><div><dt>{t('报告编号')}</dt><dd>{run.id.slice(0,8)}</dd></div><div><dt>{t('分析时间')}</dt><dd>{date(run.createdAt)}</dd></div><div><dt>{t('权益结算')}</dt><dd>{t(run.pointsSpent ? `已使用 ${run.pointsSpent} 积分` : run.status === 'completed' ? '已按当前权益结算' : '本次尚未扣费')}</dd></div></dl>
@@ -169,14 +198,14 @@ export function SiteAnalysisDashboard({ tool }: { tool: ToolService }) {
         {report && <nav className="seo-report-nav" aria-label={t('报告章节')}>{[['seo-domain-profile','站点基本信息'],['seo-overview-panels','数据概览'],['seo-engine-visibility','各引擎表现'],['seo-keyword-details','关键词明细'],['seo-report-findings','运营建议']].map(([anchor,label]) => <a href={`#${anchor}`} key={anchor}>{t(label)}</a>)}</nav>}
         {!report ? <section className="seo-card seo-welcome"><GlobeAltIcon aria-hidden="true" /><h2>{t(run ? '正在准备你的网站报告' : '建立网站的第一份分析档案')}</h2><p>{t(run ? '任务已保存，页面关闭后后台仍会继续处理。' : '输入域名后，基础信息、页面内容与关键词将分步呈现。')}</p><div className="seo-welcome-steps"><span>{t('确认域名')}</span><span>{t('采集数据')}</span><span>{t('生成报告')}</span><span>{t('保存历史')}</span></div></section> : <>
         <SiteAnalysisProfile report={report} date={date} />
-        <SiteAnalysisOverviewPanels report={report} onManage={() => setView('sites')} statistics={statistics?.data} statisticsError={statistics?.error} statisticsLoading={!statistics} onKeyword={word => { setKeywordFilter('all'); setKeywordSearch(word); setKeywordPage(1); }} />
+        <SiteAnalysisOverviewPanels report={report} onManage={() => navigate('sites')} statistics={statistics?.data} statisticsError={statistics?.error} statisticsLoading={!statistics} onKeyword={word => { setKeywordFilter('all'); setKeywordSearch(word); setKeywordPage(1); }} />
         <EngineVisibility report={report} date={date} group={engineGroup} onGroup={setEngineGroup} />
         <section className="seo-card seo-report-panel" id="seo-keyword-details"><div className="seo-section-title"><div><h2>{t('域名关键词概况')}</h2><p>{t('候选词与真实排名分开展示，每个词保留来源。')}</p></div><span>{report.keywords.length} {t('个候选词')}</span></div><div className="seo-keyword-filters"><label><span className="seo-sr-only">{t('筛选关键词')}</span><input placeholder={t('搜索本次报告关键词')} value={keywordSearch} onChange={e => { setKeywordSearch(e.target.value); setKeywordPage(1); }} /></label><select aria-label={t('关键词来源')} value={keywordFilter} onChange={e => { setKeywordFilter(e.target.value); setKeywordPage(1); }}>{Object.entries(kinds).map(([id,label]) => <option key={id} value={id}>{t(label)}</option>)}</select></div><div className="seo-table-wrap"><table><thead><tr><th>{t('关键词')}</th><th>{t('来源')}</th><th>{t('关联页面')}</th><th>{t('已观测排名')}</th></tr></thead><tbody>{filteredKeywords.slice((wordsPage - 1) * 10, wordsPage * 10).map(word => <tr key={word.word}><td><strong>{word.word}</strong></td><td>{[...new Set(word.sources.map(s => s.kind))].map(kind => t(kinds[kind])).join(' / ')}</td><td><details><summary>{new Set(word.sources.map(s => s.url).filter(Boolean)).size} {t('个页面')}</summary>{word.sources.filter(s => s.url).map((source, i) => <a key={`${source.url}:${i}`} href={safeLink(source.url)} target="_blank" rel="noreferrer">{source.url}</a>)}</details></td><td>{report.rankings.filter(r => r.keyword === word.word && r.state === 'found').map(r => `${engineDefinitions.find(e => e.id === r.engine)?.name} #${r.position}`).join(' · ') || t(report.rankings.some(r => r.keyword === word.word && r.state === 'not_found') ? '本次查询范围未命中' : '暂无有效排名数据')}</td></tr>)}</tbody></table></div>{!filteredKeywords.length && <p className="seo-empty">{t('暂无匹配关键词')}</p>}<div className="seo-pagination"><button disabled={wordsPage <= 1} onClick={() => setKeywordPage(wordsPage - 1)}>{t('上一页')}</button><span>{wordsPage} / {Math.max(1, Math.ceil(filteredKeywords.length / 10))}</span><button disabled={wordsPage * 10 >= filteredKeywords.length} onClick={() => setKeywordPage(wordsPage + 1)}>{t('下一页')}</button></div></section>
         <div className="seo-two-columns"><section className="seo-card seo-report-panel"><div className="seo-section-title"><h2>{t('重点页面')}</h2><span>{t('本轮已读取')}</span></div><div className="seo-page-list">{report.pages.slice(0, 10).map((item, index) => <div key={`${item.url}:${index}`}><span className={`seo-status ${item.status < 400 ? 'complete' : 'failed'}`}>{item.status}</span><div><strong>{item.title || t('页面标题未读取')}</strong><a href={safeLink(item.url)} target="_blank" rel="noreferrer">{item.url}</a></div></div>)}</div></section><section className="seo-card seo-report-panel"><div className="seo-section-title"><h2>{t('本次变化')}</h2></div>{report.comparison ? <div className="seo-comparison"><p>{t('与上一次相同分析条件的报告比较')}</p><dl><div><dt>{t('新增候选词')}</dt><dd>{report.comparison.added}</dd></div><div><dt>{t('未再提取到的候选词')}</dt><dd>{report.comparison.removed}</dd></div><div><dt>{t('排名上升')}</dt><dd>{report.comparison.up}</dd></div><div><dt>{t('排名下降')}</dt><dd>{report.comparison.down}</dd></div></dl><small>{t('只比较双方均成功查询的相同关键词，不把失败计为下降。')}</small></div> : <p className="seo-empty">{t('暂无可比历史。相同条件再次分析后展示变化。')}</p>}<p className="seo-inline-note">{t('竞品摘要将在竞品模块完成设计与接入后提供。')}</p></section></div>
         <section className="seo-card seo-report-panel" id="seo-report-findings"><div className="seo-section-title"><div><h2>{t('运营机会与待处理事项')}</h2><p>{t('建议基于本轮实际采集页面，请结合网站用途判断。')}</p></div><span>{report.issues.length} {t('项')}</span></div>{report.issues.slice(0, issueLimit).map((issue, i) => <div className="seo-issue" key={`${issue.code}:${i}`}><span className={`seo-status ${issue.severity}`}>{t(issue.severity === 'high' ? '优先检查' : issue.severity === 'info' ? '提示' : '建议处理')}</span><div><strong>{t(issue.title)}</strong><p>{t(issue.advice)}</p><a href={safeLink(issue.url)} target="_blank" rel="noreferrer">{issue.url}</a></div><select aria-label={t('事项处理状态')} value={issue.state || 'pending'} disabled={busy || !['completed','partial'].includes(run?.status || '')} onChange={e => void markIssue(issue.code, issue.url, e.target.value)}><option value="pending">{t('待处理')}</option><option value="resolved">{t('已处理')}</option><option value="ignored">{t('已忽略')}</option></select></div>)}{report.issues.length > issueLimit && <button className="seo-text-button" onClick={() => setIssueLimit(n => n + 20)}>{t('查看更多事项')}</button>}{!report.issues.length && <p className="seo-empty">{t('本轮采集范围内未发现上述规则对应的问题。')}</p>}</section>
         <p className="seo-footnote">{t('报告基于公开数据和本轮采集范围；关键词数量不等于搜索量，观测排名不等于真实流量。')}<button className="seo-text-button" onClick={showHistory}>{t('查看分析记录')}</button></p>
         </>}
-      </>}
+      </> : null}
       </>}
     </main>
   </div>;

@@ -349,6 +349,15 @@ function fixture({chargeType='free',balance=300,failTable='',registered=true,ver
         }
         else if(table==='site_analysis_visits'){
           rows=rows.filter(r=>r.site_id===args[0]&&(sql.includes('session_key=?')?r.session_key===args[1]:r.created_at>=args[1]));if(sql.startsWith('SELECT channel FROM'))return rows.slice(0,1);
+          if(sql.includes('AS activeSessions'))return[{activeSessions:new Set(rows.map(r=>r.session_key)).size}];
+          if(sql.includes('GROUP BY BINARY page_path')){
+            const groups=new Map();for(const row of rows){let item=groups.get(row.page_path);if(!item){item={path:row.page_path,pageviews:0,keys:new Set(),lastSeenAt:''};groups.set(row.page_path,item);}item.pageviews++;item.keys.add(row.session_key);if(row.created_at>item.lastSeenAt)item.lastSeenAt=row.created_at;}
+            return[...groups.values()].map(({keys,...item})=>({...item,sessions:keys.size})).sort((a,b)=>b.pageviews-a.pageviews||b.lastSeenAt.localeCompare(a.lastSeenAt)).slice(0,100);
+          }
+          if(sql.includes('SELECT DATE_FORMAT')){
+            const groups=new Map();for(const row of rows){const day=new Date(Date.parse(row.created_at)+8*3600000).toISOString().slice(0,10);let item=groups.get(day);if(!item){item={day,pageviews:0,keys:new Set()};groups.set(day,item);}item.pageviews++;item.keys.add(row.session_key);}
+            return[...groups.values()].map(({keys,...item})=>({...item,sessions:keys.size})).sort((a,b)=>a.day.localeCompare(b.day));
+          }
           if(sql.includes('GROUP BY')){const field=sql.includes('GROUP BY channel')?'channel':'country_code',groups=new Map();for(const row of rows){if(!groups.has(row[field]))groups.set(row[field],new Set());groups.get(row[field]).add(row.session_key);}return [...groups].map(([key,sessions])=>({[field==='channel'?'channel':'code']:key,visits:sessions.size}));}
           return[{pageviews:rows.length,sessions:new Set(rows.map(r=>r.session_key)).size}];
         }
@@ -759,11 +768,11 @@ test('SQL只新增九张业务表并补空入口，日常升级不安装新的�
   const ddl=readFileSync(new URL('sql/10_site_analysis_20261025.sql',root),'utf8');assert.equal((ddl.match(/CREATE TABLE IF NOT EXISTS /g)||[]).length,9);assert.doesNotMatch(ddl,/DROP TABLE|TRUNCATE|UPDATE users|SET tool_charge_type/i);assert.match(ddl,/uq_analysis_site\(user_id,host\)/);assert.match(ddl,/claim_token/);assert.match(ddl,/site_analysis_issue_actions/);
   const upgrade=readFileSync(new URL('upgrade.sh',root),'utf8');assert.match(upgrade,/--check/);assert.ok(!upgrade.includes('site-analysis-worker.ts'));const start=readFileSync(new URL('start.sh',root),'utf8');assert.match(start,/site-analysis-worker.sh/);
 });
-test('所选版面SSR保持左侧工作台、匿名入口和规划模块状态，英文界面可显示且不翻译采集内容',()=>{
+test('所选版面SSR保持五类工作台与匿名入口，英文界面可显示且不翻译采集内容',()=>{
   const english=loader()('lib/i18n.ts');
   for(const locale of ['zh-CN','en']){
     const ui=loader({'./language-provider':{useI18n:()=>({locale,t:english.translator(locale)})},'../lib/account-client':{useAccount:()=>({account:{authenticated:false},loading:false}),notifyAccountChanged(){}},react:{...React,useEffect(){},useRef:v=>({current:v}),useState:v=>[v,()=>{}]}})('components/site-analysis-dashboard.tsx');
-    const markup=renderToStaticMarkup(React.createElement(ui.SiteAnalysisDashboard,{tool:{id:50,slug:'webmaster-tools'}}));assert.match(markup,/seo-sidebar/);assert.match(markup,/seo-main/);assert.ok(markup.includes(locale==='en'?'Overview':'综合看板'));assert.ok(markup.includes(locale==='en'?'Sign in to analyze':'登录并开始分析'));assert.match(markup,/disabled=""/);assert.ok(!markup.includes('example.com'));assert.match(markup,/href="\/tools"/);
+    const markup=renderToStaticMarkup(React.createElement(ui.SiteAnalysisDashboard,{tool:{id:50,slug:'webmaster-tools'}}));assert.match(markup,/seo-sidebar/);assert.match(markup,/seo-main/);assert.ok(markup.includes(locale==='en'?'Overview':'综合看板'));assert.ok(markup.includes(locale==='en'?'Sign in to analyze':'登录并开始分析'));assert.match(markup,/aria-expanded="false"/);assert.ok(!markup.includes('example.com'));assert.match(markup,/href="\/tools"/);
   }
 });
 test('真实报告界面显示缺失/受限状态和业务原文，开始分析只提交当前表单条件与幂等编号', async()=>{
@@ -782,16 +791,17 @@ test('真实报告界面显示缺失/受限状态和业务原文，开始分析�
 });
 
 function uiElements(node) { if(Array.isArray(node))return node.flatMap(uiElements);return React.isValidElement(node)?[node,...uiElements(node.props.children)]:[]; }
-function dashboardFixture({effectsEnabled=false}={}) {
+function dashboardFixture({effectsEnabled=false,initialHref=`https://shop.example/tools/webmaster-tools.html?view=overview&run=${id}&site=${otherId}`}={}) {
   const translation=loader()('lib/i18n.ts'), report=collector.blankReport('example.org',model.analysisOptions({}));
   const run={id,siteId:otherId,host:'example.org',status:'completed',progress:100,stage:'report',error:'',createdAt:'2026-10-26T00:00:00Z',pointsSpent:0,report};
   const third='33333333-3333-4333-8333-333333333333', sites=[{id:otherId,host:'example.org',url:'https://example.org/',verifiedAt:'2026-01-01'},{id:third,host:'www.next.example.org',url:'http://www.next.example.org/',verifiedAt:'2026-01-01'}];
   const workspace={sites,history:[run],total:1,page:1,workerReady:true,access:{canAnalyze:true,chargeType:'free'}};
-  const slots={0:'overview',1:otherId,2:id,5:{owner:1,data:workspace},6:{owner:1,run}}, refs=[], pendingEffects=[], deps=[], requests=[];
+  const slots={0:'overview',1:otherId,2:id,5:{owner:1,data:workspace},6:{owner:1,run}}, refs=[], pendingEffects=[], deps=[], requests=[], cleanups=[], events=new Map(),timers=new Map();let timerId=0;
+  const account={authenticated:true,user:{id:1}},location={href:initialHref,get search(){return new URL(this.href).search;}},history={replaceState(_state,_title,url){location.href=new URL(url,location.href).href;},pushState(_state,_title,url){location.href=new URL(url,location.href).href;}};
   let cursor=0,refCursor=0,effectCursor=0;
-  const react={...React,useState(initial){const n=cursor++;if(!(n in slots))slots[n]=initial;return[slots[n],value=>{slots[n]=typeof value==='function'?value(slots[n]):value;}];},useRef(initial){return refs[refCursor++]??=( {current:initial} );},useEffect(fn,next){const n=effectCursor++;if(!effectsEnabled)return;if(deps[n]&&next.every((v,i)=>v===deps[n][i]))return;deps[n]=next;pendingEffects.push(fn);}};
-  const ui=loader({'./language-provider':{useI18n:()=>({locale:'zh-CN',t:translation.translator('zh-CN')})},'../lib/account-client':{useAccount:()=>({account:{authenticated:true,user:{id:1}},loading:false}),notifyAccountChanged(){}},react},{window:{location:{href:'https://shop.example/tools/webmaster-tools.html',search:''},history:{replaceState(){}}},async fetch(path,options){requests.push({path,body:options?.body&&JSON.parse(options.body)});return Response.json(options?.method==='POST'?{run:{...run,status:'queued',report:null}}:String(path).includes('&run=')?{run}:workspace);}})('components/site-analysis-dashboard.tsx');
-  return {slots,requests,sites,run,render(){cursor=0;refCursor=0;effectCursor=0;return ui.SiteAnalysisDashboard({tool:{id:50,slug:'webmaster-tools'}});},flushEffects(){for(const effect of pendingEffects.splice(0))effect();}};
+  const react={...React,useState(initial){const n=cursor++;if(!(n in slots))slots[n]=initial;return[slots[n],value=>{slots[n]=typeof value==='function'?value(slots[n]):value;}];},useRef(initial){return refs[refCursor++]??=( {current:initial} );},useEffect(fn,next){const n=effectCursor++;if(!effectsEnabled)return;if(deps[n]&&next.every((v,i)=>v===deps[n][i]))return;deps[n]=next;pendingEffects.push({n,fn});}};
+  const ui=loader({'./language-provider':{useI18n:()=>({locale:'zh-CN',t:translation.translator('zh-CN')})},'../lib/account-client':{useAccount:()=>({account,loading:false}),notifyAccountChanged(){}},react},{setTimeout(fn,ms){const id=++timerId;timers.set(id,{fn,ms});return id;},clearTimeout(id){timers.delete(id);},window:{location,history,addEventListener(name,fn){events.set(name,fn);},removeEventListener(name,fn){if(events.get(name)===fn)events.delete(name);}},async fetch(path,options){requests.push({path,signal:options?.signal,body:options?.body&&JSON.parse(options.body)});return Response.json(options?.method==='POST'?{run:{...run,status:'queued',report:null}}:String(path).includes('&statistics=')?{statistics:{siteId:otherId,connected:true,active:true,verified:true,pageviews:5,sessions:2,activeSessions:1,channels:[],countries:[],pages:[],daily:[]}}:String(path).includes('&run=')?{run:workspace.history.find(item=>item.id===new URL(String(path),'https://shop.example').searchParams.get('run'))||run}:String(path).includes('&site=')?{...workspace,history:workspace.history.filter(item=>item.siteId===new URL(String(path),'https://shop.example').searchParams.get('site'))}:workspace);}})('components/site-analysis-dashboard.tsx');
+  return {slots,requests,sites,run,workspace,account,location,events,timers,render(){cursor=0;refCursor=0;effectCursor=0;return ui.SiteAnalysisDashboard({tool:{id:50,slug:'webmaster-tools'}});},flushEffects(){for(const {n,fn} of pendingEffects.splice(0)){cleanups[n]?.();cleanups[n]=fn();}},dispose(){for(const cleanup of cleanups)cleanup?.();},pop(href){location.href=href;events.get('popstate')?.();}};
 }
 
 test('选择站点只填充完整URL，保留当前报告，点击分析才提交所选网站',async()=>{
@@ -819,6 +829,85 @@ test('迟到的历史报告填充不能覆盖用户已选择的配置站点',asy
   uiElements(tree).find(n=>n.type==='select'&&n.props['aria-label']==='选择已有站点').props.onChange({target:{value:f.sites[1].id}});
   await Promise.resolve();assert.equal(f.slots[9],f.sites[1].url);
   assert.ok(f.requests.every(request=>!request.body));assert.ok(f.requests.every(request=>!request.path.includes('&site=')));
+});
+
+test('五类导航覆盖全部页面，综合看板无子菜单，旧报告链接兼容且模块地址保留站点条件',()=>{
+  const menus=loader()('lib/site-workspace.ts');
+  assert.deepEqual(clone(menus.workspaceGroups.map(group=>group.label)),['站点管理','综合看板','站点分析','运营工具','AI智能获客']);assert.equal(menus.workspaceGroups[1].children,undefined);
+  const leaves=menus.workspaceGroups.flatMap(group=>group.children||[group.view]);assert.equal(new Set(leaves).size,19);assert.deepEqual([...leaves].sort(),Object.keys(menus.workspacePages).sort());
+  for(const view of leaves){assert.equal(menus.workspaceView('?view='+view),view);assert.ok(menus.workspaceGroup(view));}
+  assert.equal(menus.workspaceView(''),'sites');assert.equal(menus.workspaceView('?run='+id),'overview');assert.equal(menus.workspaceView('?view=__proto__'),'sites');assert.equal(menus.workspaceView('?view=constructor'),'sites');
+  const href=menus.workspaceHref(`https://shop.example/tools/webmaster-tools.html?run=${id}&custom=keep#old`,'pages',undefined,otherId),url=new URL(href,'https://shop.example');assert.equal(url.searchParams.get('view'),'pages');assert.equal(url.searchParams.get('site'),otherId);assert.equal(url.searchParams.get('run'),id);assert.equal(url.searchParams.get('custom'),'keep');assert.equal(url.hash,'');
+});
+
+test('侧边栏两级展开、选中与收起可操作，进入子菜单不创建采集任务，中英文标签一致',()=>{
+  for(const locale of ['zh-CN','en']){
+    const translations=loader()('lib/i18n.ts'),t=translations.translator(locale),slots=[];let cursor=0,view='sites';const navigated=[];
+    const react={...React,useState(initial){const n=cursor++;if(!(n in slots))slots[n]=initial;return[slots[n],value=>slots[n]=typeof value==='function'?value(slots[n]):value];}};
+    const ui=loader({react,'./language-provider':{useI18n:()=>({locale,t})}})('components/site-workspace-sidebar.tsx');
+    const render=()=>{cursor=0;return ui.SiteWorkspaceSidebar({view,onNavigate(next){navigated.push(next);view=next;}});},button=label=>uiElements(render()).find(node=>node.type==='button'&&uiElements(node.props.children).some(child=>child.type==='span'&&child.props.children===t(label)));
+    let $=require('cheerio').load(renderToStaticMarkup(render()));assert.equal($('nav>button,nav>.seo-menu-group>.seo-menu-toggle').length,5);assert.equal($('[aria-current=page]').length,1);assert.equal($('#seo-menu-analysis[hidden]').length,1);assert.equal(navigated.length,0);
+    button('站点分析').props.onClick();$=require('cheerio').load(renderToStaticMarkup(render()));assert.equal($('#seo-menu-analysis[hidden]').length,0);assert.equal(navigated.length,0);
+    button('页面与行为').props.onClick();assert.equal(view,'pages');assert.deepEqual(navigated,['pages']);$=require('cheerio').load(renderToStaticMarkup(render()));assert.ok($('[aria-current=page]').text().includes(t('页面与行为')));assert.equal($('button[disabled]').length,0);
+    button('站点分析').props.onClick();$=require('cheerio').load(renderToStaticMarkup(render()));assert.equal($('#seo-menu-analysis[hidden]').length,1);
+  }
+});
+
+test('模块切换和浏览器返回恢复地址，站点与报告隔离；切换账号不展示上个账号的数据',async()=>{
+  const f=dashboardFixture();let tree=f.render(),sidebar=uiElements(tree).find(node=>node.type?.name==='SiteWorkspaceSidebar');sidebar.props.onNavigate('pages');tree=f.render();
+  assert.equal(f.slots[0],'pages');assert.equal(new URL(f.location.href).searchParams.get('view'),'pages');let panel=uiElements(tree).find(node=>node.type?.name==='SiteWorkspaceModule');assert.equal(panel.props.report,f.run.report);assert.equal(f.requests.length,0);
+  uiElements(tree).find(node=>node.type==='select'&&node.props['aria-label']==='分析模块站点').props.onChange({target:{value:f.sites[1].id}});tree=f.render();panel=uiElements(tree).find(node=>node.type?.name==='SiteWorkspaceModule');assert.equal(panel.props.report,null);assert.equal(panel.props.statistics,undefined);assert.equal(f.slots[2],'');assert.equal(f.requests.length,0);
+  f.account.user.id=2;tree=f.render();assert.equal(uiElements(tree).filter(node=>node.type?.name==='SiteWorkspaceModule').length,0);assert.ok(!renderToStaticMarkup(tree).includes('example.org'));
+  const restored=dashboardFixture({effectsEnabled:true,initialHref:`https://shop.example/tools/webmaster-tools.html?view=pages&run=${id}&site=${otherId}`});restored.render();restored.flushEffects();await new Promise(resolve=>setImmediate(resolve));assert.equal(restored.slots[0],'pages');assert.equal(restored.slots[1],otherId);
+  restored.pop(`https://shop.example/tools/webmaster-tools.html?view=history&run=${id}`);await Promise.resolve();assert.equal(restored.slots[0],'history');assert.equal(restored.slots[2],id);assert.ok(restored.requests.every(request=>!request.body));restored.dispose();assert.equal(restored.events.has('popstate'),false);
+});
+
+test('访问统计按大小写敏感路径、访问会话和北京时间日期聚合，并保护账号隔离与三十天边界',async()=>{
+  const f=fixture(),now=Date.now(),day=new Date(now-86400000).toISOString().slice(0,10),nextDay=new Date(Date.parse(day+'T00:00:00Z')+86400000).toISOString().slice(0,10);
+  const records=[['/a','one',new Date(now-60000).toISOString()],['/a','one',new Date(now-50000).toISOString()],['/A','two',new Date(now-40000).toISOString()],['/boundary-a','one',day+'T15:59:00.000Z'],['/boundary-b','two',day+'T16:01:00.000Z'],['/expired','old',new Date(now-31*86400000).toISOString()]];
+  records.forEach(([page_path,session_key,created_at],index)=>f.state().site_analysis_visits.push({site_id:otherId,event_id:'event-'+index,session_key,page_path,created_at,channel:'direct',country_code:''}));
+  f.state().site_analysis_visits.push({site_id:id,event_id:'foreign-event',session_key:'foreign',page_path:'/private',created_at:new Date(now).toISOString(),channel:'direct',country_code:''});
+  const response=await f.route.GET(f.request({query:'?tool=50&statistics='+otherId}));assert.equal(response.status,200);const stats=(await response.json()).statistics;
+  assert.equal(stats.pageviews,5);assert.equal(stats.sessions,2);assert.equal(stats.activeSessions,2);assert.equal(stats.pages.find(row=>row.path==='/a').pageviews,2);assert.equal(stats.pages.find(row=>row.path==='/a').sessions,1);assert.equal(stats.pages.find(row=>row.path==='/A').pageviews,1);assert.ok(!stats.pages.some(row=>['/expired','/private'].includes(row.path)));
+  assert.ok(stats.daily.some(row=>row.day===day));assert.ok(stats.daily.some(row=>row.day===nextDay));assert.equal(stats.daily.reduce((sum,row)=>sum+row.pageviews,0),5);assert.equal((await f.route.GET(f.request({user:2,query:'?tool=50&statistics='+otherId}))).status,404);assert.equal(f.state().points_ledger.length,0);
+});
+
+test('模块使用真实报告与页面统计，标题和路径对应、筛选及页内标签可用；未接入能力不冒充已有数据',()=>{
+  const menu=loader()('lib/site-workspace.ts'),report=collector.blankReport('example.org',model.analysisOptions({engines:['bing']}));report.pages=[parser.parseSitePage(Buffer.from(html),'https://example.org/article')];report.keywords=[{word:'独有关键词',kind:'manual',score:10,sources:[{url:'https://example.org/article',kind:'manual'}]}];report.rankings=[{engine:'bing',keyword:'独有关键词',state:'found',position:3}];
+  const statistics={connected:true,active:true,verified:true,pageviews:8,sessions:4,activeSessions:2,lastSeenAt:'2026-10-26T00:00:00Z',channels:[{channel:'search',visits:3,share:75}],countries:[{code:'',visits:4,share:100}],daily:[{day:'2026-10-26',pageviews:8,sessions:4}],pages:[{path:'/article',pageviews:8,sessions:4,lastSeenAt:'2026-10-26T00:00:00Z'},{path:'/uncollected',pageviews:1,sessions:1,lastSeenAt:''}]};
+  for(const locale of ['zh-CN','en'])for(const view of Object.keys(menu.workspacePages).filter(view=>!['sites','overview','history'].includes(view))){
+    const slots=[],t=loader()('lib/i18n.ts').translator(locale);let cursor=0,focused='';const react={...React,useState(initial){const n=cursor++;if(!(n in slots))slots[n]=initial;return[slots[n],value=>slots[n]=typeof value==='function'?value(slots[n]):value];}};
+    const ui=loader({react,'./language-provider':{useI18n:()=>({locale,t})}},{document:{getElementById(id){return{focus(){focused=id;}};}}})('components/site-workspace-module.tsx');
+    const props={view,report,statistics,date:value=>value,onNavigate(){},onIssue(){},canEditIssues:true},render=()=>{cursor=0;return ui.SiteWorkspaceModule(props);};let tree=render(),$=require('cheerio').load(renderToStaticMarkup(tree));
+    assert.ok($.text().includes(t(menu.workspacePages[view].label)));if(locale==='en')assert.doesNotMatch($.text().replaceAll('宇星软件 | 示例网站','').replaceAll('提供网站分析与软件开发','').replaceAll('独有关键词',''),/[\u3400-\u9fff]/u);
+    if(view==='pages'){
+      const article=$('tbody tr').filter((_,row)=>$(row).text().includes('/article')).first();assert.ok(article.text().includes('宇星软件 | 示例网站'));assert.equal(article.find('td').eq(1).text(),'8');assert.ok($('tbody tr').filter((_,row)=>$(row).text().includes('/uncollected')).text().includes(t('页面标题未读取')));
+      uiElements(tree).find(node=>node.type==='input').props.onChange({target:{value:'no-matching-path'}});$=require('cheerio').load(renderToStaticMarkup(render()));assert.equal($('tbody tr').length,0);
+      const tab=uiElements(render()).find(node=>node.props.role==='tab'&&node.props.children===t('页面内容'));tab.props.onClick();$=require('cheerio').load(renderToStaticMarkup(render()));assert.equal($('[role=tab][aria-selected=true]').text(),t('页面内容'));
+      tab.props.onKeyDown({key:'ArrowRight',preventDefault(){}});assert.equal(focused,'seo-module-tab-behavior');assert.ok(renderToStaticMarkup(render()).includes(t('停留时间、退出、点击热区与浏览路径分析尚未接入行为事件。')));
+    }
+    if(view==='traffic'){assert.ok($.text().includes('75%'));assert.ok($.text().includes(t('未识别国家')));assert.ok($.text().includes('2026-10-26'));}
+    if(view==='seo'){uiElements(tree).find(node=>node.props.role==='tab'&&node.props.children===t('关键词与排名')).props.onClick();assert.ok(renderToStaticMarkup(render()).includes('Bing #3'));}
+    if(['conversions','crawlers','backlinks','competitors','leads','lead-management','lead-advice','lead-followup'].includes(view)){assert.ok($.text().includes(t('功能筹备中')));assert.equal($('table').length,0);}
+  }
+});
+
+test('实时活动每15秒只读更新，离开模块取消计时与请求，不创建分析或扣费',async()=>{
+  const f=dashboardFixture({effectsEnabled:true,initialHref:`https://shop.example/tools/webmaster-tools.html?view=realtime&run=${id}&site=${otherId}`});f.slots[0]='realtime';f.render();f.flushEffects();await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(f.timers.size,1);const [timerId,timer]=[...f.timers][0];assert.equal(timer.ms,15000);const before=f.requests.filter(request=>request.path.includes('&statistics=')).length;assert.ok(before>=1);
+  f.timers.delete(timerId);await timer.fn();assert.equal(f.requests.filter(request=>request.path.includes('&statistics=')).length,before+1);assert.equal(f.timers.size,1);assert.ok(f.requests.every(request=>!request.body));
+  const oldSignal=f.requests.filter(request=>request.path.includes('&statistics=')).at(-1).signal;const sidebar=uiElements(f.render()).find(node=>node.type?.name==='SiteWorkspaceSidebar');sidebar.props.onNavigate('content');f.render();f.flushEffects();assert.equal(f.timers.size,0);assert.equal(oldSignal.aborted,true);f.dispose();
+});
+
+test('切换站点读取本站最新报告并同步地址，无报告时移除旧报告地址，打开完整报告保持一致',async()=>{
+  for(const hasReport of [true,false]){
+    const f=dashboardFixture({effectsEnabled:true,initialHref:`https://shop.example/tools/webmaster-tools.html?view=pages&run=${id}&site=${otherId}`}),latest='44444444-4444-4444-8444-444444444444';f.slots[0]='pages';
+    if(hasReport)f.workspace.history.push({...f.run,id:latest,siteId:f.sites[1].id,host:f.sites[1].host,report:collector.blankReport(f.sites[1].host,model.analysisOptions({}))});
+    f.render();f.flushEffects();await new Promise(resolve=>setImmediate(resolve));let tree=f.render();f.flushEffects();
+    uiElements(tree).find(node=>node.type==='select'&&node.props['aria-label']==='分析模块站点').props.onChange({target:{value:f.sites[1].id}});f.render();f.flushEffects();await new Promise(resolve=>setImmediate(resolve));
+    assert.equal(f.slots[2],hasReport?latest:'');assert.equal(new URL(f.location.href).searchParams.get('run'),hasReport?latest:null);tree=f.render();f.flushEffects();await new Promise(resolve=>setImmediate(resolve));
+    uiElements(f.render()).find(node=>node.type?.name==='SiteWorkspaceSidebar').props.onNavigate('overview');assert.equal(new URL(f.location.href).searchParams.get('run'),hasReport?latest:null);assert.equal(new URL(f.location.href).searchParams.get('site'),f.sites[1].id);assert.ok(f.requests.every(request=>!request.body));f.dispose();
+  }
 });
 
 test('站点基本信息双语、域名档案默认展开，元信息顺序与Unicode计数正确且原文不截断',()=>{

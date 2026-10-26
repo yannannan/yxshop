@@ -1,5 +1,14 @@
 # Design QA
 
+## 2026-10-26 Five-section webmaster workspace
+
+- Target: the user's approved five-section menu and supplied webmaster requirements. Site Management and Overview remain direct pages. Site Analysis, Operations Tools and AI Acquisition expand to 9 / 4 / 4 children; related SEO, page and health views use keyboard-accessible in-page tabs.
+- Preserve existing installation cards, ownership verification, reports, history, exports and billing. Connect report pages / keywords / findings to their modules. Add read-only path-level visits, daily trends in Asia/Shanghai, and 5-minute active sessions. Live activity refreshes every 15 seconds with cleanup; activity is explicitly distinguished from online visitors.
+- Page titles come from the selected collected report, matched by case-sensitive path; the tracker has not gained title collection. Uncollected titles, missing metrics, unconnected sources and errors stay explicit. Revenue, crawler logs, backlinks, competitors, AI generation and lead workflows are marked as planned, not presented as complete services.
+- Navigation retains view / site / run across reload and back/forward. Cross-site and cross-account stale data is excluded. Chinese and English labels, scrollable desktop navigation, mobile layout, tab focus and selected states are included.
+- 94 related regressions and production build pass; changed-file ESLint and CSS parsing pass. The existing 20 unrelated TypeScript diagnostics remain. No new SQL, dependency or environment setup.
+- Visual and live data acceptance remain **pending user acceptance** under the standing no-browser / no-preview / no-business-database instruction. No rendered screenshot or live collection acceptance is claimed.
+
 ## Current iteration — website analytics overview, 2026-10-25
 
 - Selected target: first displayed SEO workspace image, `C:/Users/Administrator/.codex/generated_images/01a16199-c23a-7443-8df4-a3163cfdc134/exec-82ebd1f2-91f2-4b18-9789-ac4885493919.png`, inspected before implementation.
