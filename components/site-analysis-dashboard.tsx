@@ -120,16 +120,19 @@ export function SiteAnalysisDashboard({ tool }: { tool: ToolService }) {
       <form className="seo-card seo-controls seo-console" onSubmit={analyze} aria-labelledby="seo-conditions-title">
         <div className="seo-console-heading"><span className="seo-heading-icon"><AdjustmentsHorizontalIcon aria-hidden="true" /></span><div><h2 id="seo-conditions-title">{t('分析条件')}</h2><p>{t('选择网站会填入完整地址，点击分析按钮后才创建分析任务。')}</p></div></div>
         <div className="seo-conditions-body">
-        <div className="seo-domain-row"><label>{t('选择网站')}<select aria-label={t('选择已有站点')} value={siteId} onChange={e => selectSite(e.target.value)}><option value="">{t('选择已有站点')}</option>{data?.sites.map(site => <option value={site.id} key={site.id}>{site.host}</option>)}</select></label><label className="seo-domain-input">{t('网站地址')}<input type="text" autoComplete="url" placeholder="https://example.com" value={domain} maxLength={2048} onChange={e => { draftTouched.current = true; setDomain(e.target.value); setSiteId(''); }} /></label><button className="seo-primary" type="submit" disabled={busy || !data?.access.canAnalyze || data.workerReady === false}><MagnifyingGlassIcon aria-hidden="true" />{t(busy ? '正在分析…' : run ? '重新分析' : '开始分析')}<ArrowRightIcon aria-hidden="true" /></button></div>
+          <div className="seo-domain-row">
+            <label>{t('选择网站')}<select aria-label={t('选择已有站点')} value={siteId} onChange={e => selectSite(e.target.value)}><option value="">{t('选择已有站点')}</option>{data?.sites.map(site => <option value={site.id} key={site.id}>{site.host}</option>)}</select></label>
+            <label>{t('最多采集页面')}<select value={maxPages} onChange={e => setMaxPages(Number(e.target.value))}>{[5,20,50].map(n => <option key={n} value={n}>{n} {t('页')}</option>)}</select></label>
+            <label className="seo-domain-input">{t('网站地址')}<input type="text" autoComplete="url" placeholder="https://example.com" value={domain} maxLength={2048} onChange={e => { draftTouched.current = true; setDomain(e.target.value); setSiteId(''); }} /></label>
+            <label className="seo-priority-keywords">{t('重点查询关键词（可选）')}<input value={manual} onChange={e => setManual(e.target.value)} placeholder={t('例如：AI获客、网站分析；最多20个')} aria-describedby="seo-keyword-purpose" /></label>
+            <button className="seo-primary" type="submit" disabled={busy || !data?.access.canAnalyze || data.workerReady === false}><MagnifyingGlassIcon aria-hidden="true" />{t(busy ? '正在分析…' : run ? '重新分析' : '开始分析')}<ArrowRightIcon aria-hidden="true" /></button>
+          </div>
+          <p className="seo-keyword-help" id="seo-keyword-purpose">{t('填写你关心的搜索词，优先用于排名查询；留空则自动提取，不会修改网站的关键词设置。每轮最多查询前5个重点词。')}</p>
         {data && !data.access.canAnalyze && <p className="seo-inline-note">{t(data.access.chargeType === 'pending' ? '收费方式待确认，暂未开放分析' : data.access.chargeType === 'points' ? '积分不足，请充值后分析' : '暂无有效套餐，请购买后分析')}<a href={data.access.chargeType === 'points' ? '/points' : `/product/${tool.id}`}>{t('查看权益')}</a></p>}
         {data?.access.chargeType === 'points' && <p className="seo-inline-note">{t('剩余积分')}：{data.access.balance ?? '—'} · {t('每份完整报告')}：{data.access.pointsCost} {t('积分')}{data.access.hasMembership && ` · ${t('有效套餐优先使用')}`}</p>}
         {data?.workerReady === false && <p className="seo-alert">{t('采集进程尚未就绪，请管理员检查站长采集日志')}</p>}
         <details className="seo-options" open>
           <summary>{t('分析范围与搜索引擎')}</summary>
-          <div className="seo-options-grid">
-            <label>{t('最多采集页面')}<select value={maxPages} onChange={e => setMaxPages(Number(e.target.value))}>{[5,20,50].map(n => <option key={n} value={n}>{n} {t('页')}</option>)}</select></label>
-            <label className="seo-priority-keywords">{t('重点查询关键词（可选）')}<input value={manual} onChange={e => setManual(e.target.value)} placeholder={t('例如：AI获客、网站分析；最多20个')} aria-describedby="seo-keyword-purpose" /><small id="seo-keyword-purpose">{t('填写你关心的搜索词，优先用于排名查询；留空则自动提取，不会修改网站的关键词设置。每轮最多查询前5个重点词。')}</small></label>
-          </div>
           <fieldset className="seo-engine-selection" aria-describedby="seo-engine-purpose">
             <legend>{t('搜索引擎查询')}</legend>
             <p className="seo-engine-selection-meta"><span>{t('默认全选，可按需取消')}</span><span>{t(`已选 ${engines.length} 个引擎`)}</span></p>

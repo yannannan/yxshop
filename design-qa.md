@@ -120,3 +120,12 @@ final result for this addition: blocked (visual verification only; code checks c
 - Visual comparison is **blocked / pending user acceptance** under the standing user instruction not to open browsers or start app / preview services. No rendered breakpoint, screenshot comparison or visual acceptance is claimed.
 
 final result for this refinement: blocked (visual verification only; code checks complete)
+
+## 2026-10-26 Single-row analysis conditions
+
+- Reference: `codex-clipboard-1b56c988-704d-4d6e-b51b-408f0dbfbbdb.png`. Merge the two input rows and place the page selector immediately after the site selector.
+- Desktop order is site, page limit, address, priority keywords and Analyze. The keyword description remains below the row with its accessible association. Engine selection remains separate. Narrow panels reflow without changing the logical control order.
+- Verification: 6 existing form / report checks, 12 language / production-handler checks, production build, component ESLint and CSS syntax pass. The existing 20 unrelated TypeScript diagnostics remain. No collection, access, pricing or database changes.
+- Visual comparison remains **blocked / pending user acceptance** under the standing no-browser / no-preview instruction; no rendered breakpoint or screenshot acceptance is claimed.
+
+final result for this layout adjustment: blocked (visual verification only; code checks complete)
