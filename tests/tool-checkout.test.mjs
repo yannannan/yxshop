@@ -90,3 +90,24 @@ test('积分收银台已核验后显示充值数量和积分中心入口，不�
   const render = () => { cursor = 0; effects.length = 0; return page.default(); }; render(); effects[0](); await new Promise(resolve => setImmediate(resolve)); render(); effects[1]();
   const html = renderToStaticMarkup(render()); assert.ok(html.includes('积分充值已到账')); assert.ok(html.includes('200')); assert.ok(html.includes('href="/points"')); assert.ok(!html.includes('我已完成支付'));
 });
+
+test('客户端路由不可用时收银台完成入口仍可原生访问积分、工具、商城和订单，跳转不再次确认支付', async () => {
+  const cases = [
+    [{product_type:'points',points_amount:600,status:'delivered'},'/points'],
+    [{product_type:'tool',tool_slug:'stamp-maker',status:'paid'},'/tools/stamp-maker.html'],
+    [{product_type:'digital',status:'pending_delivery'},'/'],
+    [{product_type:'digital',status:'pending_delivery',category:'会员充值服务',subcategory:'ChatGPT会员充值'},'/orders'],
+  ];
+  function elements(node) { if(Array.isArray(node))return node.flatMap(elements);return React.isValidElement(node)?[node,...elements(node.props.children)]:[]; }
+  for(const [values,destination] of cases){
+    const slots=[],effects=[],requests=[];let cursor=0;
+    const react={...React,useState(initial){const index=cursor++;if(!(index in slots))slots[index]=typeof initial==='function'?initial():initial;return[slots[index],value=>{slots[index]=typeof value==='function'?value(slots[index]):value;}];},useEffect:effect=>effects.push(effect)};
+    const order={id:'own-order',product_id:101,product_name:'测试订单',amount:20,category:'',subcategory:'',...values};
+    const page=load('../app/checkout/[id]/page.tsx',{react,'next/navigation':{useParams:()=>({id:order.id})},'next/image':()=>null,'next/link':()=>{throw Error('客户端路由不可用');},'../../../lib/tool-services':tools},{window:{setInterval(){},clearInterval(){}},async fetch(url,options){requests.push({url,method:options?.method||'GET'});return Response.json(order);}});
+    const render=()=>{cursor=0;effects.length=0;return page.default();};render();effects[0]();await new Promise(resolve=>setImmediate(resolve));render();effects[1]();
+    const tree=render(),markup=renderToStaticMarkup(tree),link=elements(tree).find(node=>node.type==='a'&&node.props.href===destination);
+    assert.ok(link,`${destination}应可通过原生链接访问`);assert.ok(markup.includes(`href="${destination}"`));
+    let prevented=false;link.props.onClick?.({button:0,preventDefault(){prevented=true;}});assert.equal(prevented,false);
+    assert.ok(requests.every(request=>request.method==='GET'),'查看充值后的页面不应再次写订单或积分');
+  }
+});

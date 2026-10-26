@@ -6,7 +6,6 @@ import { useParams } from "next/navigation";
 import { StorefrontHeader } from "../../../components/storefront-header";
 import { notifyAccountChanged } from '../../../lib/account-client';
 import Image from "next/image";
-import Link from "next/link";
 import { toolBillingLabels, isToolBillingCycle, toolPagePath } from '../../../lib/tool-services';
 import { useEffect, useState } from "react";
 
@@ -222,8 +221,9 @@ export default function CheckoutPage() {
                     <p>
                       {t("充值信息已提交，充值将自动到账。")}<br />
                       {t("请关注查收邮件和重新刷新登录账号。")}</p>
-                    <Link className="recharge-home-button" href="/orders">
-                      {t("返回我的订单")}</Link>
+                    {/* 收银台完成入口使用原生导航，避免客户端路由异常时无法离开。 */}
+                    <a className="recharge-home-button" href="/orders">
+                      {t("返回我的订单")}</a>
                   </>
                 ) : (
                   <>
@@ -310,7 +310,8 @@ export default function CheckoutPage() {
                   <span>{t("订单编号")}</span>
                   <b>{order?.id || params.id}</b>
                 </div>
-                {order?.product_type === 'points' ? <Link href="/points">{t("查看积分余额与明细")}</Link> : order?.product_type === 'tool' && order.tool_slug ? <Link href={toolPagePath(order.tool_slug)}>{t("返回工具页面并使用")}</Link> : <Link href="/">{t("继续选购")}</Link>}
+                {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- 积分与工具等完成页直接交给浏览器导航，保留原收银与到账逻辑。 */}
+                {order?.product_type === 'points' ? <a href="/points">{t("查看积分余额与明细")}</a> : order?.product_type === 'tool' && order.tool_slug ? <a href={toolPagePath(order.tool_slug)}>{t("返回工具页面并使用")}</a> : <a href="/">{t("继续选购")}</a>}
               </div>
             )
           ) : (
