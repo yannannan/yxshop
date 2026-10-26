@@ -139,3 +139,11 @@ final result for this layout adjustment: blocked (visual verification only; code
 - Visual comparison is **blocked / pending user acceptance** under the standing instruction not to open browsers or start app / preview services. No live collection, business database access, rendered breakpoint or screenshot acceptance is claimed.
 
 final result for this overview refinement: blocked (visual verification only; code checks complete)
+
+## 2026-10-26 Four-column overview
+
+- Reference: `codex-clipboard-5d204ac4-5393-42c1-843d-03b9968344ad.png`. The latest request supersedes the two-by-two desktop layout: four panels now share one row. Below 1100px they use two columns, and below 480px one column; print retains two columns.
+- Business keyword priority, fixed-width centered tags, ellipsis, full-text title and filtering remain.
+- CSS syntax, production build and 6 production-handler checks pass. Visual comparison is **blocked / pending user acceptance** under the standing no-browser / no-preview instruction; no rendered comparison is claimed.
+
+final result for this column change: blocked (visual verification only; code checks complete)
