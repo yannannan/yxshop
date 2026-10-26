@@ -8,7 +8,7 @@ const trafficChannels = ['直接访问', '搜索引擎', '邮件访问', '外链
 export function SiteAnalysisOverviewPanels({ report, onKeyword }: { report: SiteReport; onKeyword: (word: string) => void }) {
   const { t } = useI18n(), [setupOpen, setSetupOpen] = useState(false);
   return <>
-    <div className="seo-overview-panels">
+    <div className="seo-overview-panels" id="seo-overview-panels">
       <section className="seo-card seo-overview-panel"><div className="seo-panel-title"><h3>{t('关键词总量')}</h3><MagnifyingGlassIcon aria-hidden="true" /></div><strong className="seo-panel-total">{report.keywords.length}</strong><p className="seo-panel-note">{t('本轮去重后的候选词，非搜索量')}</p>
         <div className="seo-keyword-scroll" role="region" tabIndex={0} aria-label={t('本轮关键词列表')}>{report.keywords.length ? report.keywords.map(word => <button key={word.word} type="button" onClick={() => onKeyword(word.word)}>{word.word}</button>) : <p className="seo-empty">{t('暂无足够内容提取关键词')}</p>}</div>
       </section>

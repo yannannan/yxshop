@@ -78,3 +78,13 @@ final result: blocked
 - Visual comparison: **blocked / pending user acceptance**. The standing user instruction prohibits opening browsers or starting preview / development services. No screenshot comparison, breakpoint rendering or real-database acceptance is claimed. The CSS defines desktop four cards, narrower two cards and small-screen one card, with profile columns stacking and tables scrolling.
 
 final result for this iteration: blocked (visual verification only; code checks complete)
+
+## 2026-10-26 Analysis conditions and report polish
+
+- Target: improve the existing approved overview without changing collection, access or charging behavior. Rename the conditions heading to 分析条件 / Analysis settings and use 分析报告 / Analysis report below the summary.
+- Implemented: navy conditions panel with a clear website-input group, orange primary action, checkbox engine controls and separated notes; grouped report identity, status, metadata, real progress and stage icons; five native report-section anchors; consistent profile, overview-card and table presentation.
+- Existing full-address selection, explicit-submit behavior, bilingual content and honest missing-data states remain. No decorative chart or new data source was added. Mobile stacking, horizontal navigation, print styling and reduced-motion handling are defined.
+- Visual comparison remains **blocked / pending user acceptance**, following the standing prohibition on browser verification and starting preview / development services. This entry does not claim rendered breakpoint or screenshot acceptance.
+- Code verification: 397 regressions and production build pass; updated interface checks cover bilingual labels and all five anchor targets. Changed-file ESLint and CSS syntax pass. Primary action / filter-label color contrast is 4.75 / 4.89. The existing 20 unrelated TypeScript errors remain; no new diagnostics in the changed components.
+
+final result for this polish: blocked (visual verification only; code checks complete)

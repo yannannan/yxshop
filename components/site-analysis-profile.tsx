@@ -1,4 +1,4 @@
-import { GlobeAltIcon } from '@heroicons/react/24/outline';
+import { ArrowTopRightOnSquareIcon, GlobeAltIcon } from '@heroicons/react/24/outline';
 import { useI18n } from './language-provider';
 import type { SiteReport } from '../lib/site-analysis';
 
@@ -13,8 +13,8 @@ export function SiteAnalysisProfile({ report, date }: { report: SiteReport; date
   const { t, locale } = useI18n(), p = report.profile, home = report.pages[0];
   const text = (value: string | null | undefined) => value || t('尚未获取');
   const title = p.title || home?.title || '', description = p.description || home?.description || '', keywords = home?.declared.join('、') || '';
-  return <section className="seo-card seo-profile">
-    <div className="seo-section-title"><div><span className="seo-eyebrow">{locale === 'en' ? 'DOMAIN PROFILE' : '基本信息'}</span><h2>{p.name || title || p.host}</h2></div><a href={safeHref(p.finalUrl || `https://${p.host}`)} target="_blank" rel="noreferrer">{p.host}<GlobeAltIcon aria-hidden="true" /></a></div>
+  return <section className="seo-card seo-profile" id="seo-domain-profile">
+    <div className="seo-section-title"><div className="seo-profile-identity"><span className="seo-heading-icon"><GlobeAltIcon aria-hidden="true" /></span><div><span className="seo-eyebrow">{locale === 'en' ? 'DOMAIN PROFILE' : '基本信息'}</span><h2>{p.name || title || p.host}</h2></div></div><a className="seo-profile-link" href={safeHref(p.finalUrl || `https://${p.host}`)} target="_blank" rel="noreferrer">{p.host}<ArrowTopRightOnSquareIcon aria-hidden="true" /></a></div>
     <div className="seo-profile-columns">
       <dl className="seo-metadata-list">
         <MetadataField label="网站标题（Title）" value={title} limit={39} />
