@@ -172,7 +172,10 @@ function startLocalAnalysis() {
 }
 export const analysisHeaders = { 'Cache-Control': 'private, no-store', Vary: 'Cookie' };
 export function analysisFailure(error: unknown) {
-  if (error instanceof SiteAnalysisError || error instanceof PointsError) return Response.json({ message: error.message }, { status: error.status, headers: analysisHeaders });
+  if (error instanceof SiteAnalysisError || error instanceof PointsError) {
+    const retryAfter = error instanceof SiteAnalysisError && error.status === 429 && Number.isFinite(error.retryAfter) ? Math.max(1, Math.min(10, Math.ceil(error.retryAfter!))) : undefined;
+    return Response.json({ message: error.message, ...(retryAfter ? { retryAfter } : {}) }, { status: error.status, headers: { ...analysisHeaders, ...(retryAfter ? { 'Retry-After': String(retryAfter) } : {}) } });
+  }
   if (error instanceof SyntaxError) return Response.json({ message: '分析参数格式不正确' }, { status: 400, headers: analysisHeaders });
   const missing = ['ER_NO_SUCH_TABLE','ER_BAD_FIELD_ERROR'].includes((error as { code?: string })?.code || '');
   console.error('[站长分析] 请求失败', (error as { code?: string })?.code || 'unavailable');

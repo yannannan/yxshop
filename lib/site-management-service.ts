@@ -64,7 +64,13 @@ export async function verifyAnalysisSite(userId: number, id: string, platformOri
   // permanent script token but must reject an earlier in-flight verification.
   const claim = `${time}#${randomBytes(6).toString('hex')}`;
   const claimed = await env.DB.prepare("UPDATE site_analysis_integrations SET verify_requested_at=? WHERE site_id=? AND user_id=? AND script_token=? AND deleted_at='' AND verify_requested_at<?").bind(claim, id, userId, site.scriptToken, cutoff).run();
-  if (claimed.meta.changes !== 1) throw new SiteAnalysisError('验证请求较频繁，请稍后重试', 429);
+  if (claimed.meta.changes !== 1) {
+    const current = await env.DB.prepare("SELECT verify_requested_at AS requestedAt FROM site_analysis_integrations WHERE site_id=? AND user_id=? AND script_token=? AND deleted_at=''").bind(id, userId, site.scriptToken).first<{ requestedAt: string }>();
+    const requestedAt = Date.parse(current?.requestedAt.split('#')[0] || '');
+    if (!Number.isFinite(requestedAt)) throw new SiteAnalysisError('站点状态已变化，请刷新后重试', 409);
+    const retryAfter = Math.max(1, Math.min(10, Math.ceil((requestedAt + 10000 - Date.now()) / 1000)));
+    throw new SiteAnalysisError('验证请求较频繁，请稍后重试', 429, retryAfter);
+  }
   let response;
   try { response = await read(site.url, AbortSignal.timeout(15000), 1024 * 1024); }
   catch { throw new SiteAnalysisError('暂时无法读取站点首页，请确认公网可访问后重试', 422); }

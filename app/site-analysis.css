@@ -259,7 +259,7 @@
 .seo-verification-receipt strong{display:block;font-size:14px;font-weight:600}
 .seo-verification-receipt p{margin:3px 0 0;font-size:13px;overflow-wrap:anywhere}
 .seo-verification-receipt small{display:block;margin-top:7px;font-size:12px}
-.seo-verification-receipt.checking{border-color:#d2e0f1;background:#f0f5fc;color:#365d85}
+.seo-verification-receipt.checking,.seo-verification-receipt.waiting{border-color:#d2e0f1;background:#f0f5fc;color:#365d85}
 .seo-verification-receipt.success{border-color:#d1e8da;background:#f0f9f3;color:#2d6a4d}
 .seo-verification-receipt.failed{border-color:#f0d8cf;background:#fff4ef;color:#a84332}
 .seo-site-install-notes{padding-left:21px;margin:21px 0 0;color:#65758a;font-size:13px;line-height:2}

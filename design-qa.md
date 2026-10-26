@@ -181,3 +181,11 @@ final result for this adjustment: blocked (visual verification only; code checks
 - Verification requests have a 25-second client wait bound, reject malformed or mismatched success receipts, allow retry after failure and cancel on unmount. Temporary network failure preserves previously saved verification; actual access rules remain on the server.
 - Code checks: 83 relevant regressions, production build, changed-file ESLint and CSS parsing pass. The original 20 unrelated TypeScript diagnostics remain. No new SQL, dependency or environment configuration is required.
 - Visual comparison remains **pending user acceptance** under the standing no-browser / no-preview / no-business-database instruction. No rendered screenshot or live verification acceptance is claimed.
+
+## 2026-10-26 Verification cooldown and concise installation copy
+
+- Reference: `codex-clipboard-4d4d4a8d-0eed-4cbd-8186-722b76df02c0.png`. A rate-limited verification now shows a neutral Waiting to retry receipt and remaining seconds, rather than a red failure. The site's verify button stays disabled until the countdown ends, then allows manual retry without an automatic request. Existing saved verification stays intact.
+- The API returns the remaining part of the existing 10-second interval. Individual cards keep independent waiting receipts; countdowns clean up after expiry or unmount. Missing metadata from an older API safely uses 10 seconds. Genuine installation / network errors retain their specific failure feedback.
+- Customer copy now says only that the generated script is permanent, verification enables statistics and analysis for the linked site, and removing the script stops collection while keeping historical analysis. Chinese and English are synchronized; deployment details remain in the maintenance guide.
+- Validation: 87 related checks and production build pass, including real production handler calls with mock data and no port. Final countdown interactions, changed-file ESLint and CSS parsing pass. The existing 20 unrelated TypeScript diagnostics remain; no new migration or dependency is required.
+- Visual and live verification acceptance remain **pending user acceptance**. No browser, preview server, real business database or live site verification was used.

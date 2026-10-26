@@ -83,6 +83,14 @@ test('分析请求保留JSON数据、私有读取与提交选项，不将错误�
   assert.equal(requests[1].init.method,'POST');assert.equal(requests[1].init.body,'{"tool":50}');assert.equal(requests[1].init.signal,signal);
 });
 
+test('分析请求保留限频状态和有限重试秒数，不把其他错误当作等待',async()=>{
+  for(const [status,header,body,expected] of [[429,'4',9,4],[429,null,3,3],[429,'999',undefined,10],[429,'invalid',undefined,undefined],[429,null,-1,undefined],[429,null,{},undefined],[429,null,null,undefined],[422,'5',5,undefined]]){
+    const response=Response.json({message:'验证请求较频繁，请稍后重试',retryAfter:body},{status,headers:header?{'Retry-After':header}:{}});
+    const client=loader({},{fetch:async()=>response})('lib/site-analysis-client.ts');
+    await assert.rejects(client.siteAnalysisRequest(''),error=>error instanceof client.SiteAnalysisRequestError&&error.status===status&&error.retryAfter===expected);
+  }
+});
+
 test('域名规范化保留主机范围与协议，拒绝 IP、认证信息、本地名和特殊端口', () => {
   assert.equal(network.normalizeSite('example.co.uk/path?q=1').url, 'https://example.co.uk/'); assert.equal(network.normalizeSite('https://www.example.co.uk').domain, 'example.co.uk');
   assert.equal(network.normalizeSite('https://例子.com').host, 'xn--fsqu00a.com');
@@ -335,7 +343,10 @@ function fixture({chargeType='free',balance=300,failTable='',registered=true,ver
           if(sql.includes("i.deleted_at=''" )||sql.includes("COALESCE(i.deleted_at,'')=''"))rows=rows.filter(r=>!r.deletedAt);
           if(sql.includes("i.verified_at<>''"))rows=rows.filter(r=>r.verifiedAt);
         }
-        else if(table==='site_analysis_integrations')rows=rows.filter(r=>(sql.includes('WHERE i.site_id=?')?r.site_id===args[0]:r.script_token===args[0])&&!r.deleted_at&&state.users.some(u=>u.id===r.user_id&&u.status==='active')).map(r=>({...r,host:state.site_analysis_sites.find(s=>s.id===r.site_id)?.host}));
+        else if(table==='site_analysis_integrations'){
+          if(sql.startsWith('SELECT verify_requested_at AS requestedAt'))rows=rows.filter(r=>r.site_id===args[0]&&r.user_id===args[1]&&r.script_token===args[2]&&!r.deleted_at).map(r=>({requestedAt:r.verify_requested_at}));
+          else rows=rows.filter(r=>(sql.includes('WHERE i.site_id=?')?r.site_id===args[0]:r.script_token===args[0])&&!r.deleted_at&&state.users.some(u=>u.id===r.user_id&&u.status==='active')).map(r=>({...r,host:state.site_analysis_sites.find(s=>s.id===r.site_id)?.host}));
+        }
         else if(table==='site_analysis_visits'){
           rows=rows.filter(r=>r.site_id===args[0]&&(sql.includes('session_key=?')?r.session_key===args[1]:r.created_at>=args[1]));if(sql.startsWith('SELECT channel FROM'))return rows.slice(0,1);
           if(sql.includes('GROUP BY')){const field=sql.includes('GROUP BY channel')?'channel':'country_code',groups=new Map();for(const row of rows){if(!groups.has(row[field]))groups.set(row[field],new Set());groups.get(row[field]).add(row.session_key);}return [...groups].map(([key,sessions])=>({[field==='channel'?'channel':'code']:key,visits:sessions.size}));}
@@ -466,6 +477,25 @@ test('验证冷却限制与删除竞态不会把已删除或重建站点重新�
   await assert.rejects(f.management.verifyAnalysisSite(1,otherId,'https://shop.example',recreate),error=>error.status===409);
   assert.equal(f.state().site_analysis_integrations[0].verified_at,'');assert.equal(f.state().site_analysis_integrations[0].deleted_at,'');
   const verified=await f.management.verifyAnalysisSite(1,otherId,'https://shop.example',read);assert.ok(verified.verifiedAt);assert.equal(verified.scriptToken,restored.scriptToken);
+});
+
+test('验证限频回执携带剩余间隔且不读取首页，过期可重试；异常状态不会误报为限频',async()=>{
+  const f=fixture({verified:false});let reads=0;
+  const read=async()=>{reads++;return{url:'https://example.org/',status:200,contentType:'text/html',bytes:Buffer.from(siteScripts.siteScriptSnippet(otherId))};};
+  await f.management.verifyAnalysisSite(1,otherId,'https://shop.example',read);
+  const row=f.state().site_analysis_integrations[0];
+  for(const suffix of ['', '#0123456789ab']){
+    row.verify_requested_at=new Date(Date.now()-7000).toISOString()+suffix;
+    const failure=await f.management.verifyAnalysisSite(1,otherId,'https://shop.example',read).then(()=>assert.fail('Cooldown must reject'),error=>error);
+    assert.equal(failure.status,429);assert.ok(failure.retryAfter>=1&&failure.retryAfter<=3);assert.equal(reads,1);
+    const response=f.service.analysisFailure(failure);assert.equal(response.status,429);assert.equal(response.headers.get('Retry-After'),String(failure.retryAfter));assert.equal((await response.json()).retryAfter,failure.retryAfter);assert.equal(response.headers.get('Cache-Control'),'private, no-store');
+    assert.ok(row.verified_at);
+  }
+  const limited=await f.route.POST(f.request({body:{tool:50,action:'site-verify',site:otherId}}));assert.equal(limited.status,429);assert.equal(limited.headers.get('Retry-After'),String((await limited.json()).retryAfter));assert.equal(reads,1);
+  row.verify_requested_at=new Date(Date.now()-11000).toISOString()+'#0123456789ab';
+  assert.ok((await f.management.verifyAnalysisSite(1,otherId,'https://shop.example',read)).verifiedAt);assert.equal(reads,2);
+  row.verify_requested_at='invalid';
+  await assert.rejects(f.management.verifyAnalysisSite(1,otherId,'https://shop.example',read),error=>error.status===409&&!error.retryAfter);assert.equal(reads,2);
 });
 
 test('访问上报不能验证站点，校验域名和事件大小，匿名脚本不依赖商城会话且不泄露统计',async()=>{
@@ -600,15 +630,15 @@ test('多站点的生成、脚本、复制与验证留在各自卡片，重复�
 });
 
 function managementUiFixture(sites,locale='zh-CN',globals={}) {
-  const slots=[],refs=[],effects=[],requests=[];let cursor=0,refCursor=0,changed=0;
+  const slots=[],refs=[],effects=[],requests=[];let cursor=0,refCursor=0,effectCursor=0,changed=0;
   const t=loader()('lib/i18n.ts').translator(locale);
-  const react={...React,useState(initial){const index=cursor++;if(!(index in slots))slots[index]=initial;return[slots[index],value=>{slots[index]=typeof value==='function'?value(slots[index]):value;}];},useRef(initial){return refs[refCursor++]??={current:initial};},useEffect(effect){effects.push(effect);}};
+  const react={...React,useState(initial){const index=cursor++;if(!(index in slots))slots[index]=initial;return[slots[index],value=>{slots[index]=typeof value==='function'?value(slots[index]):value;}];},useRef(initial){return refs[refCursor++]??={current:initial};},useEffect(effect,deps){const index=effectCursor++,old=effects[index];if(!old||deps.some((value,index)=>!Object.is(value,old.deps[index])))effects[index]={effect,deps,cleanup:old?.cleanup,pending:true};}};
   const ui=loader({react,'./language-provider':{useI18n:()=>({locale,t})},'../lib/site-analysis-client':{siteAnalysisRequest(_path,options){return new Promise((resolve,reject)=>{requests.push({body:JSON.parse(options.body),options,resolve,reject});if(options.signal.aborted)reject(options.signal.reason);else options.signal.addEventListener('abort',()=>reject(options.signal.reason),{once:true});});}}},globals)('components/site-management.tsx');
   const props={sites,toolId:50,onChanged(){changed++;},onAnalyze(){}};
-  const render=()=>{cursor=0;refCursor=0;return ui.SiteManagement(props);};
+  const render=()=>{cursor=0;refCursor=0;effectCursor=0;const view=ui.SiteManagement(props);for(const entry of effects)if(entry.pending){entry.cleanup?.();entry.cleanup=entry.effect();entry.pending=false;}return view;};
   const card=index=>uiElements(render()).filter(node=>node.type==='article')[index];
   const button=(index,label)=>uiElements(card(index)).find(node=>node.type==='button'&&(Array.isArray(node.props.children)?node.props.children.includes(t(label)):node.props.children===t(label)));
-  render();const dispose=effects[0]();
+  render();const dispose=()=>{for(const entry of effects)entry.cleanup?.();};
   return{props,render,card,button,t,requests,dispose,changed:()=>changed,$:index=>require('cheerio').load(renderToStaticMarkup(card(index)))};
 }
 
@@ -640,6 +670,33 @@ test('验证缺失回执、网络异常与等待超时都能重试，不伪造�
   timed.button(0,'已安装，开始验证').props.onClick();clock.abort(new DOMException('Timed out','TimeoutError'));await settle();assert.ok(timed.$(0)('.seo-verification-receipt.failed').text().includes(timed.t('验证等待超时，请重试')));assert.equal(timed.button(0,'已安装，开始验证').props.disabled,false);
   const cancelled=managementUiFixture([site]);cancelled.button(0,'已安装，开始验证').props.onClick();cancelled.dispose();await settle();assert.equal(cancelled.requests[0].options.signal.aborted,true);assert.equal(cancelled.changed(),0);
   const existing=managementUiFixture([{...site,verifiedAt:'2026-01-02T00:00:00Z'}]);existing.button(0,'重新验证').props.onClick();existing.requests[0].reject(new TypeError('Failed to fetch'));await settle();assert.ok(existing.$(0)('.seo-verification-receipt.failed').text().includes('网络连接异常'));assert.ok(existing.$(0)('.seo-managed-site-heading').text().includes('已验证'));assert.equal(existing.button(0,'进入综合看板').props.disabled,false);
+});
+
+test('验证限频显示独立倒计时，等待后允许手动重试，不误报失败、不自动提交，中英文说明简明',async()=>{
+  const settle=()=>new Promise(resolve=>setImmediate(resolve));
+  for(const locale of ['zh-CN','en']){
+    let now=Date.now();const timers=new Set(),Clock=class extends Date{constructor(...args){super(...(args.length?args:[now]));}static now(){return now;}};
+    const site={id,host:'first.org',url:'https://first.org/',updatedAt:'2026-01-01',scriptToken:'a'.repeat(64),verifiedAt:''},other={...site,id:otherId,host:'second.org',verifiedAt:'2026-01-02T00:00:00Z'};
+    const f=managementUiFixture([site,other],locale,{Date:Clock,setInterval(callback){timers.add(callback);return callback;},clearInterval(callback){timers.delete(callback);}});
+    const advance=ms=>{now+=ms;for(const tick of timers)tick();f.render();};
+    f.button(0,'已安装，开始验证').props.onClick();f.requests[0].reject(Object.assign(Error('验证请求较频繁，请稍后重试'),{status:429,retryAfter:5}));await settle();
+    assert.equal(f.$(0)('.seo-verification-receipt.waiting[role=status]').length,1);assert.equal(f.$(0)('.seo-verification-receipt.failed').length,0);assert.ok(f.$(0)('.seo-managed-site-heading').text().includes(f.t('等待重试')));assert.equal(f.button(0,'请等待 5 秒').props.disabled,true);assert.equal(f.button(0,'请等待 5 秒').props['aria-busy'],false);assert.equal(timers.size,1);
+    f.button(0,'请等待 5 秒').props.onClick();assert.equal(f.requests.length,1);assert.equal(f.$(1)('.seo-verification-receipt.waiting').length,0);
+    f.button(1,'重新验证').props.onClick();f.requests[1].resolve({site:other});await settle();assert.ok(f.$(1)('.seo-managed-site-heading').text().includes(f.t('已验证')));assert.equal(f.button(0,'请等待 5 秒').props.disabled,true);
+    advance(1100);assert.equal(f.button(0,'请等待 4 秒').props.disabled,true);
+    advance(3900);assert.equal(timers.size,0);assert.equal(f.requests.length,2);assert.equal(f.button(0,'已安装，开始验证').props.disabled,false);assert.ok(f.$(0)('.seo-verification-receipt strong').text().includes(f.t('可以重新验证')));
+    const text=f.$(0)('.seo-site-install').text();for(const copy of ['点击生成脚本后永久固定不变。','验证通过后，用于绑定站点的数据统计与分析。','删除统计脚本后将不再统计，历史分析数据依然保留。'])assert.ok(text.includes(f.t(copy)));assert.doesNotMatch(text,/CSP|Cookie|伪造访问|Visit submissions/);
+    f.button(0,'已安装，开始验证').props.onClick();f.requests[2].resolve({site:{...site,verifiedAt:'2026-01-03T00:00:00Z'}});await settle();assert.equal(f.$(0)('.seo-verification-receipt.success').length,1);assert.equal(f.button(0,'进入综合看板').props.disabled,false);f.dispose();
+  }
+});
+
+test('旧版限频响应使用十秒等待，已验证资格保留，卸载清理倒计时',async()=>{
+  for(const retryAfter of [undefined,NaN,1000]){
+    const timers=new Set(),site={id,host:'first.org',url:'https://first.org/',updatedAt:'2026-01-01',scriptToken:'a'.repeat(64),verifiedAt:'2026-01-02T00:00:00Z'};
+    const f=managementUiFixture([site],'en',{setInterval(callback){timers.add(callback);return callback;},clearInterval(callback){timers.delete(callback);}});
+    f.button(0,'重新验证').props.onClick();f.requests[0].reject(Object.assign(Error('验证请求较频繁，请稍后重试'),{status:429,retryAfter}));await new Promise(resolve=>setImmediate(resolve));
+    assert.equal(f.button(0,'请等待 10 秒').props.disabled,true);assert.equal(f.button(0,'进入综合看板').props.disabled,false);assert.ok(f.$(0)('.seo-managed-site-heading').text().includes(f.t('已验证')));assert.equal(timers.size,1);f.dispose();assert.equal(timers.size,0);
+  }
 });
 
 test('真实访问统计显示会话占比及未知国家，旧报告可读；读取失败不会冒充零流量或未接入',()=>{

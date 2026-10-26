@@ -34,7 +34,7 @@ export type VisitChannel = typeof visitChannels[number];
 export type SiteStatistics = { siteId: string; connected: boolean; active: boolean; verified: boolean; lastSeenAt: string; since: string; pageviews: number; sessions: number; channels: { channel: VisitChannel; visits: number; share: number }[]; countries: { code: string; visits: number; share: number }[] };
 export const siteRunLabels: Record<SiteRun['status'], string> = { queued: '排队中', running: '采集中', completed: '已完成', partial: '部分完成', failed: '分析失败' };
 export const stageLabels: Record<StageState, string> = { pending: '等待采集', running: '采集中', complete: '已完成', partial: '部分完成', failed: '采集失败', restricted: '访问受限', unavailable: '暂不可用', skipped: '未启用' };
-export class SiteAnalysisError extends Error { constructor(message: string, public status = 400) { super(message); } }
+export class SiteAnalysisError extends Error { constructor(message: string, public status = 400, public retryAfter?: number) { super(message); } }
 export function analysisOptions(value: unknown): AnalysisOptions {
   const v = value && typeof value === 'object' ? value as Record<string, unknown> : {};
   const maxPages = v.maxPages === undefined ? 20 : Number(v.maxPages);
