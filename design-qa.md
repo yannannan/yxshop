@@ -173,3 +173,11 @@ final result for this adjustment: blocked (visual verification only; code checks
 - The ID is a lossless encoding of the existing site UUID. Legacy long URLs continue working; deletion, verification and ownership remain enforced, and both formats share visit/session deduplication. No database migration or new dependency was added.
 - Verification: 81 related regressions and production build pass, including localhost output, canonical short IDs, actual production short / long handlers and standalone script deduplication. Changed-file ESLint passes; the existing 20 unrelated TypeScript diagnostics remain.
 - Visual and live installation acceptance remain **pending user acceptance** under the standing no-browser / no-service / no-business-database instruction. Production handler tests use an isolated process and mock data without listening on a port.
+
+## 2026-10-26 Expanded site scripts and verification feedback
+
+- Reference: `codex-clipboard-9b242f2f-7af6-4744-8596-94d34ace6c63.png`. Existing scripts now expand automatically when sites load, including after refresh. Users can collapse / view individual cards without modifying the permanent script. Legacy sites without a script still have an explicit Generate action.
+- Verification now has per-site pending, checking, success and failure feedback directly beneath its button, with a result reason and check time. Existing saved verification and last-pass time appear after refresh. Status icons, polite progress announcements / error alerts, busy / disabled states and reduced-motion support are included in both languages.
+- Verification requests have a 25-second client wait bound, reject malformed or mismatched success receipts, allow retry after failure and cancel on unmount. Temporary network failure preserves previously saved verification; actual access rules remain on the server.
+- Code checks: 83 relevant regressions, production build, changed-file ESLint and CSS parsing pass. The original 20 unrelated TypeScript diagnostics remain. No new SQL, dependency or environment configuration is required.
+- Visual comparison remains **pending user acceptance** under the standing no-browser / no-preview / no-business-database instruction. No rendered screenshot or live verification acceptance is claimed.

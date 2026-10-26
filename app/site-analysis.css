@@ -253,6 +253,15 @@
 .seo-site-script:focus-visible{outline:2px solid #c64b18;outline-offset:3px}
 .seo-script-actions{display:flex;gap:12px;flex-wrap:wrap;justify-content:flex-end;margin-top:15px}
 .seo-script-actions svg{width:18px;height:18px}
+.seo-verification-receipt{display:flex;align-items:flex-start;gap:11px;margin-top:18px;padding:14px 15px;border:1px solid #dfe7f1;border-radius:10px;background:#f6f8fc;color:#50657d;line-height:1.8}
+.seo-verification-receipt>svg{width:21px;height:21px;flex-shrink:0;margin-top:2px}
+.seo-verification-receipt>div{min-width:0}
+.seo-verification-receipt strong{display:block;font-size:14px;font-weight:600}
+.seo-verification-receipt p{margin:3px 0 0;font-size:13px;overflow-wrap:anywhere}
+.seo-verification-receipt small{display:block;margin-top:7px;font-size:12px}
+.seo-verification-receipt.checking{border-color:#d2e0f1;background:#f0f5fc;color:#365d85}
+.seo-verification-receipt.success{border-color:#d1e8da;background:#f0f9f3;color:#2d6a4d}
+.seo-verification-receipt.failed{border-color:#f0d8cf;background:#fff4ef;color:#a84332}
 .seo-site-install-notes{padding-left:21px;margin:21px 0 0;color:#65758a;font-size:13px;line-height:2}
 .seo-workspace .seo-country-table .seo-country-data td{padding:12px 10px;border-bottom:1px solid #e7edf4;font-size:14px}
 .seo-workspace .seo-country-table .seo-country-data td:last-child{text-align:right}

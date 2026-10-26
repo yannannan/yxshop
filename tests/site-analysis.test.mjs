@@ -566,9 +566,9 @@ test('站点管理可添加、复制唯一脚本、验证、进入看板并确�
     uiElements(tree).find(node=>node.type==='input').props.onChange({target:{value:'example.org'}});tree=render();uiElements(tree).find(node=>node.type==='form').props.onSubmit({preventDefault(){}});await settle();tree=render();
     assert.equal(calls.length,1);assert.equal(calls[0].action,'site-add');assert.equal(calls[0].domain,'example.org');
     const text=label=>translations.translator(locale)(label),button=label=>uiElements(tree).find(node=>node.type==='button'&&uiElements(node.props.children).some(child=>typeof child.props?.children==='string'&&child.props.children===text(label)))||uiElements(tree).find(node=>node.type==='button'&&(Array.isArray(node.props.children)?node.props.children.includes(text(label)):node.props.children===text(label)));
-    assert.ok(!uiElements(tree).some(node=>node.type==='textarea'));button('生成脚本').props.onClick();tree=render();
+    assert.ok(uiElements(tree).some(node=>node.type==='textarea'));
     const card=uiElements(tree).find(node=>node.type==='article'),code=uiElements(card).find(node=>node.type==='textarea');assert.equal(code.props.readOnly,true);assert.equal(code.props.value,'<script async src="https://www.yxstar.shop/s/IiIiIiIiQiKCIiIiIiIiIg"></script>');assert.ok(!code.props.value.includes('localhost'));
-    button('查看脚本').props.onClick();tree=render();assert.equal(uiElements(tree).find(node=>node.type==='textarea').props.value,code.props.value);assert.equal(calls.length,1);
+    button('收起脚本').props.onClick();tree=render();assert.ok(!uiElements(tree).some(node=>node.type==='textarea'));button('查看脚本').props.onClick();tree=render();assert.equal(uiElements(tree).find(node=>node.type==='textarea').props.value,code.props.value);assert.equal(calls.length,1);
     assert.equal(button('进入综合看板').props.disabled,true);button('复制脚本').props.onClick();await settle();assert.equal(copied,code.props.value);
     button('已安装，开始验证').props.onClick();await settle();tree=render();assert.equal(calls[1].action,'site-verify');assert.equal(button('进入综合看板').props.disabled,false);button('进入综合看板').props.onClick();assert.equal(selected.id,site.id);
     const remove=uiElements(tree).find(node=>node.type==='button'&&node.props['aria-label']===text('删除站点 example.org'));remove.props.onClick();tree=render();button('确认删除').props.onClick();await settle();tree=render();assert.equal(calls[2].action,'site-delete');assert.equal(changed,3);assert.ok(!renderToStaticMarkup(tree).includes('seo-site-script'));
@@ -587,16 +587,59 @@ test('多站点的生成、脚本、复制与验证留在各自卡片，重复�
       return{render,effects};
     }
     const text=translations.translator(locale),card=(tree,index)=>uiElements(tree).filter(node=>node.type==='article')[index],button=(tree,label)=>uiElements(tree).find(node=>node.type==='button'&&(Array.isArray(node.props.children)?node.props.children.includes(text(label)):node.props.children===text(label))),code=tree=>uiElements(tree).find(node=>node.type==='textarea');
-    const first=mount();let tree=first.render();first.effects[0]();await settle();tree=first.render();assert.ok(!code(tree));
-    button(card(tree,0),'生成脚本').props.onClick();tree=first.render();const original=code(card(tree,0)).props.value;assert.ok(!code(card(tree,1)));assert.equal(calls.length,0);
+    const first=mount();let tree=first.render();first.effects[0]();await settle();tree=first.render();assert.ok(code(card(tree,0)));assert.ok(!code(card(tree,1)));
+    const original=code(card(tree,0)).props.value;button(card(tree,0),'收起脚本').props.onClick();tree=first.render();assert.ok(!code(card(tree,0)));button(card(tree,0),'查看脚本').props.onClick();tree=first.render();assert.equal(code(card(tree,0)).props.value,original);assert.equal(calls.length,0);
     button(card(tree,1),'生成脚本').props.onClick();await settle();tree=first.render();assert.equal(calls.length,1);assert.equal(calls[0].domain,sites[1].url);
     const secondCode=code(card(tree,1));assert.equal(secondCode.props.value,'<script async src="https://www.yxstar.shop/s/IiIiIiIiQiKCIiIiIiIiIg"></script>');assert.equal(code(card(tree,0)).props.value,original);assert.notEqual(code(card(tree,0)).props.id,secondCode.props.id);
     button(card(tree,1),'复制脚本').props.onClick();await settle();assert.equal(copied,secondCode.props.value);
     button(card(tree,1),'已安装，开始验证').props.onClick();await settle();tree=first.render();assert.equal(calls[1].site,otherId);assert.equal(code(card(tree,0)).props.value,original);
-    button(card(tree,1),'查看脚本').props.onClick();tree=first.render();assert.equal(calls.length,2);assert.equal(code(card(tree,1)).props.value,secondCode.props.value);
-    const next=mount();tree=next.render();next.effects[0]();await settle();tree=next.render();button(card(tree,0),'生成脚本').props.onClick();button(card(tree,1),'生成脚本').props.onClick();tree=next.render();
+    button(card(tree,1),'收起脚本').props.onClick();tree=first.render();button(card(tree,1),'查看脚本').props.onClick();tree=first.render();assert.equal(calls.length,2);assert.equal(code(card(tree,1)).props.value,secondCode.props.value);
+    const next=mount();tree=next.render();next.effects[0]();await settle();tree=next.render();
     assert.equal(code(card(tree,0)).props.value,original);assert.equal(code(card(tree,1)).props.value,secondCode.props.value);assert.equal(calls.length,2);
   }
+});
+
+function managementUiFixture(sites,locale='zh-CN',globals={}) {
+  const slots=[],refs=[],effects=[],requests=[];let cursor=0,refCursor=0,changed=0;
+  const t=loader()('lib/i18n.ts').translator(locale);
+  const react={...React,useState(initial){const index=cursor++;if(!(index in slots))slots[index]=initial;return[slots[index],value=>{slots[index]=typeof value==='function'?value(slots[index]):value;}];},useRef(initial){return refs[refCursor++]??={current:initial};},useEffect(effect){effects.push(effect);}};
+  const ui=loader({react,'./language-provider':{useI18n:()=>({locale,t})},'../lib/site-analysis-client':{siteAnalysisRequest(_path,options){return new Promise((resolve,reject)=>{requests.push({body:JSON.parse(options.body),options,resolve,reject});if(options.signal.aborted)reject(options.signal.reason);else options.signal.addEventListener('abort',()=>reject(options.signal.reason),{once:true});});}}},globals)('components/site-management.tsx');
+  const props={sites,toolId:50,onChanged(){changed++;},onAnalyze(){}};
+  const render=()=>{cursor=0;refCursor=0;return ui.SiteManagement(props);};
+  const card=index=>uiElements(render()).filter(node=>node.type==='article')[index];
+  const button=(index,label)=>uiElements(card(index)).find(node=>node.type==='button'&&(Array.isArray(node.props.children)?node.props.children.includes(t(label)):node.props.children===t(label)));
+  render();const dispose=effects[0]();
+  return{props,render,card,button,t,requests,dispose,changed:()=>changed,$:index=>require('cheerio').load(renderToStaticMarkup(card(index)))};
+}
+
+test('已有脚本随站点读取默认展开，验证进度与成功失败回执留在本站，重复点击不重发，刷新保留服务端已验证状态',async()=>{
+  const settle=()=>new Promise(resolve=>setImmediate(resolve));
+  for(const locale of ['zh-CN','en']){
+    const site={id,host:'first.org',url:'https://first.org/',updatedAt:'2026-01-01',scriptToken:'a'.repeat(64),verifiedAt:''},other={...site,id:otherId,host:'second.org',url:'https://second.org/',scriptToken:'b'.repeat(64),verifiedAt:'2026-01-02T00:00:00Z'};
+    const f=managementUiFixture([],locale);assert.equal(uiElements(f.render()).filter(node=>node.type==='article').length,0);f.props.sites=[site,other];
+    assert.equal(uiElements(f.render()).filter(node=>node.type==='textarea').length,2);assert.equal(f.requests.length,0);
+    assert.equal(f.$(0)('.seo-verification-receipt.pending').length,1);assert.ok(f.$(1)('.seo-managed-site-heading').text().includes(f.t('已验证')));
+    const original=f.$(0)('textarea').val(),verify=f.button(0,'已安装，开始验证');verify.props.onClick();verify.props.onClick();
+    assert.equal(f.requests.length,1);assert.equal(f.requests[0].body.site,id);assert.equal(f.button(0,'正在验证…').props.disabled,true);assert.equal(f.button(0,'正在验证…').props['aria-busy'],true);
+    assert.equal(f.$(0)('.seo-verification-receipt.checking[role=status]').length,1);assert.equal(f.$(1)('.seo-verification-receipt.checking').length,0);
+    const reason='首页未发现本站唯一脚本，请安装到页面HTML后再验证';f.requests[0].reject(Error(reason));await settle();
+    assert.equal(f.$(0)('.seo-verification-receipt.failed[role=alert]').length,1);assert.ok(f.$(0)('.seo-verification-receipt').text().includes(f.t(reason)));assert.ok(f.$(0)('.seo-verification-receipt small').text().includes(f.t('本次检查时间')));assert.equal(f.button(0,'已安装，开始验证').props.disabled,false);
+    f.button(0,'已安装，开始验证').props.onClick();const verified={...site,verifiedAt:'2026-01-03T00:00:00Z'};f.requests[1].resolve({site:verified});await settle();
+    assert.equal(f.$(0)('.seo-verification-receipt.success[role=status]').length,1);assert.ok(f.$(0)('.seo-managed-site-heading').text().includes(f.t('已验证')));assert.equal(f.button(0,'进入综合看板').props.disabled,false);assert.equal(f.$(0)('textarea').val(),original);
+    f.button(0,'收起脚本').props.onClick();assert.equal(f.$(0)('textarea').length,0);
+    const refreshed=managementUiFixture([verified,other],locale);assert.equal(uiElements(refreshed.render()).filter(node=>node.type==='textarea').length,2);assert.equal(refreshed.$(0)('textarea').val(),original);assert.ok(refreshed.$(0)('.seo-verification-receipt small').text().includes(f.t('最近验证通过')));assert.equal(refreshed.requests.length,0);
+  }
+});
+
+test('验证缺失回执、网络异常与等待超时都能重试，不伪造成功；卸载取消不更新旧页面或误撤销已有验证',async()=>{
+  const settle=()=>new Promise(resolve=>setImmediate(resolve)),site={id,host:'first.org',url:'https://first.org/',updatedAt:'2026-01-01',scriptToken:'a'.repeat(64),verifiedAt:''};
+  for(const result of [{},{site:{...site,id:otherId,verifiedAt:'2026-01-02'}},{site},{site:{...site,verifiedAt:2026}},{site:{...site,verifiedAt:'invalid'}}]){
+    const f=managementUiFixture([site]);f.button(0,'已安装，开始验证').props.onClick();f.requests[0].resolve(result);await settle();assert.ok(f.$(0)('.seo-verification-receipt.failed').text().includes('验证响应不完整'));assert.equal(f.button(0,'进入综合看板').props.disabled,true);assert.equal(f.button(0,'已安装，开始验证').props.disabled,false);
+  }
+  const clock=new AbortController(),timed=managementUiFixture([site],'en',{AbortSignal:{timeout(ms){assert.equal(ms,25000);return clock.signal;},any:AbortSignal.any.bind(AbortSignal)}});
+  timed.button(0,'已安装，开始验证').props.onClick();clock.abort(new DOMException('Timed out','TimeoutError'));await settle();assert.ok(timed.$(0)('.seo-verification-receipt.failed').text().includes(timed.t('验证等待超时，请重试')));assert.equal(timed.button(0,'已安装，开始验证').props.disabled,false);
+  const cancelled=managementUiFixture([site]);cancelled.button(0,'已安装，开始验证').props.onClick();cancelled.dispose();await settle();assert.equal(cancelled.requests[0].options.signal.aborted,true);assert.equal(cancelled.changed(),0);
+  const existing=managementUiFixture([{...site,verifiedAt:'2026-01-02T00:00:00Z'}]);existing.button(0,'重新验证').props.onClick();existing.requests[0].reject(new TypeError('Failed to fetch'));await settle();assert.ok(existing.$(0)('.seo-verification-receipt.failed').text().includes('网络连接异常'));assert.ok(existing.$(0)('.seo-managed-site-heading').text().includes('已验证'));assert.equal(existing.button(0,'进入综合看板').props.disabled,false);
 });
 
 test('真实访问统计显示会话占比及未知国家，旧报告可读；读取失败不会冒充零流量或未接入',()=>{
