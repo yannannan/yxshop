@@ -34,16 +34,16 @@ export async function registerAnalysisSite(userId: number, domain: unknown) {
     let row = await db.prepare(`SELECT ${projection} ${join} WHERE s.user_id=? AND s.host=? FOR UPDATE`).bind(userId, target.host).first<ManagedSite>();
     if (row?.scriptToken && !row.deletedAt) return row;
     if ((await listAnalysisSites(userId, db)).length >= 100 && (!row || row.deletedAt)) throw new SiteAnalysisError('已达到当前站点数量上限', 409);
-    const time = stamp(), token = randomBytes(32).toString('hex');
+    const time = stamp(), token = row?.scriptToken || randomBytes(32).toString('hex');
     if (!row) {
       const id = randomUUID();
       await db.prepare('INSERT INTO site_analysis_sites (id,user_id,host,url,created_at,updated_at) VALUES (?,?,?,?,?,?)').bind(id, userId, target.host, target.url, time, time).run();
       row = { id, host: target.host, url: target.url, updatedAt: time, scriptToken: '', verifiedAt: '', lastSeenAt: '', deletedAt: '' };
     }
-    if (row.scriptToken) await db.prepare("UPDATE site_analysis_integrations SET script_token=?,verified_at='',last_seen_at='',verify_requested_at='',deleted_at='',updated_at=? WHERE site_id=? AND user_id=?").bind(token, time, row.id, userId).run();
+    if (row.scriptToken) await db.prepare("UPDATE site_analysis_integrations SET verified_at='',verify_requested_at='',deleted_at='',updated_at=? WHERE site_id=? AND user_id=?").bind(time, row.id, userId).run();
     else await db.prepare("INSERT INTO site_analysis_integrations (site_id,user_id,script_token,verified_at,last_seen_at,verify_requested_at,deleted_at,created_at,updated_at) VALUES (?,?,?,'','','','',?,?)").bind(row.id, userId, token, time, time).run();
     await db.prepare('UPDATE site_analysis_sites SET url=?,updated_at=? WHERE id=? AND user_id=?').bind(target.url, time, row.id, userId).run();
-    return { ...row, url: target.url, scriptToken: token, verifiedAt: '', lastSeenAt: '', deletedAt: '', updatedAt: time };
+    return { ...row, url: target.url, scriptToken: token, verifiedAt: '', deletedAt: '', updatedAt: time };
   });
 }
 export async function deleteAnalysisSite(userId: number, id: string) {
@@ -59,7 +59,10 @@ export async function verifyAnalysisSite(userId: number, id: string, platformOri
   const site = await ownedManagedSite(userId, id);
   if (!site.scriptToken) throw new SiteAnalysisError('请先生成本站接入脚本', 409);
   const time = stamp(), cutoff = new Date(Date.now() - 10000).toISOString();
-  const claimed = await env.DB.prepare("UPDATE site_analysis_integrations SET verify_requested_at=? WHERE site_id=? AND user_id=? AND script_token=? AND deleted_at='' AND verify_requested_at<?").bind(time, id, userId, site.scriptToken, cutoff).run();
+  // Each verification has its own marker: restoring a deleted site keeps its
+  // permanent script token but must reject an earlier in-flight verification.
+  const claim = `${time}#${randomBytes(6).toString('hex')}`;
+  const claimed = await env.DB.prepare("UPDATE site_analysis_integrations SET verify_requested_at=? WHERE site_id=? AND user_id=? AND script_token=? AND deleted_at='' AND verify_requested_at<?").bind(claim, id, userId, site.scriptToken, cutoff).run();
   if (claimed.meta.changes !== 1) throw new SiteAnalysisError('验证请求较频繁，请稍后重试', 429);
   let response;
   try { response = await read(site.url, AbortSignal.timeout(15000), 1024 * 1024); }
@@ -73,7 +76,7 @@ export async function verifyAnalysisSite(userId: number, id: string, platformOri
     if ($(node).attr('nomodule') !== undefined || type && !/^(?:text|application)\/(?:java|ecma)script$/.test(type)) return false;
     try { return new URL($(node).attr('src')!, response.url).href === expected; } catch { return false; }
   });
-  const updated = await env.DB.prepare("UPDATE site_analysis_integrations SET verified_at=?,updated_at=? WHERE site_id=? AND user_id=? AND script_token=? AND deleted_at=''").bind(found ? time : '', time, id, userId, site.scriptToken).run();
+  const updated = await env.DB.prepare("UPDATE site_analysis_integrations SET verified_at=?,updated_at=? WHERE site_id=? AND user_id=? AND script_token=? AND deleted_at='' AND verify_requested_at=?").bind(found ? time : '', time, id, userId, site.scriptToken, claim).run();
   if (updated.meta.changes !== 1) throw new SiteAnalysisError('站点状态已变化，请刷新后重试', 409);
   if (!found) throw new SiteAnalysisError('首页未发现本站唯一脚本，请安装到页面HTML后再验证', 422);
   return ownedManagedSite(userId, id);

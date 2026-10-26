@@ -338,12 +338,13 @@ function fixture({chargeType='free',balance=300,failTable='',registered=true,ver
       }
       if(sql.startsWith('UPDATE site_analysis_sites')){const row=state.site_analysis_sites.find(r=>r.id===args[2]&&r.user_id===args[3]);if(row)Object.assign(row,{url:args[0],updated_at:args[1]});return{affectedRows:row?1:0};}
       if(sql.startsWith('UPDATE site_analysis_integrations')){
-        const index=sql.includes('SET verify_requested_at=')?1:2,row=state.site_analysis_integrations.find(r=>r.site_id===args[index]&&(sql.includes('AND user_id=?')?r.user_id===args[index+1]:true));
+        const restoring=sql.includes("SET verified_at='',verify_requested_at=''");
+        const index=sql.includes('SET verify_requested_at=')||restoring?1:2,row=state.site_analysis_integrations.find(r=>r.site_id===args[index]&&(sql.includes('AND user_id=?')?r.user_id===args[index+1]:true));
         if(!row)return{affectedRows:0};
         if(sql.includes('SET verify_requested_at=')){if(row.deleted_at||row.script_token!==args[3]||!(row.verify_requested_at<args[4]))return{affectedRows:0};row.verify_requested_at=args[0];}
-        else if(sql.includes('SET script_token='))Object.assign(row,{script_token:args[0],updated_at:args[1],verified_at:'',last_seen_at:'',verify_requested_at:'',deleted_at:''});
+        else if(restoring)Object.assign(row,{updated_at:args[0],verified_at:'',verify_requested_at:'',deleted_at:''});
         else if(sql.includes('SET deleted_at='))Object.assign(row,{deleted_at:args[0],verified_at:'',updated_at:args[1]});
-        else if(sql.includes('SET verified_at=')){if(row.deleted_at||row.script_token!==args[4])return{affectedRows:0};Object.assign(row,{verified_at:args[0],updated_at:args[1]});}
+        else if(sql.includes('SET verified_at=')){if(row.deleted_at||row.script_token!==args[4]||row.verify_requested_at!==args[5])return{affectedRows:0};Object.assign(row,{verified_at:args[0],updated_at:args[1]});}
         else if(sql.includes('SET last_seen_at=')){if(row.deleted_at||row.script_token!==args[3])return{affectedRows:0};Object.assign(row,{last_seen_at:args[0],updated_at:args[1]});}
         else throw Error('Unknown integration update');return{affectedRows:1};
       }
@@ -405,6 +406,18 @@ test('站点需显式添加且脚本唯一，重复添加复用配置；跨账�
   const broken=fixture({registered:false,failTable:'site_analysis_integrations'});assert.equal((await broken.route.POST(broken.request({body:{tool:50,action:'site-add',domain:'example.org'}}))).status,503);assert.equal(broken.state().site_analysis_sites.length,0);
 });
 
+test('每个域名永久保留原脚本，并发重复生成与旧站点补生成都只保存一次且不改变验证结果',async()=>{
+  const f=fixture({registered:false}),rows=await Promise.all(Array.from({length:5},()=>f.management.registerAnalysisSite(1,'example.org')));
+  assert.equal(new Set(rows.map(row=>row.scriptToken)).size,1);assert.equal(f.state().site_analysis_integrations.length,1);
+  const token=rows[0].scriptToken,read=async()=>({url:'https://example.org/',status:200,contentType:'text/html',bytes:Buffer.from(`<script src="https://shop.example/api/site-tracker/${token}"></script>`)});
+  const verified=await f.management.verifyAnalysisSite(1,rows[0].id,'https://shop.example',read),queries=f.queries.length;
+  for(let n=0;n<3;n++){const repeated=await f.management.registerAnalysisSite(1,'example.org');assert.equal(repeated.scriptToken,token);assert.equal(repeated.verifiedAt,verified.verifiedAt);}
+  assert.ok(!f.queries.slice(queries).some(row=>/^(INSERT|UPDATE) /.test(row.sql)));
+  const legacy=fixture({verified:false});legacy.state().site_analysis_integrations=[];
+  const first=await legacy.management.registerAnalysisSite(1,'example.org'),again=await legacy.management.registerAnalysisSite(1,'example.org');
+  assert.equal(first.id,otherId);assert.match(first.scriptToken,/^[a-f0-9]{64}$/);assert.equal(again.scriptToken,first.scriptToken);assert.equal(legacy.state().site_analysis_integrations.length,1);
+});
+
 test('唯一脚本由服务器读取真实script元素验证；注释、模板、其他站点脚本和跨域跳转不能证明归属',async()=>{
   for(const kind of ['valid','comment','template','noscript','text','foreign-token','foreign-origin','dormant','redirect']){
     const f=fixture({registered:false}),site=await f.management.registerAnalysisSite(1,'example.org'),src='https://shop.example'+f.management.scriptPath(site.scriptToken);
@@ -424,6 +437,11 @@ test('验证冷却限制与删除竞态不会把已删除或重建站点重新�
   f.state().site_analysis_integrations[0].verify_requested_at='';
   const race=async()=>{await f.management.deleteAnalysisSite(1,otherId);return read();};
   await assert.rejects(f.management.verifyAnalysisSite(1,otherId,'https://shop.example',race),error=>error.status===409);assert.ok(f.state().site_analysis_integrations[0].deleted_at);
+  const restored=await f.management.registerAnalysisSite(1,'example.org');assert.equal(restored.scriptToken,'a'.repeat(64));
+  const recreate=async()=>{await f.management.deleteAnalysisSite(1,otherId);await f.management.registerAnalysisSite(1,'example.org');return read();};
+  await assert.rejects(f.management.verifyAnalysisSite(1,otherId,'https://shop.example',recreate),error=>error.status===409);
+  assert.equal(f.state().site_analysis_integrations[0].verified_at,'');assert.equal(f.state().site_analysis_integrations[0].deleted_at,'');
+  const verified=await f.management.verifyAnalysisSite(1,otherId,'https://shop.example',read);assert.ok(verified.verifiedAt);assert.equal(verified.scriptToken,restored.scriptToken);
 });
 
 test('访问上报不能验证站点，校验域名和事件大小，匿名脚本不依赖商城会话且不泄露统计',async()=>{
@@ -442,7 +460,7 @@ test('访问上报不能验证站点，校验域名和事件大小，匿名脚�
   const event=f.state().site_analysis_visits[0];assert.equal(event.page_path,'/page');assert.equal(event.channel,'email');assert.equal(event.country_code,'');assert.ok(!JSON.stringify(event).includes('secret'));assert.notEqual(event.session_key,payload.session);
 });
 
-test('上报幂等并按会话统计来源；删除不丢历史，旧脚本立即失效，重加域名生成新脚本且重新验证',async()=>{
+test('上报幂等并按会话统计来源；删除不丢历史并暂停原脚本，重加域名保留原脚本且重新验证',async()=>{
   const f=fixture(),token='a'.repeat(64),body={id:'visit-event-00000001',session:'anonymous-session-0001',page:'https://example.org/page',referrer:'https://www.google.com/search?q=word',medium:''};
   const request=()=>new Request('https://shop.example/api/site-tracker/'+token,{method:'POST',headers:{origin:'https://example.org'}});
   await f.tracking.recordSiteVisit(token,request(),body);await f.tracking.recordSiteVisit(token,request(),body);await f.tracking.recordSiteVisit(token,request(),{...body,id:'visit-event-00000002',page:'https://example.org/second',referrer:'https://facebook.com/',medium:'social'});
@@ -452,7 +470,10 @@ test('上报幂等并按会话统计来源；删除不丢历史，旧脚本立�
   assert.equal((await f.trackerRoute.GET(new Request('https://shop.example/api/site-tracker/'+token),{params:Promise.resolve({token})})).status,404);
   await assert.rejects(f.tracking.recordSiteVisit(token,request(),{...body,id:'visit-event-00000003'}),error=>error.status===403);
   stats=await f.management.siteStatistics(1,otherId);assert.equal(stats.active,false);assert.equal(stats.pageviews,2);
-  const restored=await f.management.registerAnalysisSite(1,'example.org');assert.equal(restored.id,otherId);assert.notEqual(restored.scriptToken,token);assert.equal(restored.verifiedAt,'');assert.equal(f.state().site_analysis_visits.length,2);
+  const restored=await f.management.registerAnalysisSite(1,'example.org');assert.equal(restored.id,otherId);assert.equal(restored.scriptToken,token);assert.equal(restored.verifiedAt,'');assert.equal(f.state().site_analysis_visits.length,2);
+  await assert.rejects(f.tracking.recordSiteVisit(token,request(),{...body,id:'visit-event-00000003'}),error=>error.status===403);
+  await f.management.verifyAnalysisSite(1,otherId,'https://shop.example',async()=>({url:'https://example.org/',status:200,contentType:'text/html',bytes:Buffer.from(`<script src="https://shop.example/api/site-tracker/${token}"></script>`)}));
+  await f.tracking.recordSiteVisit(token,request(),{...body,id:'visit-event-00000003'});assert.equal(f.state().site_analysis_visits.length,3);
 });
 
 test('访问来源分类使用域名边界和明确medium，不把伪装搜索域或邮件访问误记为搜索',()=>{
@@ -496,11 +517,37 @@ test('站点管理可添加、复制唯一脚本、验证、进入看板并确�
     let tree=render();effects[0]();await settle();
     uiElements(tree).find(node=>node.type==='input').props.onChange({target:{value:'example.org'}});tree=render();uiElements(tree).find(node=>node.type==='form').props.onSubmit({preventDefault(){}});await settle();tree=render();
     assert.equal(calls.length,1);assert.equal(calls[0].action,'site-add');assert.equal(calls[0].domain,'example.org');
-    const code=uiElements(tree).find(node=>node.type==='textarea');assert.equal(code.props.readOnly,true);assert.equal(code.props.value,`<script async src="https://shop.example/api/site-tracker/${site.scriptToken}"></script>`);
     const text=label=>translations.translator(locale)(label),button=label=>uiElements(tree).find(node=>node.type==='button'&&uiElements(node.props.children).some(child=>typeof child.props?.children==='string'&&child.props.children===text(label)))||uiElements(tree).find(node=>node.type==='button'&&(Array.isArray(node.props.children)?node.props.children.includes(text(label)):node.props.children===text(label)));
+    assert.ok(!uiElements(tree).some(node=>node.type==='textarea'));button('生成脚本').props.onClick();tree=render();
+    const card=uiElements(tree).find(node=>node.type==='article'),code=uiElements(card).find(node=>node.type==='textarea');assert.equal(code.props.readOnly,true);assert.equal(code.props.value,`<script async src="https://shop.example/api/site-tracker/${site.scriptToken}"></script>`);
+    button('查看脚本').props.onClick();tree=render();assert.equal(uiElements(tree).find(node=>node.type==='textarea').props.value,code.props.value);assert.equal(calls.length,1);
     assert.equal(button('进入综合看板').props.disabled,true);button('复制脚本').props.onClick();await settle();assert.equal(copied,code.props.value);
     button('已安装，开始验证').props.onClick();await settle();tree=render();assert.equal(calls[1].action,'site-verify');assert.equal(button('进入综合看板').props.disabled,false);button('进入综合看板').props.onClick();assert.equal(selected.id,site.id);
     const remove=uiElements(tree).find(node=>node.type==='button'&&node.props['aria-label']===text('删除站点 example.org'));remove.props.onClick();tree=render();button('确认删除').props.onClick();await settle();tree=render();assert.equal(calls[2].action,'site-delete');assert.equal(changed,3);assert.ok(!renderToStaticMarkup(tree).includes('seo-site-script'));
+  }
+});
+
+test('多站点的生成、脚本、复制与验证留在各自卡片，重复点击和页面重建保持原脚本',async()=>{
+  const translations=loader()('lib/i18n.ts'),settle=()=>new Promise(resolve=>setImmediate(resolve));
+  for(const locale of ['zh-CN','en']){
+    const sites=[{id,host:'first.org',url:'https://first.org/',updatedAt:'2026-01-01',scriptToken:'a'.repeat(64),verifiedAt:''},{id:otherId,host:'second.org',url:'https://second.org/',updatedAt:'2026-01-01',scriptToken:'',verifiedAt:''}],calls=[];let copied='';
+    function mount(){
+      const slots=[],refs=[],effects=[];let cursor=0,refCursor=0;
+      const react={...React,useState(initial){const index=cursor++;if(!(index in slots))slots[index]=initial;return[slots[index],value=>{slots[index]=typeof value==='function'?value(slots[index]):value;}];},useRef(initial){return refs[refCursor++]??={current:initial};},useEffect(effect){effects.push(effect);}};
+      const ui=loader({react,'./language-provider':{useI18n:()=>({locale,t:translations.translator(locale)})},'../lib/site-analysis-client':{async siteAnalysisRequest(_path,options){const body=JSON.parse(options.body);calls.push(body);const site=sites.find(site=>site.id===body.site||site.url===body.domain);assert.ok(site);Object.assign(site,{scriptToken:site.scriptToken||'b'.repeat(64),updatedAt:'2026-01-02',...(body.action==='site-verify'?{verifiedAt:'2026-01-02'}:{})});return{site:{...site}};}}},{window:{location:{origin:'https://shop.example'}},navigator:{clipboard:{async writeText(value){copied=value;}}}})('components/site-management.tsx');
+      const render=()=>{cursor=0;refCursor=0;return ui.SiteManagement({sites,toolId:50,onChanged(){},onAnalyze(){}});};
+      return{render,effects};
+    }
+    const text=translations.translator(locale),card=(tree,index)=>uiElements(tree).filter(node=>node.type==='article')[index],button=(tree,label)=>uiElements(tree).find(node=>node.type==='button'&&(Array.isArray(node.props.children)?node.props.children.includes(text(label)):node.props.children===text(label))),code=tree=>uiElements(tree).find(node=>node.type==='textarea');
+    const first=mount();let tree=first.render();first.effects[0]();await settle();tree=first.render();assert.ok(!code(tree));
+    button(card(tree,0),'生成脚本').props.onClick();tree=first.render();const original=code(card(tree,0)).props.value;assert.ok(!code(card(tree,1)));assert.equal(calls.length,0);
+    button(card(tree,1),'生成脚本').props.onClick();await settle();tree=first.render();assert.equal(calls.length,1);assert.equal(calls[0].domain,sites[1].url);
+    const secondCode=code(card(tree,1));assert.ok(secondCode.props.value.includes('b'.repeat(64)));assert.equal(code(card(tree,0)).props.value,original);assert.notEqual(code(card(tree,0)).props.id,secondCode.props.id);
+    button(card(tree,1),'复制脚本').props.onClick();await settle();assert.equal(copied,secondCode.props.value);
+    button(card(tree,1),'已安装，开始验证').props.onClick();await settle();tree=first.render();assert.equal(calls[1].site,otherId);assert.equal(code(card(tree,0)).props.value,original);
+    button(card(tree,1),'查看脚本').props.onClick();tree=first.render();assert.equal(calls.length,2);assert.equal(code(card(tree,1)).props.value,secondCode.props.value);
+    const next=mount();tree=next.render();next.effects[0]();await settle();tree=next.render();button(card(tree,0),'生成脚本').props.onClick();button(card(tree,1),'生成脚本').props.onClick();tree=next.render();
+    assert.equal(code(card(tree,0)).props.value,original);assert.equal(code(card(tree,1)).props.value,secondCode.props.value);assert.equal(calls.length,2);
   }
 });
 

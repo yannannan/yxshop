@@ -157,3 +157,12 @@ final result for this column change: blocked (visual verification only; code che
 - Visual comparison and real-site installation are **blocked / pending user acceptance** under the standing instruction not to open browsers, start app / preview services or connect to the business database. No rendered screenshot, breakpoint or live installation acceptance is claimed.
 
 final result for this feature: blocked (visual / live integration verification only; code checks complete)
+
+## 2026-10-26 Per-site inline permanent scripts
+
+- Reference: `codex-clipboard-0abf0a35-ce30-450e-a950-f752d5635caf.png`. Each site card now owns its script-generation / viewing, copy, installation and verification controls. The separate shared connection panel is removed. Multiple cards can expand independently with unique labels and IDs; narrow screens retain the existing single-column layout.
+- The first click reveals the saved unique script, with a permanent-state note. Repeated clicks and page remounts preserve it. Existing tokens stay unchanged, including removal / re-addition under the same account; removal pauses collection and restoration requires verification again.
+- Verification: 78 related regressions pass, including multi-site action binding, copy, bilingual text, page remount, concurrent generation, legacy initialization and deletion / verification races. Production build, changed-file ESLint and CSS parsing pass. The original 20 unrelated TypeScript diagnostics remain.
+- Visual comparison remains **blocked / pending user acceptance** under the standing no-browser / no-preview instruction. No app server, real database or live site installation was used for acceptance.
+
+final result for this adjustment: blocked (visual verification only; code checks complete)

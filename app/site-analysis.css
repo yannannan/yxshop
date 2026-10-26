@@ -223,7 +223,7 @@
 .seo-site-add input{width:100%}
 .seo-site-add .seo-primary{min-height:48px}
 .seo-site-message{display:flex;align-items:center;gap:9px;padding:12px 16px;margin:0 0 20px;border:1px solid #d1e8da;border-radius:10px;background:#f0f9f3;color:#2d6a4d;font-size:14px;line-height:1.8}
-.seo-managed-sites{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-bottom:20px}
+.seo-managed-sites{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start;gap:16px;margin-bottom:20px}
 .seo-managed-site{margin:0;padding:22px;min-width:0}
 .seo-managed-site.selected{border-color:#9db3cc;box-shadow:0 3px 14px #193a5e08}
 .seo-managed-site-heading{display:flex;align-items:center;gap:10px}
@@ -241,8 +241,13 @@
 .seo-site-delete-confirm{border-top:1px solid #e8e1dc;margin-top:17px;padding-top:15px;color:#9b523a;font-size:13px;line-height:1.9}
 .seo-site-delete-confirm p{margin:0 0 12px}
 .seo-site-delete-confirm button{border:1px solid #dec7bb;border-radius:6px;background:#fff7f1;color:#9b523a;padding:6px 12px;margin-right:10px;font-size:13px}
-.seo-site-install .seo-section-title{align-items:flex-start}
-.seo-site-install .seo-section-title h2{overflow-wrap:anywhere}
+.seo-managed-site-actions .seo-quiet svg{width:17px;height:17px}
+.seo-site-install{margin-top:20px;padding-top:20px;border-top:1px solid #e3eaf2}
+.seo-site-script-heading{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px}
+.seo-site-script-heading h3{margin:0;color:#203650;font-size:16px;font-weight:600}
+.seo-site-script-heading>span{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:#2d6a4d}
+.seo-site-script-heading svg{width:16px;height:16px}
+.seo-site-script-note{margin:9px 0 15px;font-size:13px;color:#65758a;line-height:1.8}
 .seo-script-label{display:block;color:#50657d;font-size:14px;margin-bottom:9px}
 .seo-site-script{display:block;width:100%;min-height:105px;padding:15px 16px;border:1px solid #dbe4ef;border-radius:10px;resize:vertical;background:#f6f8fc;color:#28415d;font:13px/1.9 ui-monospace,SFMono-Regular,Consolas,monospace;overflow-wrap:anywhere}
 .seo-site-script:focus-visible{outline:2px solid #c64b18;outline-offset:3px}
