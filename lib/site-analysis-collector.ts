@@ -124,7 +124,7 @@ export async function collectSiteReport(input: string, options: AnalysisOptions,
   await stage('keywords', 'running', '正在整理网站关键词', 60);
   report.keywords = extractSiteKeywords(report.pages, options.keywords);
   await stage('keywords', report.keywords.length ? 'complete' : 'unavailable', report.keywords.length ? '已整理关键词并保存来源' : '暂无足够内容提取关键词', 65);
-  const seeds = report.keywords.slice(0, 5).map(k => k.word);
+  const seeds = [...new Set([...options.keywords, ...report.keywords.map(k => k.word)])].slice(0, 5);
   for (const engine of options.engines) {
     const summary = report.engines.find(e => e.id === engine)!;
     const engineSignal = AbortSignal.any([signal, AbortSignal.timeout(35000)]);

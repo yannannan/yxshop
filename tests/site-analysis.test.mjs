@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import vm from 'node:vm';
 import ts from 'typescript';
@@ -18,7 +18,7 @@ function loader(mocks = {}, globals = {}) {
     const source = ts.transpileModule(readFileSync(file, 'utf8'), { fileName: file.pathname.replace(/\.mjs$/, '.ts'), compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText;
     vm.runInNewContext(source, { module: loaded, exports: loaded.exports, Buffer, Request, Response, URL, URLSearchParams, TextDecoder, AbortSignal, AbortController, Intl, Date, crypto: globalThis.crypto, setTimeout, clearTimeout, setInterval, clearInterval, console: { info() {}, error() {}, warn() {} }, process: { env: { NODE_ENV: 'production' } }, ...globals, require: spec => {
       if (Object.hasOwn(mocks, spec)) return mocks[spec];
-      if (spec.startsWith('.')) { const relative = new URL(spec + (/\.(?:tsx?|mjs)$/.test(spec) ? '' : '.ts'), file); return load(relative.href); }
+      if (spec.startsWith('.')) { const relative = new URL(spec + (/\.(?:tsx?|mjs)$/.test(spec) ? '' : existsSync(new URL(`${spec}.tsx`, file)) ? '.tsx' : '.ts'), file); return load(relative.href); }
       return require(spec);
     } }, { filename: file.pathname });
     return loaded.exports;
@@ -178,6 +178,17 @@ test('同一报告执行三个引擎并保存真实查询、排名、检查时�
   assert.ok(snapshots.some(r=>r.engines.find(e=>e.id==='google').state==='running'));
   assert.ok(f.requests.some(url=>url.startsWith('https://www.google.com/search?')));
   assert.ok(report.stages.filter(s=>s.key.startsWith('engine:')).every(s=>s.state==='complete'));
+});
+
+test('重点关键词按输入顺序优先查询，去重并限制五个，留空使用自动候选词', async () => {
+  for (const words of [[], ['自定义重点', 'RankProbe'], ['词一','词二','词三','词四','词五','词六']]) {
+    const f=searchIO(), options=model.analysisOptions({maxPages:5,engines:['bing'],keywords:words});
+    const report=await collector.collectSiteReport('example.org',options,async()=>{},f.io);
+    const queried=f.requests.filter(raw=>new URL(raw).pathname==='/search').map(raw=>new URL(raw).searchParams.get('q'));
+    assert.deepEqual(queried,[...new Set([...words,...report.keywords.map(k=>k.word)])].slice(0,5));
+    assert.ok(queried.length<=5);assert.equal(new Set(queried).size,queried.length);
+    if(words.length)assert.equal(queried[0],words[0]);else assert.equal(queried[0],'RankProbe');
+  }
 });
 
 test('三个引擎遵守禁止规则，受限记录检查时间但不发送搜索、不填零排名', async () => {
@@ -357,4 +368,90 @@ test('真实报告界面显示缺失/受限状态和业务原文，开始分析�
   const checkboxes=elements(tree).filter(n=>n.type==='input'&&n.props.type==='checkbox');assert.equal(checkboxes.length,3);assert.ok(checkboxes.every(node=>node.props.checked&&!node.props.disabled));
   assert.ok(markup.includes('https://www.google.com/search?'));assert.ok(markup.includes('site%3Aexample.org'));assert.ok(markup.includes('New analyses select Baidu, Bing and Google by default'));
   await elements(tree).find(n=>n.type==='form').props.onSubmit({preventDefault(){}});assert.equal(submitted.domain,'https://new.example.org/path');assert.equal(submitted.tool,50);assert.ok(submitted.id);assert.equal(submitted.userId,undefined);assert.equal(submitted.options.device,'desktop');assert.equal(submitted.options.maxPages,20);assert.deepEqual(submitted.options.engines,['baidu','bing','google']);
+});
+
+function uiElements(node) { if(Array.isArray(node))return node.flatMap(uiElements);return React.isValidElement(node)?[node,...uiElements(node.props.children)]:[]; }
+function dashboardFixture({effectsEnabled=false}={}) {
+  const translation=loader()('lib/i18n.ts'), report=collector.blankReport('example.org',model.analysisOptions({}));
+  const run={id,siteId:otherId,host:'example.org',status:'completed',progress:100,stage:'report',error:'',createdAt:'2026-10-26T00:00:00Z',pointsSpent:0,report};
+  const third='33333333-3333-4333-8333-333333333333', sites=[{id:otherId,host:'example.org',url:'https://example.org/'},{id:third,host:'www.next.example.org',url:'http://www.next.example.org/'}];
+  const workspace={sites,history:[run],total:1,page:1,workerReady:true,access:{canAnalyze:true,chargeType:'free'}};
+  const slots={2:id,5:{owner:1,data:workspace},6:{owner:1,run}}, refs=[], pendingEffects=[], deps=[], requests=[];
+  let cursor=0,refCursor=0,effectCursor=0;
+  const react={...React,useState(initial){const n=cursor++;if(!(n in slots))slots[n]=initial;return[slots[n],value=>{slots[n]=typeof value==='function'?value(slots[n]):value;}];},useRef(initial){return refs[refCursor++]??=( {current:initial} );},useEffect(fn,next){const n=effectCursor++;if(!effectsEnabled)return;if(deps[n]&&next.every((v,i)=>v===deps[n][i]))return;deps[n]=next;pendingEffects.push(fn);}};
+  const ui=loader({'./language-provider':{useI18n:()=>({locale:'zh-CN',t:translation.translator('zh-CN')})},'../lib/account-client':{useAccount:()=>({account:{authenticated:true,user:{id:1}},loading:false}),notifyAccountChanged(){}},react},{window:{location:{href:'https://shop.example/tools/webmaster-tools.html',search:''},history:{replaceState(){}}},async fetch(path,options){requests.push({path,body:options?.body&&JSON.parse(options.body)});return Response.json(options?.method==='POST'?{run:{...run,status:'queued',report:null}}:String(path).includes('&run=')?{run}:workspace);}})('components/site-analysis-dashboard.tsx');
+  return {slots,requests,sites,run,render(){cursor=0;refCursor=0;effectCursor=0;return ui.SiteAnalysisDashboard({tool:{id:50,slug:'webmaster-tools'}});},flushEffects(){for(const effect of pendingEffects.splice(0))effect();}};
+}
+
+test('选择站点只填充完整URL，保留当前报告，点击分析才提交所选网站',async()=>{
+  const f=dashboardFixture();let tree=f.render();
+  uiElements(tree).find(n=>n.type==='select'&&n.props['aria-label']==='选择已有站点').props.onChange({target:{value:f.sites[1].id}});
+  tree=f.render();assert.equal(f.slots[9],f.sites[1].url);assert.equal(f.slots[2],f.run.id);assert.equal(f.slots[6].run.host,'example.org');assert.equal(f.requests.length,0);
+  assert.equal(uiElements(tree).find(n=>n.type==='input'&&n.props.autoComplete==='url').props.value,f.sites[1].url);
+  await uiElements(tree).find(n=>n.type==='form').props.onSubmit({preventDefault(){}});
+  assert.equal(f.requests.length,1);assert.equal(f.requests[0].body.domain,'http://www.next.example.org/');
+});
+
+test('清空地址不会回退分析旧站点，站点管理选择同样仅填入地址',async()=>{
+  const f=dashboardFixture();let tree=f.render();
+  uiElements(tree).find(n=>n.type==='select'&&n.props['aria-label']==='选择已有站点').props.onChange({target:{value:f.sites[1].id}});
+  tree=f.render();uiElements(tree).find(n=>n.type==='input'&&n.props.autoComplete==='url').props.onChange({target:{value:''}});
+  tree=f.render();await uiElements(tree).find(n=>n.type==='form').props.onSubmit({preventDefault(){}});
+  assert.equal(f.requests.length,0);assert.equal(f.slots[7],'请输入域名或选择已有站点');
+  f.slots[0]='sites';tree=f.render();const button=uiElements(tree).find(n=>n.type==='strong'&&n.props.children==='www.next.example.org');assert.ok(button);
+  uiElements(tree).find(n=>n.type==='button'&&uiElements(n.props.children).includes(button)).props.onClick();
+  assert.equal(f.slots[9],f.sites[1].url);assert.equal(f.slots[0],'overview');assert.equal(f.requests.length,0);
+});
+
+test('迟到的历史报告填充不能覆盖用户已编辑的网站地址',async()=>{
+  const f=dashboardFixture({effectsEnabled:true});let tree=f.render();f.flushEffects();await Promise.resolve();
+  tree=f.render();f.flushEffects();
+  uiElements(tree).find(n=>n.type==='input'&&n.props.autoComplete==='url').props.onChange({target:{value:'https://typed.example.org/'}});
+  await Promise.resolve();assert.equal(f.slots[9],'https://typed.example.org/');
+  assert.ok(f.requests.every(request=>!request.body));assert.ok(f.requests.every(request=>!request.path.includes('&site=')));
+});
+
+test('基本信息中英文切换、Title/Keywords/Description顺序与Unicode计数正确，长内容不截断',()=>{
+  const translations=loader()('lib/i18n.ts'), report=collector.blankReport('example.org',model.analysisOptions({}));
+  const title='星'.repeat(39)+'🌍', description='描'.repeat(69), keyword='关键词原文'.repeat(23);
+  report.profile.title=title;report.profile.description=description;report.pages=[{title,description,declared:[keyword],url:'https://example.org/'}];
+  report.profile.finalUrl='javascript:alert(1)';report.profile.registrationSource='https://user:password@example.org/private';
+  for(const locale of ['zh-CN','en']){
+    const ui=loader({'./language-provider':{useI18n:()=>({locale,t:translations.translator(locale)})}})('components/site-analysis-profile.tsx');
+    const markup=renderToStaticMarkup(React.createElement(ui.SiteAnalysisProfile,{report,date:value=>value}));
+    for(const text of [title,description,keyword])assert.ok(markup.includes(text));
+    const labels=locale==='en'?['Website title (Title)','Website keywords (Keywords)','Website description (Description)']:['网站标题（Title）','网站关键词（Keywords）','网站描述（Description）'];
+    assert.ok(labels.every(label=>markup.includes(`<dt>${label}</dt><dd>`)));assert.ok(markup.indexOf(labels[0])<markup.indexOf(labels[1])&&markup.indexOf(labels[1])<markup.indexOf(labels[2]));
+    assert.ok(markup.includes(locale==='en'?'DOMAIN PROFILE':'基本信息'));assert.equal(markup.includes('DOMAIN PROFILE'),locale==='en');
+    assert.ok(markup.includes(locale==='en'?'Suggested maximum: 39 characters. Current: 40.':'建议不超过 39 字，当前 40 字'));
+    assert.ok(markup.includes(locale==='en'?'Suggested maximum: 100':'建议不超过 100'));assert.ok(markup.includes(locale==='en'?'Suggested maximum: 68':'建议不超过 68'));
+    assert.ok(!markup.includes('href="javascript:')&&!markup.includes('href="https://user:password'));
+  }
+});
+
+test('四个概况面板使用真实候选词，未知统计显示未接入，按钮可展开验证和脚本说明',()=>{
+  const translations=loader()('lib/i18n.ts'), report=collector.blankReport('example.org',model.analysisOptions({}));report.coverage.fetched=5;report.keywords=[{word:'业务词原文'}];
+  for(const locale of ['zh-CN','en']){
+    let open=false,selected='';
+    const ui=loader({'./language-provider':{useI18n:()=>({locale,t:translations.translator(locale)})},react:{...React,useState:()=>[open,value=>{open=value;}]}})('components/site-analysis-overview-panels.tsx');
+    const props={report,onKeyword:word=>{selected=word;}}, tree=ui.SiteAnalysisOverviewPanels(props), markup=renderToStaticMarkup(tree);
+    assert.match(markup,/role="region" tabindex="0"/);assert.ok(markup.includes('业务词原文'));
+    assert.equal((markup.match(/seo-overview-panel"/g)||[]).length,4);assert.equal((markup.match(/seo-data-state/g)||[]).length,2);
+    assert.ok(markup.includes(locale==='en'?'Index statistics not connected':'尚未接入收录统计'));assert.ok(markup.includes(locale==='en'?'5 pages collected':'本轮读取 5 页'));
+    assert.ok(!markup.includes('0%'));assert.ok(markup.includes('site%3Aexample.org'));
+    uiElements(tree).find(n=>n.type==='button'&&n.props.children==='业务词原文').props.onClick();assert.equal(selected,'业务词原文');
+    uiElements(tree).find(n=>n.type==='button'&&n.props['aria-controls']==='seo-statistics-setup').props.onClick();
+    const expanded=ui.SiteAnalysisOverviewPanels(props), details=uiElements(expanded).find(n=>n.type==='details');assert.equal(details.props.open,true);
+    assert.ok(markup.includes(locale==='en'?'DNS TXT record':'DNS TXT记录'));assert.ok(markup.includes(locale==='en'?'Verification itself does not collect visits':'验证本身不会收集访问数据'));
+    assert.ok(markup.includes(locale==='en'?'Install the tracking script':'安装统计脚本'));assert.ok(!markup.includes('<script'));
+    details.props.onToggle({currentTarget:{open:false}});assert.equal(open,false);
+  }
+});
+
+test('旧报告缺少页面元信息仍可显示未读取，深色操作区与报告标题分开且保留关键词用途',()=>{
+  const translations=loader()('lib/i18n.ts'), report=collector.blankReport('example.org',model.analysisOptions({}));
+  const profile=loader({'./language-provider':{useI18n:()=>({locale:'zh-CN',t:translations.translator('zh-CN')})}})('components/site-analysis-profile.tsx');
+  const markup=renderToStaticMarkup(React.createElement(profile.SiteAnalysisProfile,{report,date:value=>value}));assert.equal((markup.match(/页面未设置或尚未读取/g)||[]).length,3);
+  const f=dashboardFixture(), page=renderToStaticMarkup(f.render());assert.ok(page.indexOf('分析工作台')<page.indexOf('任务进度与导出'));assert.ok(page.indexOf('任务进度与导出')<page.indexOf('报告分析'));assert.ok(page.indexOf('报告分析')<page.indexOf('基本信息'));
+  assert.ok(page.includes('aria-describedby="seo-keyword-purpose"'));assert.ok(page.includes('不会修改网站的关键词设置'));assert.ok(page.includes('seo-controls seo-console'));assert.ok(page.includes('seo-run-state seo-console'));
 });

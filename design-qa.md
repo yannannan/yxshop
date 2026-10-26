@@ -67,3 +67,14 @@ The sections below describe older technical-service iterations and do not overri
 - Add a mobile visual regression capture after the responsive mobile design is finalized.
 
 final result: blocked
+
+## 2026-10-26 SEO overview adjustment
+
+- Reference: the user's five screenshots ending in `5481fb80`, `f28a16c5`, `d84d255e`, `eec6409f` and `cbeddaa9`, and the stated changes to those screens.
+- Implemented: larger type; full-URL selection without task creation; keyword purpose; dark workbench / progress / export with a distinct report divider; two-column label / value profile with Title, Keywords and Description; four responsive overview panels, scrollable keyword candidates and honest missing-data states.
+- Both languages include profile guidance and analytics setup copy. Collected site text is retained. Font counts are suggestions, not truncation limits or search-engine guarantees.
+- Traffic and geography currently show “not connected”. The expandable guide distinguishes DNS TXT / file ownership verification from visit collection by a future tracking script; no actual tracker or verification endpoint is exposed in this iteration.
+- Code verification: 397 regressions and production build pass; changed-file ESLint and CSS syntax checks pass. Existing 20 unrelated TypeScript errors remain.
+- Visual comparison: **blocked / pending user acceptance**. The standing user instruction prohibits opening browsers or starting preview / development services. No screenshot comparison, breakpoint rendering or real-database acceptance is claimed. The CSS defines desktop four cards, narrower two cards and small-screen one card, with profile columns stacking and tables scrolling.
+
+final result for this iteration: blocked (visual verification only; code checks complete)
