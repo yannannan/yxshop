@@ -44,7 +44,7 @@ export function SiteWorkspaceModule({ view, report, statistics, statisticsError,
 
   if (upcoming[view]) {
     const item = upcoming[view]!;
-    return <section className="seo-card seo-module-planned"><span className="seo-data-state">{t('功能筹备中')}</span><SparklesIcon aria-hidden="true" /><h2>{t(workspacePages[view].label)}</h2><p>{t(item.source)}</p><div className="seo-module-capabilities">{item.features.map(feature => <div key={feature}><span>{t(feature)}</span><small>{t('待接入')}</small></div>)}</div><button type="button" className="seo-quiet" onClick={() => onNavigate(view === 'competitors' ? 'seo' : 'sites')}>{t(view === 'competitors' ? '查看本站SEO分析' : '前往站点管理')}<ArrowRightIcon aria-hidden="true" /></button></section>;
+    return <section className="seo-card seo-module-planned"><div className="seo-module-planned-heading"><span className="seo-heading-icon"><SparklesIcon aria-hidden="true" /></span><h2>{t(workspacePages[view].label)}</h2><span className="seo-data-state">{t('功能筹备中')}</span></div><p>{t(item.source)}</p><div className="seo-module-capabilities">{item.features.map(feature => <div key={feature}><span>{t(feature)}</span><small>{t('待接入')}</small></div>)}</div><button type="button" className="seo-quiet" onClick={() => onNavigate(view === 'competitors' ? 'seo' : 'sites')}>{t(view === 'competitors' ? '查看本站SEO分析' : '前往站点管理')}<ArrowRightIcon aria-hidden="true" /></button></section>;
   }
   const hasTabs = ['seo','pages','health'].includes(view), selectedTab = tab || (view === 'seo' ? 'performance' : view === 'health' ? 'issues' : 'visits');
   return <section className="seo-card seo-module-panel">

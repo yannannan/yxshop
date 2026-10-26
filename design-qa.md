@@ -1,5 +1,13 @@
 # Design QA
 
+## 2026-10-26 Navy headers and orange actions
+
+- Selected references: the user's site-management screenshot (`codex-clipboard-a1da1bfc-1bc6-417e-92c7-f9a1dbea8dd8.png`), orange selected badge (`codex-clipboard-a4fc60ab-e5f0-483c-8ade-cb38823c6a9b.png`), navy report-progress panel (`codex-clipboard-476dc940-9a46-40c5-8d4b-a6a90a9028f1.png`) and compact navy/white conditions panel (`codex-clipboard-e0486c73-661a-426b-9553-e2c7e9fbd589.png`), supplied inline from `C:/Users/ADMINI~1/AppData/Local/Temp/`.
+- Apply the existing `#1b2f47` navy to the workspace title, add-site heading, each site's identity header, overview metrics, profile, history and report/module headers. Keep editing, script installation, verification receipts and data tables on white. Reuse Heroicons, existing typography and the current business text; no raster assets or dependencies added.
+- Orange primary actions and selected module tabs, numbered installation steps, domain/status hierarchy, count badge, consistent spacing and lighter secondary actions provide structure. Success, waiting and failure remain distinct. Long domains wrap; site cards stack on narrower desktops; form actions and headers wrap on mobile. Printed report headers use white backgrounds and dark text.
+- Verification: 87 site-analysis / development / i18n checks, 7 production-handler checks and production build pass. Changed-component ESLint, CSS parsing and whitespace checks pass. Seven key foreground/background pairs exceed 4.5:1 (primary white/orange: 4.75:1). The existing 20 unrelated TypeScript diagnostics remain; none point to the changed components.
+- Visual result: **pending user acceptance**. The standing user instruction prohibits browsers, preview servers and real business-database access. No rendered screenshot, breakpoint screenshot comparison or live-data acceptance is claimed. Existing script permanence, account isolation, verification and billing behavior are covered by the existing regressions; this iteration changes presentation only.
+
 ## 2026-10-26 Five-section webmaster workspace
 
 - Target: the user's approved five-section menu and supplied webmaster requirements. Site Management and Overview remain direct pages. Site Analysis, Operations Tools and AI Acquisition expand to 9 / 4 / 4 children; related SEO, page and health views use keyboard-accessible in-page tabs.
