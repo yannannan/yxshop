@@ -399,6 +399,7 @@ test('真实报告界面显示缺失/受限状态和业务原文，开始分析�
   assert.ok(markup.includes('独有网站标题'));assert.ok(markup.includes('独有业务关键词'));assert.ok(markup.includes('Access restricted'));assert.ok(markup.includes('Unavailable'));assert.ok(markup.includes('Search this domain'));assert.ok(markup.includes('Engines not queried in this report'));
   function elements(node){if(Array.isArray(node))return node.flatMap(elements);return React.isValidElement(node)?[node,...elements(node.props.children)]:[];}
   const checkboxes=elements(tree).filter(n=>n.type==='input'&&n.props.type==='checkbox');assert.equal(checkboxes.length,5);assert.ok(checkboxes.every(node=>node.props.checked&&!node.props.disabled));
+  assert.ok(markup.includes('5 engines selected'));assert.ok(!markup.includes('{0} engines selected'));
   assert.ok(markup.includes('Analysis settings'));assert.ok(markup.includes('Report sections'));assert.ok(markup.includes('This report does not include this engine'));assert.ok(markup.includes('duckduckgo.com'));assert.ok(markup.includes('yandex.com'));assert.ok(!markup.includes('Analysis workbench'));assert.ok(markup.includes('https://www.google.com/search?'));assert.ok(markup.includes('site%3Aexample.org'));assert.ok(markup.includes('All engines are selected by default'));
   await elements(tree).find(n=>n.type==='form').props.onSubmit({preventDefault(){}});assert.equal(submitted.domain,'https://new.example.org/path');assert.equal(submitted.tool,50);assert.ok(submitted.id);assert.equal(submitted.userId,undefined);assert.equal(submitted.options.device,'desktop');assert.equal(submitted.options.maxPages,20);assert.deepEqual(submitted.options.engines,['baidu','google','bing','duckduckgo','yandex']);
 });
@@ -492,5 +493,5 @@ test('旧报告缺少页面元信息仍可显示未读取，深色操作区与�
   const markup=renderToStaticMarkup(React.createElement(profile.SiteAnalysisProfile,{report,date:value=>value}));assert.equal((markup.match(/页面未设置或尚未读取/g)||[]).length,3);
   const f=dashboardFixture(), page=renderToStaticMarkup(f.render());assert.ok(page.indexOf('分析条件')<page.indexOf('任务进度与导出'));assert.ok(page.indexOf('任务进度与导出')<page.indexOf('分析报告'));assert.ok(page.indexOf('分析报告')<page.indexOf('站点基本信息'));
   for(const anchor of ['seo-domain-profile','seo-overview-panels','seo-engine-visibility','seo-keyword-details','seo-report-findings'])assert.ok(page.includes(`href="#${anchor}"`)&&page.includes(`id="${anchor}"`));
-  assert.ok(page.includes('aria-describedby="seo-keyword-purpose"'));assert.ok(page.includes('不会修改网站的关键词设置'));assert.ok(page.includes('seo-controls seo-console'));assert.ok(page.includes('seo-run-state seo-console'));
+  assert.ok(page.includes('aria-describedby="seo-keyword-purpose"'));assert.ok(page.includes('不会修改网站的关键词设置'));assert.ok(page.includes('已选 5 个引擎'));assert.ok(page.includes('seo-controls seo-console'));assert.ok(page.includes('seo-run-state seo-console'));
 });

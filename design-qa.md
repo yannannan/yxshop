@@ -109,3 +109,14 @@ final result for this refinement: blocked (visual verification only; code checks
 - Visual comparison remains **blocked / pending user acceptance** under the standing instruction not to open browsers or start preview / app services. Public HTTP / robots checks do not constitute browser QA or successful live ranking acceptance.
 
 final result for this addition: blocked (visual verification only; code checks complete)
+
+## 2026-10-26 Analysis conditions screenshot refinement
+
+- Reference: `codex-clipboard-728d5c4a-2f34-490a-aedf-4665457d641a.png`. The requested scope is the existing analysis conditions panel.
+- Replaced the large dark editing surface and nested plate with a compact navy heading, white form and quiet footer. Website / scope columns share a width, and address / keyword inputs share their starting edge.
+- Engine controls use equal-width pale-blue selected cards, existing local brand icons and native checkboxes. The actual selected count is translated in both languages. Container-width breakpoints define five, three, two and single-column layouts, with visible keyboard focus and reduced-motion support.
+- Query guidance is one full-width note. Existing explicit-submit behavior, field descriptions, access warnings, charging rules and the separate dark report summary remain.
+- Code verification: 58 analytics / language / production-handler checks and the production build pass. Changed-file ESLint and CSS syntax checks pass; relevant text color contrast ranges from 4.51 to 11.46. Existing 20 unrelated TypeScript diagnostics remain, with none in the changed components.
+- Visual comparison is **blocked / pending user acceptance** under the standing user instruction not to open browsers or start app / preview services. No rendered breakpoint, screenshot comparison or visual acceptance is claimed.
+
+final result for this refinement: blocked (visual verification only; code checks complete)
