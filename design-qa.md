@@ -1,5 +1,10 @@
 # Design QA
 
+## 2026-10-26 Compact dark panel headings
+
+- User feedback: the dark heading in the real-time visitors panel is too tall (`codex-clipboard-c6f44d35-6ce2-4706-af17-88b28640147d.png`, supplied inline). Reduce shared panel-heading vertical padding to 10px on desktop and mobile, tighten the description spacing and reduce framed icons to 34px. Overview heading minimum height changes from 80px to 54px; site identity headers also lose excess vertical padding. Titles retain their font sizes; long text can still wrap.
+- CSS-only presentation change. CSS parsing, production build and 7 production-handler regressions pass. No SQL, dependencies or business logic change. Browser / visual acceptance remains **pending user acceptance**, under the standing no-browser / no-preview instruction; no rendered height measurement is claimed.
+
 ## 2026-10-26 Navy headers and orange actions
 
 - Selected references: the user's site-management screenshot (`codex-clipboard-a1da1bfc-1bc6-417e-92c7-f9a1dbea8dd8.png`), orange selected badge (`codex-clipboard-a4fc60ab-e5f0-483c-8ade-cb38823c6a9b.png`), navy report-progress panel (`codex-clipboard-476dc940-9a46-40c5-8d4b-a6a90a9028f1.png`) and compact navy/white conditions panel (`codex-clipboard-e0486c73-661a-426b-9553-e2c7e9fbd589.png`), supplied inline from `C:/Users/ADMINI~1/AppData/Local/Temp/`.

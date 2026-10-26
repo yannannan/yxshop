@@ -118,12 +118,12 @@
   border:1px solid #dce4ee;border-radius:18px;box-shadow:0 5px 22px #17304b08;
 }
 .seo-controls .seo-console-heading{
-  align-items:center;gap:14px;margin:0;padding:21px 26px;background:#1b2f47;
+  align-items:center;gap:14px;margin:0;padding:10px 26px;background:#1b2f47;
   border-bottom:1px solid #2c4058;border-radius:17px 17px 0 0;
 }
 .seo-controls .seo-console-heading h2{font-size:23px;line-height:1.4;color:#f7faff}
-.seo-controls .seo-console-heading p{font-size:14px;line-height:1.7;color:#c0cfdf;margin-top:5px}
-.seo-controls .seo-heading-icon{width:42px;height:42px;border-radius:11px;color:#ffc4a1}
+.seo-controls .seo-console-heading p{font-size:14px;line-height:1.6;color:#c0cfdf;margin-top:3px}
+.seo-controls .seo-heading-icon{width:34px;height:34px;border-radius:9px;color:#ffc4a1}
 .seo-controls .seo-heading-icon svg{width:23px;height:23px}
 .seo-conditions-body{padding:25px 26px 24px}
 .seo-controls .seo-domain-row{
@@ -203,7 +203,7 @@
 @container (max-width:420px){
   .seo-conditions-body{padding:19px 16px}
   .seo-controls .seo-domain-row{grid-template-columns:1fr}
-  .seo-controls .seo-console-heading{padding:19px 16px;gap:11px}
+  .seo-controls .seo-console-heading{padding:10px 16px;gap:11px}
   .seo-controls .seo-console-heading h2{font-size:21px}
   .seo-controls .seo-console-heading p{font-size:13px}
   .seo-controls .seo-engine-options{grid-template-columns:1fr;gap:9px}
@@ -217,7 +217,7 @@
 .seo-site-onboarding>span{display:flex;gap:9px;align-items:center}
 .seo-site-onboarding svg{width:20px;height:20px}
 .seo-site-add{padding:0}
-.seo-site-add-heading{display:flex;align-items:center;gap:14px;padding:21px 24px;border-radius:inherit;border-bottom-left-radius:0;border-bottom-right-radius:0}
+.seo-site-add-heading{display:flex;align-items:center;gap:14px;padding:10px 24px;border-radius:inherit;border-bottom-left-radius:0;border-bottom-right-radius:0}
 .seo-site-add-fields{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:18px;align-items:end;padding:24px}
 .seo-site-add h2{margin:0 0 6px;font-size:21px;color:#203650}
 .seo-site-add p{margin:0;font-size:14px;color:#65758a;line-height:1.8}
@@ -228,7 +228,7 @@
 .seo-managed-sites{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start;gap:16px;margin-bottom:20px}
 .seo-managed-site{margin:0;padding:0;min-width:0;overflow:hidden}
 .seo-managed-site.selected{border-color:#9db3cc;box-shadow:0 3px 14px #193a5e08}
-.seo-managed-site-header{padding:23px 24px 21px}
+.seo-managed-site-header{padding:14px 24px 12px}
 .seo-managed-site-body{padding:21px 24px 24px}
 .seo-managed-site-heading{display:flex;align-items:center;gap:10px}
 .seo-managed-site-heading>svg{color:#c65b25}
@@ -393,17 +393,17 @@
 .seo-module-panel>.seo-section-title,.seo-module-planned-heading,
 .seo-profile>.seo-section-title,.seo-report-panel>.seo-section-title{
   margin:calc(-1 * var(--seo-card-y)) calc(-1 * var(--seo-card-x)) 24px;
-  padding:21px var(--seo-card-x);border-radius:inherit;border-bottom-left-radius:0;border-bottom-right-radius:0;
+  padding:10px var(--seo-card-x);border-radius:inherit;border-bottom-left-radius:0;border-bottom-right-radius:0;
   align-items:center;gap:16px;
 }
 .seo-module-panel>.seo-section-title h2,.seo-module-planned-heading h2,
-.seo-profile>.seo-section-title h2,.seo-report-panel>.seo-section-title h2{font-size:22px;font-weight:650;line-height:1.5;color:var(--seo-header-text);margin:0}
+.seo-profile>.seo-section-title h2,.seo-report-panel>.seo-section-title h2{font-size:22px;font-weight:650;line-height:1.4;color:var(--seo-header-text);margin:0}
 .seo-module-panel>.seo-section-title p,.seo-profile>.seo-section-title p,
-.seo-report-panel>.seo-section-title p{color:var(--seo-header-muted);font-size:14px;margin-top:5px}
+.seo-report-panel>.seo-section-title p{color:var(--seo-header-muted);font-size:14px;line-height:1.6;margin-top:3px}
 .seo-module-panel>.seo-section-title>span,.seo-module-planned-heading>.seo-data-state,
 .seo-report-panel>.seo-section-title>span{font-size:13px;flex-shrink:0;margin:0;padding:5px 10px;border:1px solid #ffffff24;border-radius:7px;color:#ffe1cf;background:#ffffff09;align-self:auto}
 .seo-site-add-heading .seo-heading-icon,.seo-module-planned-heading .seo-heading-icon,
-.seo-profile>.seo-section-title .seo-heading-icon{background:#ffffff09;border:1px solid #ffffff24;color:var(--seo-header-accent);width:42px;height:42px;border-radius:11px}
+.seo-profile>.seo-section-title .seo-heading-icon{background:#ffffff09;border:1px solid #ffffff24;color:var(--seo-header-accent);width:34px;height:34px;border-radius:9px}
 .seo-module-planned-heading>.seo-data-state{color:#ffd5b8;background:#64432e;border-color:#805537}
 .seo-profile>.seo-section-title .seo-profile-link{color:#e8f0fa;background:#ffffff09;border-color:#ffffff30}
 .seo-profile>.seo-section-title .seo-profile-link:hover{background:#ffffff16;border-color:#ffffff50}
@@ -420,7 +420,7 @@
 .seo-module-metrics>div:first-child{border-top-color:#de8b60}
 .seo-module-capabilities>div{background:#fafbfd;border-color:#e1e8f1;padding:23px}
 .seo-module-planned>.seo-quiet{color:#b84316;border-color:#ecd2bf;background:#fff5ed}
-.seo-overview-panel>.seo-panel-title{margin:calc(-1 * var(--seo-card-y)) calc(-1 * var(--seo-card-x)) 20px;padding:17px var(--seo-card-x);min-height:80px;align-items:center;background:var(--seo-navy);border-radius:inherit;border-bottom-left-radius:0;border-bottom-right-radius:0}
+.seo-overview-panel>.seo-panel-title{margin:calc(-1 * var(--seo-card-y)) calc(-1 * var(--seo-card-x)) 20px;padding:10px var(--seo-card-x);min-height:54px;align-items:center;background:var(--seo-navy);border-radius:inherit;border-bottom-left-radius:0;border-bottom-right-radius:0}
 .seo-overview-panel>.seo-panel-title h3{color:var(--seo-header-text);font-size:19px}
 @media(max-width:1100px){.seo-title-row{padding:24px}.seo-managed-sites{grid-template-columns:1fr}}
 @media(max-width:700px){
@@ -436,7 +436,8 @@
   .seo-sites-heading{margin-top:23px}
   .seo-sites-heading h2{font-size:21px}
   .seo-sites-heading>span{padding:4px 9px;font-size:13px}
-  .seo-site-add-heading,.seo-managed-site-header{padding:19px 18px}
+  .seo-site-add-heading{padding:10px 18px}
+  .seo-managed-site-header{padding:14px 18px 12px}
   .seo-site-add-fields,.seo-managed-site-body{padding:20px 18px}
   .seo-managed-site-heading{grid-template-columns:30px minmax(0,1fr);gap:10px}
   .seo-managed-site-heading>svg{width:30px;height:30px;padding:6px}
@@ -446,7 +447,7 @@
   .seo-script-actions{gap:10px}
   .seo-script-actions>button{white-space:normal;min-width:130px}
   .seo-module-panel>.seo-section-title,.seo-module-planned-heading,
-  .seo-profile>.seo-section-title,.seo-report-panel>.seo-section-title{padding-top:19px;padding-bottom:19px;margin-bottom:20px;flex-wrap:wrap}
+  .seo-profile>.seo-section-title,.seo-report-panel>.seo-section-title{padding-top:10px;padding-bottom:10px;margin-bottom:20px;flex-wrap:wrap}
   .seo-module-panel>.seo-section-title h2,.seo-module-planned-heading h2,
   .seo-profile>.seo-section-title h2,.seo-report-panel>.seo-section-title h2{font-size:21px}
 }
