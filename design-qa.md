@@ -166,3 +166,10 @@ final result for this feature: blocked (visual / live integration verification o
 - Visual comparison remains **blocked / pending user acceptance** under the standing no-browser / no-preview instruction. No app server, real database or live site installation was used for acceptance.
 
 final result for this adjustment: blocked (visual verification only; code checks complete)
+
+## 2026-10-26 Fixed public origin and shorter site scripts
+
+- The user's pasted localhost script is replaced in generated output by a fixed `https://www.yxstar.shop/s/` URL and a permanent 22-character site ID. The complete snippet is 78 characters, remains async and stays in its own site card with copy / verification actions.
+- The ID is a lossless encoding of the existing site UUID. Legacy long URLs continue working; deletion, verification and ownership remain enforced, and both formats share visit/session deduplication. No database migration or new dependency was added.
+- Verification: 81 related regressions and production build pass, including localhost output, canonical short IDs, actual production short / long handlers and standalone script deduplication. Changed-file ESLint passes; the existing 20 unrelated TypeScript diagnostics remain.
+- Visual and live installation acceptance remain **pending user acceptance** under the standing no-browser / no-service / no-business-database instruction. Production handler tests use an isolated process and mock data without listening on a port.

@@ -4,13 +4,14 @@ import { ArrowPathIcon, CheckCircleIcon, ClipboardDocumentIcon, CodeBracketIcon,
 import { useI18n } from './language-provider';
 import { siteAnalysisRequest } from '../lib/site-analysis-client';
 import type { AnalysisSite } from '../lib/site-analysis';
+import { siteScriptSnippet } from '../lib/site-script';
 
 export function SiteManagement({ sites, toolId, onChanged, onAnalyze }: { sites: AnalysisSite[]; toolId: number; onChanged: () => void; onAnalyze: (site: AnalysisSite) => void }) {
   const { t, locale } = useI18n();
   const [domain,setDomain] = useState(''), [pending,setPending] = useState(''), [error,setError] = useState(''), [message,setMessage] = useState('');
-  const [expanded,setExpanded] = useState<string[]>([]), [patches,setPatches] = useState<Record<string,AnalysisSite>>({}), [hidden,setHidden] = useState<string[]>([]), [deleting,setDeleting] = useState(''), [origin,setOrigin] = useState('');
+  const [expanded,setExpanded] = useState<string[]>([]), [patches,setPatches] = useState<Record<string,AnalysisSite>>({}), [hidden,setHidden] = useState<string[]>([]), [deleting,setDeleting] = useState('');
   const controller = useRef<AbortController | null>(null);
-  useEffect(() => { void Promise.resolve().then(() => setOrigin(window.location.origin)); return () => controller.current?.abort(); }, []);
+  useEffect(() => () => controller.current?.abort(), []);
   const visible = sites.filter(site => !hidden.includes(site.id)).map(site => patches[site.id]?.updatedAt > site.updatedAt ? patches[site.id] : site);
   for (const site of Object.values(patches)) if (!hidden.includes(site.id) && !visible.some(row => row.id === site.id)) visible.unshift(site);
   const date = (value?: string) => value ? new Date(value).toLocaleString(locale, { timeZone: 'Asia/Shanghai', hour12: false }) : t('尚未收到访问');
@@ -47,19 +48,19 @@ export function SiteManagement({ sites, toolId, onChanged, onAnalyze }: { sites:
     <div className="seo-section-title"><div><h2>{t('我的站点')}</h2><p>{t('每个站点对应一个永久固定的唯一脚本，验证和访问统计共用。')}</p></div><span>{visible.length} / 100</span></div>
     {!visible.length ? <div className="seo-card seo-welcome"><GlobeAltIcon aria-hidden="true" /><h2>{t('添加第一个站点')}</h2><p>{t('历史分析中保存的站点也需要安装脚本并验证。')}</p></div> : <div className="seo-managed-sites">{visible.map(site => {
       const scriptId = `seo-site-script-${site.id}`, panelId = `seo-site-install-${site.id}`;
-      const snippet = site.scriptToken && /^[a-f0-9]{64}$/.test(site.scriptToken) && origin ? `<script async src="${origin}/api/site-tracker/${site.scriptToken}"></script>` : '';
+      const snippet = site.scriptToken && /^[a-f0-9]{64}$/.test(site.scriptToken) ? siteScriptSnippet(site.id) : '';
       const open = expanded.includes(site.id);
       return <article className={`seo-card seo-managed-site${open ? ' selected' : ''}`} key={site.id}>
         <div className="seo-managed-site-heading"><GlobeAltIcon aria-hidden="true" /><strong>{site.host}</strong><span className={`seo-status ${site.verifiedAt ? 'complete' : 'pending'}`}>{t(site.verifiedAt ? '已验证' : '待验证')}</span></div>
         <p>{site.url}</p><small>{t('最近统计')}：{date(site.lastSeenAt)}</small>
-        <div className="seo-managed-site-actions"><button className="seo-quiet" type="button" disabled={Boolean(pending) || !origin} aria-expanded={open} aria-controls={open ? panelId : undefined} onClick={() => generate(site)}><CodeBracketIcon aria-hidden="true" />{t(open ? '查看脚本' : '生成脚本')}</button><button className="seo-text-button" type="button" disabled={Boolean(pending) || !site.verifiedAt} onClick={() => onAnalyze(site)}>{t('进入综合看板')}</button><button className="seo-site-delete" type="button" disabled={Boolean(pending)} aria-label={t(`删除站点 ${site.host}`)} onClick={() => setDeleting(site.id)}><TrashIcon aria-hidden="true" /></button></div>
+        <div className="seo-managed-site-actions"><button className="seo-quiet" type="button" disabled={Boolean(pending)} aria-expanded={open} aria-controls={open ? panelId : undefined} onClick={() => generate(site)}><CodeBracketIcon aria-hidden="true" />{t(open ? '查看脚本' : '生成脚本')}</button><button className="seo-text-button" type="button" disabled={Boolean(pending) || !site.verifiedAt} onClick={() => onAnalyze(site)}>{t('进入综合看板')}</button><button className="seo-site-delete" type="button" disabled={Boolean(pending)} aria-label={t(`删除站点 ${site.host}`)} onClick={() => setDeleting(site.id)}><TrashIcon aria-hidden="true" /></button></div>
         {open && snippet && <section className="seo-site-install" id={panelId} aria-labelledby={`${panelId}-title`}>
           <div className="seo-site-script-heading"><h3 id={`${panelId}-title`}>{t('本站唯一脚本')}</h3><span><ShieldCheckIcon aria-hidden="true" />{t('永久固定')}</span></div>
           <p className="seo-site-script-note">{t('首次生成后固定保存，重复点击或刷新页面不会改变。')}</p>
           <label className="seo-script-label" htmlFor={scriptId}>{t('将此脚本加入本站公共页面的HTML，建议放在head中；同一脚本用于验证和统计。')}</label>
           <textarea id={scriptId} className="seo-site-script" readOnly value={snippet} rows={3} onFocus={event => event.currentTarget.select()} spellCheck={false} />
           <div className="seo-script-actions"><button type="button" className="seo-quiet" onClick={() => void copy(snippet)}><ClipboardDocumentIcon aria-hidden="true" />{t('复制脚本')}</button><button type="button" className="seo-primary" disabled={Boolean(pending)} onClick={() => void change('site-verify',site)}><ArrowPathIcon aria-hidden="true" />{t(pending === site.id ? '正在验证…' : site.verifiedAt ? '重新验证' : '已安装，开始验证')}</button></div>
-          <ul className="seo-site-install-notes"><li>{t('请从平台公网HTTPS地址复制脚本，确保访客能够加载。')}</li><li>{t('验证时由服务器读取首页确认脚本，不通过伪造访问上报取得验证。')}</li><li>{t('验证成功后开始累计页面访问和来源；脚本不读取Cookie，不上报网址查询参数或片段。')}</li><li>{t('如站点启用了CSP，请允许本站脚本来源及统计请求。')}</li><li>{t('删除后暂停接入；同一账号重新添加该域名仍使用原脚本，重新验证后恢复统计。')}</li></ul>
+          <ul className="seo-site-install-notes"><li>{t('脚本固定使用 https://www.yxstar.shop，不随当前访问地址变化。')}</li><li>{t('验证时由服务器读取首页确认脚本，不通过伪造访问上报取得验证。')}</li><li>{t('验证成功后开始累计页面访问和来源；脚本不读取Cookie，不上报网址查询参数或片段。')}</li><li>{t('如站点启用了CSP，请允许本站脚本来源及统计请求。')}</li><li>{t('删除后暂停接入；同一账号重新添加该域名仍使用原脚本，重新验证后恢复统计。')}</li></ul>
         </section>}
         {deleting === site.id && <div className="seo-site-delete-confirm" role="alert"><p>{t('删除后停止新分析和访问统计，历史数据保留；已提交的分析会继续完成。')}</p><button type="button" disabled={Boolean(pending)} onClick={() => void change('site-delete',site)}>{t('确认删除')}</button><button type="button" onClick={() => setDeleting('')}>{t('取消')}</button></div>}
       </article>;

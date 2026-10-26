@@ -3,12 +3,14 @@ import { env } from '@/db/mysql-runtime';
 import { lockPointsUser } from './points-service';
 import { sameSiteHost } from './site-management-service';
 import { SiteAnalysisError, type VisitChannel } from './site-analysis';
+import { siteIdFromScriptId } from './site-script';
 
-export const validTrackingToken = (token: string) => /^[a-f0-9]{64}$/.test(token);
-type Tracker = { site_id: string; user_id: number; host: string; verified_at: string };
+export const validTrackingToken = (token: string) => /^[a-f0-9]{64}$/.test(token) || Boolean(siteIdFromScriptId(token));
+type Tracker = { site_id: string; user_id: number; host: string; verified_at: string; script_token: string };
 export async function activeTracker(token: string, db: Pick<typeof env.DB, 'prepare'> = env.DB) {
   if (!validTrackingToken(token)) return null;
-  return db.prepare("SELECT i.site_id,i.user_id,i.verified_at,s.host FROM site_analysis_integrations i JOIN site_analysis_sites s ON s.id=i.site_id AND s.user_id=i.user_id JOIN users u ON u.id=i.user_id WHERE i.script_token=? AND i.deleted_at='' AND u.status='active'").bind(token).first<Tracker>();
+  const siteId = siteIdFromScriptId(token), field = siteId ? 'i.site_id' : 'i.script_token';
+  return db.prepare(`SELECT i.site_id,i.user_id,i.script_token,i.verified_at,s.host FROM site_analysis_integrations i JOIN site_analysis_sites s ON s.id=i.site_id AND s.user_id=i.user_id JOIN users u ON u.id=i.user_id WHERE ${field}=? AND i.deleted_at='' AND u.status='active'`).bind(siteId || token).first<Tracker>();
 }
 export function trafficChannel(referrer: string, medium: string, host: string): VisitChannel {
   if (/^(email|e-mail|newsletter)$/.test(medium)) return 'email';
@@ -41,6 +43,7 @@ export function trackingOrigin(request: Request, host: string) {
 export async function recordSiteVisit(token: string, request: Request, body: unknown) {
   const tracker = await activeTracker(token);
   if (!tracker?.verified_at) throw new SiteAnalysisError('统计站点不可用', 403);
+  const canonicalToken = tracker.script_token;
   const origin = trackingOrigin(request, tracker.host);
   if (!origin) throw new SiteAnalysisError('统计来源不匹配', 403);
   if (!body || typeof body !== 'object' || Array.isArray(body)) throw new SiteAnalysisError('统计事件格式不正确');
@@ -50,29 +53,30 @@ export async function recordSiteVisit(token: string, request: Request, body: unk
   try { page = new URL(event.page); } catch { throw new SiteAnalysisError('统计页面地址不正确'); }
   if (page.origin !== origin || page.username || page.password || page.pathname.length > 1024) throw new SiteAnalysisError('统计来源不匹配', 403);
   if (/bot|spider|crawler|headless/i.test(request.headers.get('user-agent') || '')) return origin;
-  if (!trackingRateAllowed(token)) throw new SiteAnalysisError('统计请求较频繁', 429);
+  if (!trackingRateAllowed(canonicalToken)) throw new SiteAnalysisError('统计请求较频繁', 429);
   const channel = trafficChannel(event.referrer, event.medium.toLowerCase().trim(), tracker.host), time = new Date().toISOString();
-  const session = createHash('sha256').update(`${token}\0${event.session}`).digest('hex');
+  const session = createHash('sha256').update(`${canonicalToken}\0${event.session}`).digest('hex');
   await env.DB.transaction(async db => {
     await lockPointsUser(db, tracker.user_id);
-    if (!(await activeTracker(token, db))?.verified_at) throw new SiteAnalysisError('统计站点不可用', 403);
+    if (!(await activeTracker(canonicalToken, db))?.verified_at) throw new SiteAnalysisError('统计站点不可用', 403);
     const first = await db.prepare('SELECT channel FROM site_analysis_visits WHERE site_id=? AND session_key=? ORDER BY created_at LIMIT 1').bind(tracker.site_id, session).first<{ channel: string }>();
     const result = await db.prepare('INSERT IGNORE INTO site_analysis_visits (site_id,event_id,session_key,channel,page_path,country_code,created_at) VALUES (?,?,?,?,?,?,?)').bind(tracker.site_id, event.id, session, first?.channel || channel, page.pathname, '', time).run();
-    if (result.meta.changes) await db.prepare("UPDATE site_analysis_integrations SET last_seen_at=?,updated_at=? WHERE site_id=? AND script_token=? AND deleted_at=''").bind(time, time, tracker.site_id, token).run();
+    if (result.meta.changes) await db.prepare("UPDATE site_analysis_integrations SET last_seen_at=?,updated_at=? WHERE site_id=? AND script_token=? AND deleted_at=''").bind(time, time, tracker.site_id, canonicalToken).run();
   });
   return origin;
 }
 
 // This function is serialized as standalone browser JavaScript. Keep every
 // dependency inside it and never collect cookies, query strings or IP addresses.
-function browserTracker(endpoint: string) {
+function browserTracker(endpoint: string, siteKey = '') {
   try {
     endpoint = (document.currentScript as HTMLScriptElement | null)?.src || endpoint;
+    siteKey ||= endpoint;
     const root = window as typeof window & { __yxTrackers?: Record<string, boolean> };
-    if (root.__yxTrackers?.[endpoint]) return;
-    (root.__yxTrackers ||= {})[endpoint] = true;
+    if (root.__yxTrackers?.[siteKey]) return;
+    (root.__yxTrackers ||= {})[siteKey] = true;
     if (navigator.doNotTrack === '1' || (navigator as Navigator & { globalPrivacyControl?: boolean }).globalPrivacyControl) return;
-    const storageKey = `yx-visit:${new URL(endpoint).pathname}`, uuid = () => typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+    const storageKey = `yx-visit:${siteKey}`, uuid = () => typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
     let previous = '', journey: { id: string; at: number; referrer: string; medium: string } | undefined;
     const pageview = () => {
       try {
@@ -97,4 +101,4 @@ function browserTracker(endpoint: string) {
     window.addEventListener('popstate', pageview); window.addEventListener('yx-site-page', pageview); pageview();
   } catch { /* Leave the host page usable when browser capabilities are restricted. */ }
 }
-export function siteTrackerScript(endpoint: string) { return `;(${browserTracker.toString()})(${JSON.stringify(endpoint)});`; }
+export function siteTrackerScript(endpoint: string, siteKey = '') { return `;(${browserTracker.toString()})(${JSON.stringify(endpoint)},${JSON.stringify(siteKey)});`; }

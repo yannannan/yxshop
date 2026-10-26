@@ -4,6 +4,7 @@ import { env } from '@/db/mysql-runtime';
 import { lockPointsUser } from './points-service';
 import { normalizeSite, siteRequest } from './site-analysis-network';
 import { SiteAnalysisError, visitChannels, type AnalysisSite, type SiteStatistics } from './site-analysis';
+import { siteScriptOrigin, siteScriptUrl } from './site-script';
 
 type Database = Pick<typeof env.DB, 'prepare'>;
 export type ManagedSite = AnalysisSite & { scriptToken: string; verifiedAt: string; lastSeenAt: string; deletedAt: string };
@@ -68,13 +69,14 @@ export async function verifyAnalysisSite(userId: number, id: string, platformOri
   try { response = await read(site.url, AbortSignal.timeout(15000), 1024 * 1024); }
   catch { throw new SiteAnalysisError('暂时无法读取站点首页，请确认公网可访问后重试', 422); }
   if (response.status < 200 || response.status >= 300 || !/html/i.test(response.contentType) || !sameSiteHost(new URL(response.url).hostname, site.host)) throw new SiteAnalysisError('站点首页访问异常或跳转到其他域名，无法验证', 422);
-  const expected = new URL(scriptPath(site.scriptToken), platformOrigin).href, $ = loadBuffer(response.bytes, { encoding: { defaultEncoding: 'utf-8' } });
+  const expected = new Set([siteScriptUrl(site.id), new URL(scriptPath(site.scriptToken), platformOrigin).href, new URL(scriptPath(site.scriptToken), siteScriptOrigin).href]);
+  const $ = loadBuffer(response.bytes, { encoding: { defaultEncoding: 'utf-8' } });
   $('template,noscript').remove();
   const found = $('script[src]').toArray().some(node => {
     if ($(node).closest('template,noscript').length) return false;
     const type = ($(node).attr('type') || '').trim().toLowerCase();
     if ($(node).attr('nomodule') !== undefined || type && !/^(?:text|application)\/(?:java|ecma)script$/.test(type)) return false;
-    try { return new URL($(node).attr('src')!, response.url).href === expected; } catch { return false; }
+    try { return expected.has(new URL($(node).attr('src')!, response.url).href); } catch { return false; }
   });
   const updated = await env.DB.prepare("UPDATE site_analysis_integrations SET verified_at=?,updated_at=? WHERE site_id=? AND user_id=? AND script_token=? AND deleted_at='' AND verify_requested_at=?").bind(found ? time : '', time, id, userId, site.scriptToken, claim).run();
   if (updated.meta.changes !== 1) throw new SiteAnalysisError('站点状态已变化，请刷新后重试', 409);

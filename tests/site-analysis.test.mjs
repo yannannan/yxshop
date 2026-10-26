@@ -16,7 +16,7 @@ function loader(mocks = {}, globals = {}) {
     const file = new URL(name, root); if (cache.has(file.href)) return cache.get(file.href).exports;
     const loaded = { exports: {} }; cache.set(file.href, loaded);
     const source = ts.transpileModule(readFileSync(file, 'utf8'), { fileName: file.pathname.replace(/\.mjs$/, '.ts'), compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText;
-    vm.runInNewContext(source, { module: loaded, exports: loaded.exports, Buffer, Request, Response, URL, URLSearchParams, TextDecoder, AbortSignal, AbortController, Intl, Date, crypto: globalThis.crypto, setTimeout, clearTimeout, setInterval, clearInterval, console: { info() {}, error() {}, warn() {} }, process: { env: { NODE_ENV: 'production' } }, ...globals, require: spec => {
+    vm.runInNewContext(source, { module: loaded, exports: loaded.exports, Buffer, btoa, atob, Request, Response, URL, URLSearchParams, TextDecoder, AbortSignal, AbortController, Intl, Date, crypto: globalThis.crypto, setTimeout, clearTimeout, setInterval, clearInterval, console: { info() {}, error() {}, warn() {} }, process: { env: { NODE_ENV: 'production' } }, ...globals, require: spec => {
       if (Object.hasOwn(mocks, spec)) return mocks[spec];
       if (spec.startsWith('.')) { const relative = new URL(spec + (/\.(?:tsx?|mjs)$/.test(spec) ? '' : existsSync(new URL(`${spec}.tsx`, file)) ? '.tsx' : '.ts'), file); return load(relative.href); }
       return require(spec);
@@ -27,6 +27,20 @@ function loader(mocks = {}, globals = {}) {
 }
 const load = loader(), model = load('lib/site-analysis.ts'), parser = load('lib/site-analysis-parser.ts'), network = load('lib/site-analysis-network.ts'), collector = load('lib/site-analysis-collector.ts');
 const id = '11111111-1111-4111-8111-111111111111', otherId = '22222222-2222-4222-8222-222222222222';
+const siteScripts = load('lib/site-script.ts');
+
+test('接入地址固定为www.yxstar.shop的HTTPS，22位短标识完整保留站点编号并拒绝非规范别名',()=>{
+  const ids=[id,otherId,'00000000-0000-0000-0000-000000000000','ffffffff-ffff-ffff-ffff-ffffffffffff',...Array.from({length:50},()=>crypto.randomUUID())];
+  for(const siteId of ids){
+    const key=siteScripts.siteScriptId(siteId);assert.equal(key.length,22);assert.equal(key,Buffer.from(siteId.replaceAll('-',''),'hex').toString('base64url'));
+    assert.equal(siteScripts.siteIdFromScriptId(key),siteId);assert.equal(siteScripts.siteScriptId(siteId.toUpperCase()),key);
+    const url=new URL(siteScripts.siteScriptUrl(siteId));assert.equal(url.origin,'https://www.yxstar.shop');assert.equal(url.pathname,'/s/'+key);
+    assert.equal(siteScripts.siteScriptSnippet(siteId),`<script async src="${url.href}"></script>`);assert.ok(siteScripts.siteScriptSnippet(siteId).length<90);
+  }
+  assert.equal(new Set(ids.map(siteScripts.siteScriptId)).size,ids.length);
+  for(const bad of ['',id,'x'.repeat(21),'a'.repeat(64),'A'.repeat(21)+'B','A'.repeat(22)+'==','/'.repeat(22)])assert.equal(siteScripts.siteIdFromScriptId(bad),'');
+  assert.equal(siteScripts.siteScriptSnippet('not-a-site'),'');
+});
 const html = '<html lang="zh-CN"><head><title>宇星软件 | 示例网站</title><meta name="description" content="提供网站分析与软件开发"><meta name="keywords" content="网站分析,软件开发"></head><body><main><h1>网站分析工具</h1><p>网站分析用于网站运营。软件开发帮助企业提供网站分析功能。</p><a href="/about">关于软件开发</a><a href="https://external.example.org/">外站</a><a href="/admin">后台</a></main><script>secret keyword</script></body></html>';
 function fakeIO({ blocked = false, engineBlocked = false, brokenPage = false, dynamic = false } = {}) {
   const requests = [];
@@ -321,7 +335,7 @@ function fixture({chargeType='free',balance=300,failTable='',registered=true,ver
           if(sql.includes("i.deleted_at=''" )||sql.includes("COALESCE(i.deleted_at,'')=''"))rows=rows.filter(r=>!r.deletedAt);
           if(sql.includes("i.verified_at<>''"))rows=rows.filter(r=>r.verifiedAt);
         }
-        else if(table==='site_analysis_integrations')rows=rows.filter(r=>r.script_token===args[0]&&!r.deleted_at&&state.users.some(u=>u.id===r.user_id&&u.status==='active')).map(r=>({...r,host:state.site_analysis_sites.find(s=>s.id===r.site_id)?.host}));
+        else if(table==='site_analysis_integrations')rows=rows.filter(r=>(sql.includes('WHERE i.site_id=?')?r.site_id===args[0]:r.script_token===args[0])&&!r.deleted_at&&state.users.some(u=>u.id===r.user_id&&u.status==='active')).map(r=>({...r,host:state.site_analysis_sites.find(s=>s.id===r.site_id)?.host}));
         else if(table==='site_analysis_visits'){
           rows=rows.filter(r=>r.site_id===args[0]&&(sql.includes('session_key=?')?r.session_key===args[1]:r.created_at>=args[1]));if(sql.startsWith('SELECT channel FROM'))return rows.slice(0,1);
           if(sql.includes('GROUP BY')){const field=sql.includes('GROUP BY channel')?'channel':'country_code',groups=new Map();for(const row of rows){if(!groups.has(row[field]))groups.set(row[field],new Set());groups.get(row[field]).add(row.session_key);}return [...groups].map(([key,sessions])=>({[field==='channel'?'channel':'code']:key,visits:sessions.size}));}
@@ -369,7 +383,8 @@ function fixture({chargeType='free',balance=300,failTable='',registered=true,ver
   const body=(overrides={})=>({id,tool:50,domain:'example.org',options:{maxPages:5},...overrides});
   const collect=async(url,options,progress)=>{const result=collector.blankReport(network.normalizeSite(url).host,options);result.pages=[parser.parseSitePage(Buffer.from(html),'https://example.org/')];result.keywords=parser.extractSiteKeywords(result.pages,[]);result.stages=[{key:'pages',state:'complete',message:'ok',at:new Date().toISOString()}];result.issues=[{code:'description',severity:'medium',title:'页面缺少描述',url:'https://example.org/about',advice:'检查描述'}];result.coverage={discovered:1,fetched:1,limited:false};await progress(result,90);return result;};
   const management=modules('lib/site-management-service.ts'),tracking=modules('lib/site-tracking.ts');mocks['@/lib/site-tracking']=tracking;const trackerRoute=modules('app/api/site-tracker/[token]/route.ts');
-  return{service,management,tracking,trackerRoute,route,request,body,queries,state:()=>state,collect};
+  const shortRoute=modules('app/s/[token]/route.ts');
+  return{service,management,tracking,trackerRoute,shortRoute,route,request,body,queries,state:()=>state,collect};
 }
 test('匿名、伪造 Cookie 和停用用户不能创建或读取个人任务', async()=>{
   const f=fixture();assert.equal((await f.route.GET(f.request({user:0}))).status,200);assert.equal((await(await f.route.GET(f.request({user:0}))).json()).authenticated,false);
@@ -430,6 +445,15 @@ test('唯一脚本由服务器读取真实script元素验证；注释、模板�
   }
 });
 
+test('本地发起验证也识别固定线上短脚本，仍兼容原长脚本，其他站点或来源的短脚本不通过',async()=>{
+  for(const kind of ['short','long','other-site','other-origin']){
+    const f=fixture(),url=kind==='short'?siteScripts.siteScriptUrl(otherId):kind==='long'?'https://www.yxstar.shop/api/site-tracker/'+'a'.repeat(64):kind==='other-site'?siteScripts.siteScriptUrl(id):siteScripts.siteScriptUrl(otherId).replace('www.yxstar.shop','other.example');
+    const read=async()=>({url:'https://example.org/',status:200,contentType:'text/html',bytes:Buffer.from(`<script async src="${url}"></script>`)});
+    if(kind==='short'||kind==='long'){const site=await f.management.verifyAnalysisSite(1,otherId,'http://localhost:3000',read);assert.ok(site.verifiedAt);assert.equal(site.scriptToken,'a'.repeat(64));}
+    else await assert.rejects(f.management.verifyAnalysisSite(1,otherId,'http://localhost:3000',read),error=>error.status===422);
+  }
+});
+
 test('验证冷却限制与删除竞态不会把已删除或重建站点重新标为已验证',async()=>{
   const f=fixture(),read=async()=>({url:'https://example.org/',status:200,contentType:'text/html',bytes:Buffer.from(`<script src="https://shop.example/api/site-tracker/${'a'.repeat(64)}"></script>`)});
   await f.management.verifyAnalysisSite(1,otherId,'https://shop.example',read);
@@ -458,6 +482,26 @@ test('访问上报不能验证站点，校验域名和事件大小，匿名脚�
   assert.equal((await(await f.route.GET(f.request({user:0,query:'?tool=50&statistics='+otherId}))).json()).authenticated,false);
   assert.equal((await f.route.GET(f.request({user:2,query:'?tool=50&statistics='+otherId}))).status,404);
   const event=f.state().site_analysis_visits[0];assert.equal(event.page_path,'/page');assert.equal(event.channel,'email');assert.equal(event.country_code,'');assert.ok(!JSON.stringify(event).includes('secret'));assert.notEqual(event.session_key,payload.session);
+});
+
+test('短脚本与原长脚本映射同一站点并共享会话和事件去重，删除与重新验证规则一致',async()=>{
+  const f=fixture(),key=siteScripts.siteScriptId(otherId),legacy='a'.repeat(64),context={params:Promise.resolve({token:key})};
+  const request=(method='GET',body,origin='https://example.org')=>new Request(siteScripts.siteScriptUrl(otherId),{method,headers:{origin},...(body?{body:JSON.stringify(body)}:{})});
+  const body={id:'visit-event-00000001',session:'anonymous-session-0001',page:'https://example.org/path',referrer:'',medium:''};
+  const script=await f.shortRoute.GET(request(),context);assert.equal(script.status,200);assert.match(script.headers.get('content-type'),/javascript/);
+  assert.equal((await f.shortRoute.OPTIONS(request('OPTIONS'),context)).headers.get('access-control-allow-origin'),'https://example.org');
+  assert.equal((await f.shortRoute.POST(request('POST',body),context)).status,204);
+  await f.tracking.recordSiteVisit(legacy,request('POST'),body);assert.equal(f.state().site_analysis_visits.length,1);
+  await f.tracking.recordSiteVisit(legacy,request('POST'),{...body,id:'visit-event-00000002'});
+  const stats=await f.management.siteStatistics(1,otherId);assert.equal(stats.pageviews,2);assert.equal(stats.sessions,1);
+  assert.equal((await f.shortRoute.POST(request('POST',body,'https://evil.org'),context)).status,403);
+  const queries=f.queries.length;assert.equal((await f.shortRoute.GET(request(),{params:Promise.resolve({token:'A'.repeat(21)+'B'})})).status,404);assert.equal(f.queries.length,queries);
+  await f.management.deleteAnalysisSite(1,otherId);assert.equal((await f.shortRoute.GET(request(),context)).status,404);
+  await f.management.registerAnalysisSite(1,'example.org');assert.equal((await f.shortRoute.POST(request('POST',{...body,id:'visit-event-00000003'}),context)).status,403);
+  await f.management.verifyAnalysisSite(1,otherId,'http://localhost:3000',async()=>({url:'https://example.org/',status:200,contentType:'text/html',bytes:Buffer.from(siteScripts.siteScriptSnippet(otherId))}));
+  assert.equal((await f.shortRoute.POST(request('POST',{...body,id:'visit-event-00000003'}),context)).status,204);
+  assert.equal((await f.trackerRoute.GET(new Request('https://www.yxstar.shop/api/site-tracker/'+legacy),{params:Promise.resolve({token:legacy})})).status,200);
+  assert.equal(siteScripts.siteScriptId((await f.management.ownedManagedSite(1,otherId)).id),key);
 });
 
 test('上报幂等并按会话统计来源；删除不丢历史并暂停原脚本，重加域名保留原脚本且重新验证',async()=>{
@@ -512,14 +556,14 @@ test('站点管理可添加、复制唯一脚本、验证、进入看板并确�
     const slots=[],refs=[],calls=[],effects=[];let cursor=0,refCursor=0,copied='',selected=null,changed=0,installed=false;
     const site={id:otherId,host:'example.org',url:'https://example.org/',updatedAt:'2026-01-01',scriptToken:'a'.repeat(64),verifiedAt:'',lastSeenAt:''};
     const react={...React,useState(initial){const index=cursor++;if(!(index in slots))slots[index]=initial;return[slots[index],value=>{slots[index]=typeof value==='function'?value(slots[index]):value;}];},useRef(initial){return refs[refCursor++]??={current:initial};},useEffect(effect){effects.push(effect);}};
-    const ui=loader({react,'./language-provider':{useI18n:()=>({locale,t:translations.translator(locale)})},'../lib/site-analysis-client':{async siteAnalysisRequest(_path,options){const body=JSON.parse(options.body);calls.push(body);if(body.action==='site-verify')installed=true;return{site:{...site,verifiedAt:installed?'2026-01-02':'',updatedAt:installed?'2026-01-02':'2026-01-01'}};}}},{window:{location:{origin:'https://shop.example'}},navigator:{clipboard:{async writeText(text){copied=text;}}}})('components/site-management.tsx');
+    const ui=loader({react,'./language-provider':{useI18n:()=>({locale,t:translations.translator(locale)})},'../lib/site-analysis-client':{async siteAnalysisRequest(_path,options){const body=JSON.parse(options.body);calls.push(body);if(body.action==='site-verify')installed=true;return{site:{...site,verifiedAt:installed?'2026-01-02':'',updatedAt:installed?'2026-01-02':'2026-01-01'}};}}},{window:{location:{origin:'http://localhost:3000'}},navigator:{clipboard:{async writeText(text){copied=text;}}}})('components/site-management.tsx');
     const props={sites:[],toolId:50,onChanged(){changed++;},onAnalyze(site){selected=site;}},render=()=>{cursor=0;refCursor=0;return ui.SiteManagement(props);},settle=()=>new Promise(resolve=>setImmediate(resolve));
     let tree=render();effects[0]();await settle();
     uiElements(tree).find(node=>node.type==='input').props.onChange({target:{value:'example.org'}});tree=render();uiElements(tree).find(node=>node.type==='form').props.onSubmit({preventDefault(){}});await settle();tree=render();
     assert.equal(calls.length,1);assert.equal(calls[0].action,'site-add');assert.equal(calls[0].domain,'example.org');
     const text=label=>translations.translator(locale)(label),button=label=>uiElements(tree).find(node=>node.type==='button'&&uiElements(node.props.children).some(child=>typeof child.props?.children==='string'&&child.props.children===text(label)))||uiElements(tree).find(node=>node.type==='button'&&(Array.isArray(node.props.children)?node.props.children.includes(text(label)):node.props.children===text(label)));
     assert.ok(!uiElements(tree).some(node=>node.type==='textarea'));button('生成脚本').props.onClick();tree=render();
-    const card=uiElements(tree).find(node=>node.type==='article'),code=uiElements(card).find(node=>node.type==='textarea');assert.equal(code.props.readOnly,true);assert.equal(code.props.value,`<script async src="https://shop.example/api/site-tracker/${site.scriptToken}"></script>`);
+    const card=uiElements(tree).find(node=>node.type==='article'),code=uiElements(card).find(node=>node.type==='textarea');assert.equal(code.props.readOnly,true);assert.equal(code.props.value,'<script async src="https://www.yxstar.shop/s/IiIiIiIiQiKCIiIiIiIiIg"></script>');assert.ok(!code.props.value.includes('localhost'));
     button('查看脚本').props.onClick();tree=render();assert.equal(uiElements(tree).find(node=>node.type==='textarea').props.value,code.props.value);assert.equal(calls.length,1);
     assert.equal(button('进入综合看板').props.disabled,true);button('复制脚本').props.onClick();await settle();assert.equal(copied,code.props.value);
     button('已安装，开始验证').props.onClick();await settle();tree=render();assert.equal(calls[1].action,'site-verify');assert.equal(button('进入综合看板').props.disabled,false);button('进入综合看板').props.onClick();assert.equal(selected.id,site.id);
@@ -534,7 +578,7 @@ test('多站点的生成、脚本、复制与验证留在各自卡片，重复�
     function mount(){
       const slots=[],refs=[],effects=[];let cursor=0,refCursor=0;
       const react={...React,useState(initial){const index=cursor++;if(!(index in slots))slots[index]=initial;return[slots[index],value=>{slots[index]=typeof value==='function'?value(slots[index]):value;}];},useRef(initial){return refs[refCursor++]??={current:initial};},useEffect(effect){effects.push(effect);}};
-      const ui=loader({react,'./language-provider':{useI18n:()=>({locale,t:translations.translator(locale)})},'../lib/site-analysis-client':{async siteAnalysisRequest(_path,options){const body=JSON.parse(options.body);calls.push(body);const site=sites.find(site=>site.id===body.site||site.url===body.domain);assert.ok(site);Object.assign(site,{scriptToken:site.scriptToken||'b'.repeat(64),updatedAt:'2026-01-02',...(body.action==='site-verify'?{verifiedAt:'2026-01-02'}:{})});return{site:{...site}};}}},{window:{location:{origin:'https://shop.example'}},navigator:{clipboard:{async writeText(value){copied=value;}}}})('components/site-management.tsx');
+      const ui=loader({react,'./language-provider':{useI18n:()=>({locale,t:translations.translator(locale)})},'../lib/site-analysis-client':{async siteAnalysisRequest(_path,options){const body=JSON.parse(options.body);calls.push(body);const site=sites.find(site=>site.id===body.site||site.url===body.domain);assert.ok(site);Object.assign(site,{scriptToken:site.scriptToken||'b'.repeat(64),updatedAt:'2026-01-02',...(body.action==='site-verify'?{verifiedAt:'2026-01-02'}:{})});return{site:{...site}};}}},{window:{get location(){throw Error('The script origin must not come from the current page');}},navigator:{clipboard:{async writeText(value){copied=value;}}}})('components/site-management.tsx');
       const render=()=>{cursor=0;refCursor=0;return ui.SiteManagement({sites,toolId:50,onChanged(){},onAnalyze(){}});};
       return{render,effects};
     }
@@ -542,7 +586,7 @@ test('多站点的生成、脚本、复制与验证留在各自卡片，重复�
     const first=mount();let tree=first.render();first.effects[0]();await settle();tree=first.render();assert.ok(!code(tree));
     button(card(tree,0),'生成脚本').props.onClick();tree=first.render();const original=code(card(tree,0)).props.value;assert.ok(!code(card(tree,1)));assert.equal(calls.length,0);
     button(card(tree,1),'生成脚本').props.onClick();await settle();tree=first.render();assert.equal(calls.length,1);assert.equal(calls[0].domain,sites[1].url);
-    const secondCode=code(card(tree,1));assert.ok(secondCode.props.value.includes('b'.repeat(64)));assert.equal(code(card(tree,0)).props.value,original);assert.notEqual(code(card(tree,0)).props.id,secondCode.props.id);
+    const secondCode=code(card(tree,1));assert.equal(secondCode.props.value,'<script async src="https://www.yxstar.shop/s/IiIiIiIiQiKCIiIiIiIiIg"></script>');assert.equal(code(card(tree,0)).props.value,original);assert.notEqual(code(card(tree,0)).props.id,secondCode.props.id);
     button(card(tree,1),'复制脚本').props.onClick();await settle();assert.equal(copied,secondCode.props.value);
     button(card(tree,1),'已安装，开始验证').props.onClick();await settle();tree=first.render();assert.equal(calls[1].site,otherId);assert.equal(code(card(tree,0)).props.value,original);
     button(card(tree,1),'查看脚本').props.onClick();tree=first.render();assert.equal(calls.length,2);assert.equal(code(card(tree,1)).props.value,secondCode.props.value);
