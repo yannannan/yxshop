@@ -68,9 +68,13 @@ export async function recordSiteVisit(token: string, request: Request, body: unk
 
 // This function is serialized as standalone browser JavaScript. Keep every
 // dependency inside it and never collect cookies, query strings or IP addresses.
-function browserTracker(endpoint: string, siteKey = '') {
+function browserTracker(endpoint: string, siteKey = '', siteHost = '') {
   try {
-    endpoint = (document.currentScript as HTMLScriptElement | null)?.src || endpoint;
+    const script = document.currentScript as HTMLScriptElement | null;
+    endpoint = script?.src || endpoint;
+    const excludedPath = script?.getAttribute?.('data-exclude-path') || '';
+    const host = (value: string) => value.toLowerCase().replace(/^www\./, '');
+    if (siteHost && host(location.hostname) !== host(siteHost)) return;
     siteKey ||= endpoint;
     const root = window as typeof window & { __yxTrackers?: Record<string, boolean> };
     if (root.__yxTrackers?.[siteKey]) return;
@@ -80,6 +84,7 @@ function browserTracker(endpoint: string, siteKey = '') {
     let previous = '', journey: { id: string; at: number; referrer: string; medium: string } | undefined;
     const pageview = () => {
       try {
+        if (excludedPath && (location.pathname === excludedPath || location.pathname.startsWith(`${excludedPath}/`))) { previous = ''; return; }
         const path = location.origin + location.pathname;
         if (path === previous) return;
         previous = path;
@@ -101,4 +106,4 @@ function browserTracker(endpoint: string, siteKey = '') {
     window.addEventListener('popstate', pageview); window.addEventListener('yx-site-page', pageview); pageview();
   } catch { /* Leave the host page usable when browser capabilities are restricted. */ }
 }
-export function siteTrackerScript(endpoint: string, siteKey = '') { return `;(${browserTracker.toString()})(${JSON.stringify(endpoint)},${JSON.stringify(siteKey)});`; }
+export function siteTrackerScript(endpoint: string, siteKey = '', siteHost = '') { return `;(${browserTracker.toString()})(${JSON.stringify(endpoint)},${JSON.stringify(siteKey)},${JSON.stringify(siteHost)});`; }

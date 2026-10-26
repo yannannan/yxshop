@@ -7,7 +7,7 @@ export async function GET(request: Request, context: Context) {
     const { token } = await context.params;
     const tracker = await activeTracker(token);
     if (!tracker) return new Response('', { status: 404, headers });
-    return new Response(siteTrackerScript(new URL(request.url).origin + new URL(request.url).pathname, tracker.site_id), { headers: { ...headers, 'Content-Type': 'application/javascript; charset=utf-8' } });
+    return new Response(siteTrackerScript(new URL(request.url).origin + new URL(request.url).pathname, tracker.site_id, tracker.host), { headers: { ...headers, 'Content-Type': 'application/javascript; charset=utf-8' } });
   } catch { return new Response('', { status: 503, headers }); }
 }
 export async function POST(request: Request, context: Context) {

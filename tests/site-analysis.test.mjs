@@ -525,11 +525,11 @@ test('访问来源分类使用域名边界和明确medium，不把伪装搜索�
   for(const [url,medium,want] of [['','', 'direct'],['https://example.org/other','', 'direct'],['https://www.baidu.com/s','', 'search'],['https://mail.google.com/','', 'email'],['https://google.com.evil.org/','', 'referral'],['https://facebook.com/','', 'social'],['','newsletter','email'],['','unknown-medium','other']])assert.equal(classify(url,medium,'example.org'),want);
 });
 
-test('实际浏览器脚本不读Cookie或上报敏感URL，支持SPA去重、匿名会话、隐私选择和HTTPS代理',()=>{
-  const script=fixture().tracking.siteTrackerScript('http://shop.example/api/site-tracker/'+ 'a'.repeat(64));
-  function browser({dnt='0',deniedStorage=false}={}){
+test('实际浏览器脚本不读敏感数据，支持SPA去重、匿名会话、隐私、HTTPS及域名和后台范围排除',()=>{
+  const script=fixture().tracking.siteTrackerScript('http://shop.example/api/site-tracker/'+ 'a'.repeat(64),otherId,'example.org');
+  function browser({dnt='0',deniedStorage=false,start='https://example.org/start?secret=private&utm_medium=email#token'}={}){
     const sent=[],events=new Map(),storage=new Map();let counter=0;
-    const location=new URL('https://example.org/start?secret=private&utm_medium=email#token'),document={currentScript:{src:'https://shop.example/api/site-tracker/'+'a'.repeat(64)},referrer:'https://mail.google.com/private?password=hidden'};
+    const location=new URL(start),document={currentScript:{src:'https://shop.example/api/site-tracker/'+'a'.repeat(64),getAttribute:name=>name==='data-exclude-path'?'/admin':null},referrer:'https://mail.google.com/private?password=hidden'};
     Object.defineProperty(document,'cookie',{get(){throw Error('Cookies must not be read');}});
     const window={addEventListener(name,callback){if(!events.has(name))events.set(name,[]);events.get(name).push(callback);},dispatchEvent(event){for(const callback of events.get(event.type)||[])callback();}};
     const history={pushState(_state,_title,path){location.href=new URL(path,location).href;},replaceState(_state,_title,path){location.href=new URL(path,location).href;}};
@@ -540,6 +540,10 @@ test('实际浏览器脚本不读Cookie或上报敏感URL，支持SPA去重、�
   b.history.pushState({},'', '/next?secret=hidden#fragment');assert.equal(b.sent.length,2);assert.equal(b.sent[0].body.session,b.sent[1].body.session);assert.notEqual(b.sent[0].body.id,b.sent[1].body.id);assert.equal(b.sent[1].body.page,'https://example.org/next');
   b.history.replaceState({},'', '/next?other=query');assert.equal(b.sent.length,2);vm.runInNewContext(script,b.context);assert.equal(b.sent.length,2);
   assert.equal(browser({dnt:'1'}).sent.length,0);assert.equal(browser({deniedStorage:true}).sent.length,1);
+  assert.equal(browser({start:'http://localhost:3000/'}).sent.length,0);assert.equal(browser({start:'https://example.org.evil.test/'}).sent.length,0);assert.equal(browser({start:'https://www.example.org/'}).sent.length,1);
+  const admin=browser({start:'https://example.org/admin'});assert.equal(admin.sent.length,0);admin.history.pushState({},'', '/admin/users?private=hidden');assert.equal(admin.sent.length,0);
+  admin.history.pushState({},'', '/');assert.equal(admin.sent.length,1);admin.history.pushState({},'', '/admin');assert.equal(admin.sent.length,1);admin.history.pushState({},'', '/');assert.equal(admin.sent.length,2);
+  admin.history.pushState({},'', '/administrator');assert.equal(admin.sent.length,3);assert.ok(admin.sent.every(event=>!event.body.page.includes('/admin/')&&!event.body.page.endsWith('/admin')));
 });
 
 test('站点管理默认位于首位，只有验证站点才能进入分析，地址来自配置且不能自由改写',()=>{

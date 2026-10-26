@@ -62,7 +62,9 @@ for (const spec of ${JSON.stringify(paths)}) {
   const path = typeof spec === 'string' ? spec : spec.path;
   const response = await handler(new Request('http://localhost:3000' + path, { method: typeof spec === 'object' ? spec.method || 'GET' : 'GET', headers: typeof spec === 'object' ? { cookie: 'yxshop_locale=' + (spec.locale || 'zh-CN') } : {} }));
   const html = await response.text();
-  pages.push({ path, script: (path.startsWith('/api/site-tracker/') || path.startsWith('/s/')) && response.status === 200 ? html : undefined, status: response.status, failed: html.includes('This page couldn'), hasBrand: html.includes('宇星脉通'), hasVideoForm: html.includes('粘贴视频链接'), hasStampPreview: html.includes('效果预览'), language: /<html[^>]*lang="([^"]+)"/.exec(html)?.[1], englishNav: html.includes('AI Digital Services'), englishPoints: html.includes('One balance. Many possibilities.'), englishStamp: html.includes('Design Your Stamp'), englishVideo: html.includes('Paste a Video Link'), chineseAdmin: html.includes('正在验证管理权限') });
+  const trackerSource = 'https://www.yxstar.shop/s/RDYfVdtkRd-iXLHGxvrdEA';
+  const trackerTags = [...html.matchAll(/<script[^>]*>/g)].filter(match => match[0].includes('src="' + trackerSource + '"'));
+  pages.push({ path, script: (path.startsWith('/api/site-tracker/') || path.startsWith('/s/')) && response.status === 200 ? html : undefined, siteTrackerCount: trackerTags.length, siteTrackerInHead: trackerTags.every(match => match.index < html.indexOf('</head>')), siteTrackerSkipsAdmin: trackerTags.every(match => match[0].includes('data-exclude-path="/admin"')), status: response.status, failed: html.includes('This page couldn'), hasBrand: html.includes('宇星脉通'), hasVideoForm: html.includes('粘贴视频链接'), hasStampPreview: html.includes('效果预览'), language: /<html[^>]*lang="([^"]+)"/.exec(html)?.[1], englishNav: html.includes('AI Digital Services'), englishPoints: html.includes('One balance. Many possibilities.'), englishStamp: html.includes('Design Your Stamp'), englishVideo: html.includes('Paste a Video Link'), chineseAdmin: html.includes('正在验证管理权限') });
 }
 console.log(JSON.stringify({ pages, errors, queries }));
 `;
@@ -87,6 +89,7 @@ test('生产包在严格依赖边界下渲染首页、目录和匿名工具页�
   for (const page of result.pages) {
     assert.equal(page.status, 200, JSON.stringify({ page, errors: result.errors }));
     assert.equal(page.failed, false); assert.equal(page.hasBrand, true);
+    assert.equal(page.siteTrackerCount,1,page.path);assert.equal(page.siteTrackerInHead,true,page.path);assert.equal(page.siteTrackerSkipsAdmin,true,page.path);
   }
   assert.equal(result.pages.find(page => page.path.includes('video-extractor')).hasVideoForm, true);
   assert.equal(result.pages.find(page => page.path.includes('stamp-maker')).hasStampPreview, true);
@@ -116,7 +119,7 @@ test('同一生产处理器按语言 Cookie 渲染英文前台，非法偏好回
     { path: '/admin', locale: 'en' }, { path: '/', locale: 'zh-CN' }, { path: '/', locale: 'invalid' },
   ]);
   assert.deepEqual(result.errors, []);
-  for (const page of result.pages) assert.equal(page.status, 200, JSON.stringify(page));
+  for (const page of result.pages) { assert.equal(page.status, 200, JSON.stringify(page));assert.equal(page.siteTrackerCount,1);assert.equal(page.siteTrackerSkipsAdmin,true); }
   assert.equal(result.pages[0].language, 'en'); assert.equal(result.pages[0].englishNav, true);
   assert.equal(result.pages[1].englishPoints, true); assert.equal(result.pages[2].englishStamp, true); assert.equal(result.pages[3].englishVideo, true);
   assert.equal(result.pages[4].chineseAdmin, true); assert.equal(result.pages[4].englishNav, false);
