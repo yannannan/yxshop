@@ -147,3 +147,13 @@ final result for this overview refinement: blocked (visual verification only; co
 - CSS syntax, production build and 6 production-handler checks pass. Visual comparison is **blocked / pending user acceptance** under the standing no-browser / no-preview instruction; no rendered comparison is claimed.
 
 final result for this column change: blocked (visual verification only; code checks complete)
+
+## 2026-10-26 Site management and unique verification / tracking script
+
+- Reference: `codex-clipboard-53ae1382-90c6-421c-842f-9135a166b6ea.png`. Site management is now the first sidebar entry and default view. It has a dedicated add-site form, status cards, a per-site installation panel, copy / verify actions and inline deletion confirmation. The previous analysis form is shown only in the overview.
+- New analysis requires an owned, active, verified site in both the interface and API. Each site receives its own script for server-side installation verification and anonymous visits. Deletion retains reports and events, stops new work and invalidates the script; re-adding rotates the token and requires verification again.
+- Existing navy / orange colors, white cards, responsive columns, form labels, native controls, status / error announcements and both languages are retained. Traffic shows real last-30-day session shares and PV. Country data is explicitly unknown until a geolocation source is connected; historical reports and search-index missing-data states remain honest.
+- Code verification: 417 regressions and production build pass, including the complete bilingual management interaction, ownership / lifecycle / race checks, real development module loading and standalone production tracking-script execution. Changed-file ESLint and CSS parsing pass. Existing 20 unrelated TypeScript diagnostics remain.
+- Visual comparison and real-site installation are **blocked / pending user acceptance** under the standing instruction not to open browsers, start app / preview services or connect to the business database. No rendered screenshot, breakpoint or live installation acceptance is claimed.
+
+final result for this feature: blocked (visual / live integration verification only; code checks complete)

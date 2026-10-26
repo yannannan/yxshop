@@ -211,3 +211,46 @@
   .seo-controls .seo-control-meta{padding:14px 16px}
 }
 @media(prefers-reduced-motion:reduce){.seo-controls .seo-check{transition:none}}
+
+.seo-site-management{min-width:0}
+.seo-site-onboarding{display:flex;flex-wrap:wrap;gap:14px 30px;padding:16px 20px;margin-bottom:20px;background:#eef3f9;border:1px solid #dfe7f1;border-radius:12px;color:#405c7b;font-size:14px}
+.seo-site-onboarding>span{display:flex;gap:9px;align-items:center}
+.seo-site-onboarding svg{width:20px;height:20px}
+.seo-site-add{display:grid;grid-template-columns:minmax(210px,.8fr) minmax(240px,1.6fr) auto;gap:22px;align-items:end}
+.seo-site-add h2{margin:0 0 6px;font-size:21px;color:#203650}
+.seo-site-add p{margin:0;font-size:14px;color:#65758a;line-height:1.8}
+.seo-site-add label{display:flex;flex-direction:column;gap:9px;min-width:0;font-size:14px;color:#465b74}
+.seo-site-add input{width:100%}
+.seo-site-add .seo-primary{min-height:48px}
+.seo-site-message{display:flex;align-items:center;gap:9px;padding:12px 16px;margin:0 0 20px;border:1px solid #d1e8da;border-radius:10px;background:#f0f9f3;color:#2d6a4d;font-size:14px;line-height:1.8}
+.seo-managed-sites{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-bottom:20px}
+.seo-managed-site{margin:0;padding:22px;min-width:0}
+.seo-managed-site.selected{border-color:#9db3cc;box-shadow:0 3px 14px #193a5e08}
+.seo-managed-site-heading{display:flex;align-items:center;gap:10px}
+.seo-managed-site-heading>svg{color:#c65b25}
+.seo-managed-site-heading>strong{font-size:17px;overflow-wrap:anywhere;min-width:0}
+.seo-managed-site-heading>.seo-status{margin-left:auto}
+.seo-managed-site>p{margin:12px 0 7px;color:#65758a;font-size:14px;overflow-wrap:anywhere}
+.seo-managed-site>small{font-size:13px;color:#65758a}
+.seo-managed-site-actions{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-top:20px}
+.seo-managed-site-actions .seo-quiet{font-size:13px!important;padding:8px 12px;min-height:38px}
+.seo-managed-site-actions .seo-text-button{font-size:14px}
+.seo-site-delete{display:inline-flex;align-items:center;justify-content:center;background:#fff;border:1px solid #e8deda;border-radius:8px;padding:9px;color:#a85a43;margin-left:auto}
+.seo-site-delete:hover{background:#fff3ed;border-color:#d9ad9c}
+.seo-site-delete svg{width:17px;height:17px}
+.seo-site-delete-confirm{border-top:1px solid #e8e1dc;margin-top:17px;padding-top:15px;color:#9b523a;font-size:13px;line-height:1.9}
+.seo-site-delete-confirm p{margin:0 0 12px}
+.seo-site-delete-confirm button{border:1px solid #dec7bb;border-radius:6px;background:#fff7f1;color:#9b523a;padding:6px 12px;margin-right:10px;font-size:13px}
+.seo-site-install .seo-section-title{align-items:flex-start}
+.seo-site-install .seo-section-title h2{overflow-wrap:anywhere}
+.seo-script-label{display:block;color:#50657d;font-size:14px;margin-bottom:9px}
+.seo-site-script{display:block;width:100%;min-height:105px;padding:15px 16px;border:1px solid #dbe4ef;border-radius:10px;resize:vertical;background:#f6f8fc;color:#28415d;font:13px/1.9 ui-monospace,SFMono-Regular,Consolas,monospace;overflow-wrap:anywhere}
+.seo-site-script:focus-visible{outline:2px solid #c64b18;outline-offset:3px}
+.seo-script-actions{display:flex;gap:12px;flex-wrap:wrap;justify-content:flex-end;margin-top:15px}
+.seo-script-actions svg{width:18px;height:18px}
+.seo-site-install-notes{padding-left:21px;margin:21px 0 0;color:#65758a;font-size:13px;line-height:2}
+.seo-workspace .seo-country-table .seo-country-data td{padding:12px 10px;border-bottom:1px solid #e7edf4;font-size:14px}
+.seo-workspace .seo-country-table .seo-country-data td:last-child{text-align:right}
+.seo-controls input[readonly]{background:#f5f7fa;color:#5d7189}
+@media(max-width:1100px){.seo-site-add{grid-template-columns:1fr auto}.seo-site-add>div{grid-column:1/-1}}
+@media(max-width:700px){.seo-managed-sites{grid-template-columns:1fr}.seo-site-add{grid-template-columns:1fr;gap:16px}.seo-site-add>div{grid-column:auto}.seo-script-actions>button{flex:1}.seo-site-onboarding{gap:12px 20px;font-size:13px}}

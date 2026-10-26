@@ -1,6 +1,12 @@
 import { integer, real, sqliteTable, text, primaryKey, uniqueIndex, index } from 'drizzle-orm/sqlite-core';
 
-// MySQL production DDL is maintained in sql/10_site_analysis_20261025.sql.
+// MySQL production DDL is maintained in sql/10_site_analysis_20261025.sql and sql/11_site_management_20261026.sql.
+export const siteAnalysisIntegrations = sqliteTable('site_analysis_integrations', {
+  siteId:text('site_id').primaryKey(),userId:integer('user_id').notNull(),scriptToken:text('script_token').notNull(),verifiedAt:text('verified_at').notNull().default(''),lastSeenAt:text('last_seen_at').notNull().default(''),verifyRequestedAt:text('verify_requested_at').notNull().default(''),deletedAt:text('deleted_at').notNull().default(''),createdAt:text('created_at').notNull(),updatedAt:text('updated_at').notNull(),
+}, table=>[uniqueIndex('uq_site_script').on(table.scriptToken)]);
+export const siteAnalysisVisits = sqliteTable('site_analysis_visits', {
+  siteId:text('site_id').notNull(),eventId:text('event_id').notNull(),sessionKey:text('session_key').notNull(),channel:text('channel').notNull(),pagePath:text('page_path').notNull(),countryCode:text('country_code').notNull().default(''),createdAt:text('created_at').notNull(),
+}, table=>[primaryKey({columns:[table.siteId,table.eventId]}),index('idx_site_visits_period').on(table.siteId,table.createdAt)]);
 export const siteAnalysisSites = sqliteTable('site_analysis_sites', {
   id: text('id').primaryKey(), userId: integer('user_id').notNull(), host: text('host').notNull(), url: text('url').notNull(), createdAt: text('created_at').notNull(), updatedAt: text('updated_at').notNull(),
 }, table => [uniqueIndex('uq_analysis_site').on(table.userId, table.host)]);

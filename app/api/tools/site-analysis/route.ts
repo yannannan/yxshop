@@ -1,5 +1,6 @@
 import { analysisFailure, analysisHeaders, analysisWorkspace, ownedAnalysisRun, queueAnalysis, siteAnalysisTool, siteAnalysisUser, updateAnalysisIssue } from '@/lib/site-analysis-service';
 import { SiteAnalysisError } from '@/lib/site-analysis';
+import { registerAnalysisSite, deleteAnalysisSite, verifyAnalysisSite, siteStatistics } from '@/lib/site-management-service';
 export const runtime = 'nodejs';
 export async function GET(request: Request) {
   try {
@@ -7,6 +8,7 @@ export async function GET(request: Request) {
     if (!user) return Response.json({ authenticated: false }, { headers: analysisHeaders });
     const query = new URL(request.url).searchParams, tool = await siteAnalysisTool(Number(query.get('tool')));
     if (query.has('run')) return Response.json({ run: await ownedAnalysisRun(Number(user.id), query.get('run')!, tool.id) }, { headers: analysisHeaders });
+    if (query.has('statistics')) return Response.json({ statistics: await siteStatistics(Number(user.id), query.get('statistics')!) }, { headers: analysisHeaders });
     return Response.json(await analysisWorkspace(Number(user.id), tool, Number(query.get('page') || 1), query.get('site') || ''), { headers: analysisHeaders });
   } catch (error) { return analysisFailure(error); }
 }
@@ -29,6 +31,12 @@ export async function POST(request: Request) {
     const body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
     if (!body || typeof body !== 'object' || Array.isArray(body)) throw new SiteAnalysisError('分析参数格式不正确');
     const tool = await siteAnalysisTool(Number(body.tool));
+    if (body.action === 'site-add') return Response.json({ site: await registerAnalysisSite(Number(user.id), body.domain) }, { status: 201, headers: analysisHeaders });
+    if (body.action === 'site-delete') return Response.json(await deleteAnalysisSite(Number(user.id), String(body.site || '')), { headers: analysisHeaders });
+    if (body.action === 'site-verify') {
+      const platformOrigin = origin || `${request.headers.get('x-forwarded-proto')?.split(',')[0].trim() === 'https' ? 'https:' : target.protocol}//${target.host}`;
+      return Response.json({ site: await verifyAnalysisSite(Number(user.id), String(body.site || ''), platformOrigin) }, { headers: analysisHeaders });
+    }
     if (body.action === 'issue') return Response.json({ run: await updateAnalysisIssue(Number(user.id), tool.id, body) }, { headers: analysisHeaders });
     if (body.action !== undefined) throw new SiteAnalysisError('分析操作不正确');
     return Response.json({ run: await queueAnalysis(Number(user.id), tool, body) }, { status: 202, headers: analysisHeaders });

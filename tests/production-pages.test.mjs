@@ -3,6 +3,7 @@ import test from 'node:test';
 import { existsSync, readFileSync } from 'node:fs';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import vm from 'node:vm';
 
 const execute = promisify(execFile);
 const entry = new URL('../dist/server/index.js', import.meta.url);
@@ -43,6 +44,7 @@ const rows = [
 let queries = 0;
 // 只允许页面读取模拟的公开工具数据；没有真实连接或写业务数据库。
 mysql.createPool = () => ({ async execute(sql, values = []) {
+  if (sql.startsWith('SELECT ') && sql.includes('FROM site_analysis_integrations i')) { queries++; return [[{ site_id: '22222222-2222-4222-8222-222222222222', user_id: 1, verified_at: '2026-10-26', host: 'example.org' }]]; }
   if (!sql.startsWith('SELECT ') || !sql.includes("FROM products WHERE product_type='tool' AND status='active'")) throw new Error('Unexpected database operation in page test');
   queries++;
   return [values.length ? rows.filter(row => row.tool_slug === values[0]) : rows];
@@ -60,7 +62,7 @@ for (const spec of ${JSON.stringify(paths)}) {
   const path = typeof spec === 'string' ? spec : spec.path;
   const response = await handler(new Request('http://localhost:3000' + path, { method: typeof spec === 'object' ? spec.method || 'GET' : 'GET', headers: typeof spec === 'object' ? { cookie: 'yxshop_locale=' + (spec.locale || 'zh-CN') } : {} }));
   const html = await response.text();
-  pages.push({ path, status: response.status, failed: html.includes('This page couldn'), hasBrand: html.includes('宇星脉通'), hasVideoForm: html.includes('粘贴视频链接'), hasStampPreview: html.includes('效果预览'), language: /<html[^>]*lang="([^"]+)"/.exec(html)?.[1], englishNav: html.includes('AI Digital Services'), englishPoints: html.includes('One balance. Many possibilities.'), englishStamp: html.includes('Design Your Stamp'), englishVideo: html.includes('Paste a Video Link'), chineseAdmin: html.includes('正在验证管理权限') });
+  pages.push({ path, script: path.startsWith('/api/site-tracker/') && response.status === 200 ? html : undefined, status: response.status, failed: html.includes('This page couldn'), hasBrand: html.includes('宇星脉通'), hasVideoForm: html.includes('粘贴视频链接'), hasStampPreview: html.includes('效果预览'), language: /<html[^>]*lang="([^"]+)"/.exec(html)?.[1], englishNav: html.includes('AI Digital Services'), englishPoints: html.includes('One balance. Many possibilities.'), englishStamp: html.includes('Design Your Stamp'), englishVideo: html.includes('Paste a Video Link'), chineseAdmin: html.includes('正在验证管理权限') });
 }
 console.log(JSON.stringify({ pages, errors, queries }));
 `;
@@ -69,6 +71,13 @@ console.log(JSON.stringify({ pages, errors, queries }));
 }
 
 const needsBuild = !existsSync(entry) ? '请先执行 pnpm build 生成生产包' : false;
+
+test('生产接入脚本可独立运行，不依赖构建闭包、商城登录或内部HTTP地址', { skip: needsBuild }, async () => {
+  const path='/api/site-tracker/'+'a'.repeat(64),result=await renderPages([path]);assert.equal(result.pages[0].status,200);assert.deepEqual(result.errors,[]);
+  const sent=[],storage=new Map(),origin='https://platform.example',source=origin+path;
+  vm.runInNewContext(result.pages[0].script,{window:{addEventListener(){},dispatchEvent(){}},document:{currentScript:{src:source},referrer:'https://www.google.com/'},navigator:{doNotTrack:'0'},history:{pushState(){},replaceState(){}},location:new URL('https://example.org/?secret=hidden#private'),URL,URLSearchParams,Math,Date,Number,Event,crypto:{randomUUID:()=> '11111111-1111-4111-8111-111111111111'},sessionStorage:{getItem:key=>storage.get(key),setItem:(key,value)=>storage.set(key,value)},fetch:async(endpoint,options)=>{sent.push({endpoint,body:JSON.parse(options.body),options});}});
+  assert.equal(sent.length,1);assert.equal(sent[0].endpoint,source);assert.equal(sent[0].body.page,'https://example.org/');assert.equal(sent[0].options.credentials,'omit');
+});
 
 test('生产包在严格依赖边界下渲染首页、目录和匿名工具页，无端口、无登录和真实数据库', { skip: needsBuild }, async () => {
   const result = await renderPages(['/', '/orders', '/points', '/addresses', '/product/1', '/checkout/test-order', '/account', '/account/profile', '/account/orders', '/account/activity', '/ai-leads', '/ai-operations', '/tools', '/tools/video-extractor.html', '/tools/stamp-maker.html']);

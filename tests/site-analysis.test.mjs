@@ -294,15 +294,16 @@ test('同一落地页面的多个跳转入口不会产生重复页面记录', as
   const report=await collector.collectSiteReport('example.org',model.analysisOptions({maxPages:5}),async()=>{},f.io);assert.equal(report.pages.length,1);assert.equal(new Set(report.pages.map(p=>p.url)).size,1);
 });
 
-function fixture({chargeType='free',balance=300,failTable=''}={}) {
-  let state={users:[{id:1,phone:'13800000000',status:'active'},{id:2,phone:'13900000000',status:'active'}],products:[{id:50,name:'站长分析工具',tool_slug:'webmaster-tools',tool_charge_type:chargeType,tool_points_cost:10}],orders:[],points_wallets:[{user_id:1,balance}],points_ledger:[],tool_usage_events:[],site_analysis_sites:[],site_analysis_runs:[],site_analysis_reports:[],site_analysis_pages:[],site_analysis_keywords:[],site_analysis_rankings:[],site_analysis_events:[],site_analysis_workers:[],site_analysis_issue_actions:[]};
+function fixture({chargeType='free',balance=300,failTable='',registered=true,verified=true,deleted=false}={}) {
+  let state={users:[{id:1,phone:'13800000000',status:'active'},{id:2,phone:'13900000000',status:'active'}],products:[{id:50,name:'站长分析工具',tool_slug:'webmaster-tools',tool_charge_type:chargeType,tool_points_cost:10}],orders:[],points_wallets:[{user_id:1,balance}],points_ledger:[],tool_usage_events:[],site_analysis_sites:registered?[{id:otherId,user_id:1,host:'example.org',url:'https://example.org/',updated_at:'2026-01-01'}]:[],site_analysis_visits:[],site_analysis_integrations:registered?[{site_id:otherId,user_id:1,verify_requested_at:'',script_token:'a'.repeat(64),verified_at:verified?'2026-01-01':'',deleted_at:deleted?'2026-01-02':'',last_seen_at:''}]:[],site_analysis_runs:[],site_analysis_reports:[],site_analysis_pages:[],site_analysis_keywords:[],site_analysis_rankings:[],site_analysis_events:[],site_analysis_workers:[],site_analysis_issue_actions:[]};
   const queries=[];let gate=Promise.resolve();
   const DB={prepare(sql){let args=[],expected;
     const execute=async()=>{
       assert.equal((sql.match(/\?/g)||[]).length,args.length,sql);queries.push({sql,args:clone(args)});
-      if(sql.startsWith('INSERT INTO ')){
-        const match=/INSERT INTO (\w+) \(([^)]+)\) VALUES \(([^)]+)\)/.exec(sql);assert.ok(match,sql);const[,table,cols,values]=match;
+      if(sql.startsWith('INSERT INTO ')||sql.startsWith('INSERT IGNORE INTO ')){
+        const match=/INSERT (?:IGNORE )?INTO (\w+) \(([^)]+)\) VALUES \(([^)]+)\)/.exec(sql);assert.ok(match,sql);const[,table,cols,values]=match;
         if(table===failTable)throw Error('mock write failure');let cursor=0;const record=Object.fromEntries(cols.split(',').map((key,i)=>{const token=values.split(',')[i].trim();return[key.trim(),token==='?'?args[cursor++]:token.startsWith("'")?token.slice(1,-1):Number(token)];}));
+        if(table==='site_analysis_visits'&&state[table].some(r=>r.site_id===record.site_id&&r.event_id===record.event_id))return{affectedRows:0};
         const old=table==='site_analysis_workers'?state[table].find(r=>r.id===record.id):table==='site_analysis_issue_actions'?state[table].find(r=>r.run_id===record.run_id&&r.user_id===record.user_id&&r.issue_key===record.issue_key):null;
         if(old)Object.assign(old,record);else state[table].push(record);return{affectedRows:1};
       }
@@ -315,7 +316,17 @@ function fixture({chargeType='free',balance=300,failTable=''}={}) {
           if(sql.includes('WHERE id=?'))rows=rows.filter(r=>r.id===args[0]&&(!sql.includes('AND user_id=?')||r.user_id===args[1])&&(!sql.includes('AND product_id=?')||r.product_id===args[2]));
           else if(sql.includes("WHERE status='queued' OR"))rows=rows.filter(r=>r.status==='queued'||r.status==='running'&&r.lease_until<args[0]&&r.attempts<3).slice(0,1);
           else if(sql.includes('WHERE user_id=?')){rows=rows.filter(r=>r.user_id===args[0]);if(sql.includes('AND product_id=?'))rows=rows.filter(r=>r.product_id===args[1]);if(sql.includes('AND site_id=?'))rows=rows.filter(r=>r.site_id===args[2]);if(sql.includes("status IN ('queued','running')"))rows=rows.filter(r=>['queued','running'].includes(r.status));if(sql.includes('created_at>=?'))rows=rows.filter(r=>r.created_at>=args[1]);}
-        }else if(table==='site_analysis_sites')rows=rows.filter(r=>r.user_id===args[0]&&(!sql.includes('host=?')||r.host===args[1]));
+         }else if(table==='site_analysis_sites'){
+          rows=rows.filter(r=>r.user_id===args[0]&&(!sql.includes('host=?')||r.host===args[1])&&(!sql.includes('s.id=?')||r.id===args[1])).map(r=>{const i=state.site_analysis_integrations.find(i=>i.site_id===r.id)||{};return{...r,scriptToken:i.script_token||'',verifiedAt:i.verified_at||'',deletedAt:i.deleted_at||'',lastSeenAt:i.last_seen_at||'',updatedAt:r.updated_at};});
+          if(sql.includes("i.deleted_at=''" )||sql.includes("COALESCE(i.deleted_at,'')=''"))rows=rows.filter(r=>!r.deletedAt);
+          if(sql.includes("i.verified_at<>''"))rows=rows.filter(r=>r.verifiedAt);
+        }
+        else if(table==='site_analysis_integrations')rows=rows.filter(r=>r.script_token===args[0]&&!r.deleted_at&&state.users.some(u=>u.id===r.user_id&&u.status==='active')).map(r=>({...r,host:state.site_analysis_sites.find(s=>s.id===r.site_id)?.host}));
+        else if(table==='site_analysis_visits'){
+          rows=rows.filter(r=>r.site_id===args[0]&&(sql.includes('session_key=?')?r.session_key===args[1]:r.created_at>=args[1]));if(sql.startsWith('SELECT channel FROM'))return rows.slice(0,1);
+          if(sql.includes('GROUP BY')){const field=sql.includes('GROUP BY channel')?'channel':'country_code',groups=new Map();for(const row of rows){if(!groups.has(row[field]))groups.set(row[field],new Set());groups.get(row[field]).add(row.session_key);}return [...groups].map(([key,sessions])=>({[field==='channel'?'channel':'code']:key,visits:sessions.size}));}
+          return[{pageviews:rows.length,sessions:new Set(rows.map(r=>r.session_key)).size}];
+        }
         else if(table==='site_analysis_workers')rows=rows.filter(r=>r.heartbeat_at>=args[0]);
         else if(table==='orders')rows=rows.filter(r=>r.user_id===args[0]&&r.product_id===args[1]&&['paid','pending_delivery','delivered'].includes(r.status));
         else if(table==='points_wallets')rows=rows.filter(r=>r.user_id===args[0]);
@@ -326,6 +337,16 @@ function fixture({chargeType='free',balance=300,failTable=''}={}) {
         return clone(rows);
       }
       if(sql.startsWith('UPDATE site_analysis_sites')){const row=state.site_analysis_sites.find(r=>r.id===args[2]&&r.user_id===args[3]);if(row)Object.assign(row,{url:args[0],updated_at:args[1]});return{affectedRows:row?1:0};}
+      if(sql.startsWith('UPDATE site_analysis_integrations')){
+        const index=sql.includes('SET verify_requested_at=')?1:2,row=state.site_analysis_integrations.find(r=>r.site_id===args[index]&&(sql.includes('AND user_id=?')?r.user_id===args[index+1]:true));
+        if(!row)return{affectedRows:0};
+        if(sql.includes('SET verify_requested_at=')){if(row.deleted_at||row.script_token!==args[3]||!(row.verify_requested_at<args[4]))return{affectedRows:0};row.verify_requested_at=args[0];}
+        else if(sql.includes('SET script_token='))Object.assign(row,{script_token:args[0],updated_at:args[1],verified_at:'',last_seen_at:'',verify_requested_at:'',deleted_at:''});
+        else if(sql.includes('SET deleted_at='))Object.assign(row,{deleted_at:args[0],verified_at:'',updated_at:args[1]});
+        else if(sql.includes('SET verified_at=')){if(row.deleted_at||row.script_token!==args[4])return{affectedRows:0};Object.assign(row,{verified_at:args[0],updated_at:args[1]});}
+        else if(sql.includes('SET last_seen_at=')){if(row.deleted_at||row.script_token!==args[3])return{affectedRows:0};Object.assign(row,{last_seen_at:args[0],updated_at:args[1]});}
+        else throw Error('Unknown integration update');return{affectedRows:1};
+      }
       if(sql.startsWith('UPDATE site_analysis_workers')){const row=state.site_analysis_workers.find(r=>r.id===args[1]);if(row)row.heartbeat_at=args[0];return{affectedRows:row?1:0};}
       if(sql.startsWith('UPDATE points_wallets')){const row=state.points_wallets.find(r=>r.user_id===args[2]&&r.balance>=args[3]);if(row)row.balance-=args[0];return{affectedRows:row?1:0};}
       if(sql.startsWith('UPDATE orders')){const row=state.orders.find(r=>r.id===args[0]&&r.user_id===args[1]&&r.tool_uses_remaining>0);if(row)row.tool_uses_remaining--;return{affectedRows:row?1:0};}
@@ -342,21 +363,160 @@ function fixture({chargeType='free',balance=300,failTable=''}={}) {
   },async transaction(work){const previous=gate;let release;gate=new Promise(resolve=>release=resolve);await previous;const old=structuredClone(state);try{return await work(DB);}catch(e){state=old;throw e;}finally{release();}}};
   const mocks={'@/db/mysql-runtime':{env:{DB}}};const modules=loader(mocks,{process:{env:{NODE_ENV:'production',AUTH_SESSION_SECRET:'test-site-analysis-key'}}});
   const setup=loader({'./mysql-runtime':{env:{DB}}},{process:{env:{AUTH_SESSION_SECRET:'test-site-analysis-key'}}})('db/setup.ts');mocks['@/db/setup']=setup;
-  const service=modules('lib/site-analysis-service.ts');mocks['@/lib/site-analysis-service']=service;mocks['@/lib/site-analysis']=modules('lib/site-analysis.ts');const route=modules('app/api/tools/site-analysis/route.ts');
+  const service=modules('lib/site-analysis-service.ts');mocks['@/lib/site-analysis-service']=service;mocks['@/lib/site-analysis']=modules('lib/site-analysis.ts');mocks['@/lib/site-management-service']=modules('lib/site-management-service.ts');const route=modules('app/api/tools/site-analysis/route.ts');
   const request=({user=1,body,query='?tool=50',headers={}}={})=>new Request('https://shop.example/api/tools/site-analysis'+query,{method:body===undefined?'GET':'POST',headers:{...(user?{cookie:`mall_session=${encodeURIComponent(setup.createMallSession(user===1?'13800000000':'13900000000'))}`} : {}),...(body!==undefined?{'Content-Type':'application/json'}:{}),...headers},...(body===undefined?{}:{body:JSON.stringify(body)})});
   const body=(overrides={})=>({id,tool:50,domain:'example.org',options:{maxPages:5},...overrides});
   const collect=async(url,options,progress)=>{const result=collector.blankReport(network.normalizeSite(url).host,options);result.pages=[parser.parseSitePage(Buffer.from(html),'https://example.org/')];result.keywords=parser.extractSiteKeywords(result.pages,[]);result.stages=[{key:'pages',state:'complete',message:'ok',at:new Date().toISOString()}];result.issues=[{code:'description',severity:'medium',title:'页面缺少描述',url:'https://example.org/about',advice:'检查描述'}];result.coverage={discovered:1,fetched:1,limited:false};await progress(result,90);return result;};
-  return{service,route,request,body,queries,state:()=>state,collect};
+  const management=modules('lib/site-management-service.ts'),tracking=modules('lib/site-tracking.ts');mocks['@/lib/site-tracking']=tracking;const trackerRoute=modules('app/api/site-tracker/[token]/route.ts');
+  return{service,management,tracking,trackerRoute,route,request,body,queries,state:()=>state,collect};
 }
 test('匿名、伪造 Cookie 和停用用户不能创建或读取个人任务', async()=>{
   const f=fixture();assert.equal((await f.route.GET(f.request({user:0}))).status,200);assert.equal((await(await f.route.GET(f.request({user:0}))).json()).authenticated,false);
   assert.equal((await f.route.POST(f.request({user:0,body:f.body()}))).status,401);assert.equal((await f.route.POST(f.request({body:f.body(),headers:{cookie:'mall_session=fake'}}))).status,401);
   f.state().users[0].status='disabled';assert.equal((await f.route.POST(f.request({body:f.body()}))).status,401);assert.equal(f.state().site_analysis_runs.length,0);
 });
-test('任务创建保存站点与条件；相同请求幂等、并发提交复用活动任务、改参数复用编号被拒绝',async()=>{
+test('任务只使用已验证配置站点；相同请求幂等、并发提交复用活动任务、改参数复用编号被拒绝',async()=>{
   const f=fixture();const first=await f.route.POST(f.request({body:f.body({userId:2})}));assert.equal(first.status,202);assert.equal(f.state().site_analysis_runs[0].user_id,1);assert.equal(f.state().site_analysis_sites.length,1);
   await Promise.all([f.route.POST(f.request({body:f.body()})),f.route.POST(f.request({body:f.body({id:otherId})}))]);assert.equal(f.state().site_analysis_runs.length,1);
   assert.equal((await f.route.POST(f.request({body:f.body({domain:'other.org'})}))).status,409);assert.equal(f.state().points_ledger.length,0);
+});
+
+test('未配置、未验证、已删除或属于其他账号的站点不能提交新分析，既有历史仍按账号读取',async()=>{
+  for(const options of [{registered:false},{verified:false},{deleted:true}]){
+    const f=fixture(options),response=await f.route.POST(f.request({body:f.body()}));assert.equal(response.status,403);assert.equal(f.state().site_analysis_runs.length,0);assert.equal(f.state().points_ledger.length,0);
+  }
+  const foreign=fixture();assert.equal((await foreign.route.POST(foreign.request({user:2,body:foreign.body()}))).status,403);
+  const f=fixture();await f.route.POST(f.request({body:f.body()}));f.state().site_analysis_integrations[0].deleted_at='2026-01-02';
+  assert.equal((await f.route.GET(f.request({query:'?tool=50&run='+id}))).status,200);assert.equal((await f.route.POST(f.request({body:f.body()}))).status,202);
+  const workspace=await(await f.route.GET(f.request())).json();assert.equal(workspace.sites.length,0);assert.equal(workspace.history.length,1);
+});
+
+test('站点需显式添加且脚本唯一，重复添加复用配置；跨账号隔离，失败回滚，不触发分析或收费',async()=>{
+  const f=fixture({registered:false}), add=domain=>f.route.POST(f.request({body:{tool:50,action:'site-add',domain,userId:2}}));
+  const first=await add('example.org');assert.equal(first.status,201);const a=(await first.json()).site;
+  assert.match(a.scriptToken,/^[a-f0-9]{64}$/);assert.equal(a.verifiedAt,'');assert.equal(f.state().site_analysis_sites[0].user_id,1);
+  const b=(await(await add('other.org')).json()).site;assert.notEqual(a.scriptToken,b.scriptToken);assert.notEqual(a.id,b.id);
+  const again=(await(await add('https://example.org/')).json()).site;assert.equal(again.id,a.id);assert.equal(again.scriptToken,a.scriptToken);
+  assert.equal(f.state().site_analysis_runs.length,0);assert.equal(f.state().points_ledger.length,0);
+  assert.equal((await f.route.POST(f.request({user:2,body:{tool:50,action:'site-delete',site:a.id}}))).status,404);
+  assert.equal((await f.route.POST(f.request({user:0,body:{tool:50,action:'site-add',domain:'fresh.org'}}))).status,401);
+  assert.equal((await f.route.POST(f.request({body:{tool:50,action:'site-add',domain:'fresh.org'},headers:{origin:'https://evil.example'}}))).status,403);
+  for(const domain of ['127.0.0.1','http://thing.local','https://user:password@example.org'])assert.equal((await add(domain)).status,400);
+  const broken=fixture({registered:false,failTable:'site_analysis_integrations'});assert.equal((await broken.route.POST(broken.request({body:{tool:50,action:'site-add',domain:'example.org'}}))).status,503);assert.equal(broken.state().site_analysis_sites.length,0);
+});
+
+test('唯一脚本由服务器读取真实script元素验证；注释、模板、其他站点脚本和跨域跳转不能证明归属',async()=>{
+  for(const kind of ['valid','comment','template','noscript','text','foreign-token','foreign-origin','dormant','redirect']){
+    const f=fixture({registered:false}),site=await f.management.registerAnalysisSite(1,'example.org'),src='https://shop.example'+f.management.scriptPath(site.scriptToken);
+    const tag=`<script async src="${src}"></script>`,html=kind==='comment'?`<!--${tag}-->`:kind==='template'?`<template>${tag}</template>`:kind==='noscript'?`<noscript>${tag}</noscript>`:kind==='text'?`<script>const text=${JSON.stringify(tag)};</script>`:kind==='foreign-token'?tag.replace(site.scriptToken,'b'.repeat(64)):kind==='foreign-origin'?tag.replace('shop.example','evil.example'):kind==='dormant'?tag.replace('async','type="application/json"'):tag;
+    const read=async(url,signal,limit)=>{assert.equal(url,'https://example.org/');assert.ok(signal instanceof AbortSignal);assert.equal(limit,1024*1024);return{url:kind==='redirect'?'https://other.org/':url,status:200,contentType:'text/html',bytes:Buffer.from(html)};};
+    if(kind==='valid'){const verified=await f.management.verifyAnalysisSite(1,site.id,'https://shop.example',read);assert.ok(verified.verifiedAt);assert.equal((await f.route.POST(f.request({body:f.body()}))).status,202);}
+    else {await assert.rejects(f.management.verifyAnalysisSite(1,site.id,'https://shop.example',read),error=>error.status===422);assert.equal(f.state().site_analysis_integrations[0].verified_at,'');}
+    assert.equal(f.state().points_ledger.length,0);
+    await assert.rejects(f.management.verifyAnalysisSite(2,site.id,'https://shop.example',read),error=>error.status===404);
+  }
+});
+
+test('验证冷却限制与删除竞态不会把已删除或重建站点重新标为已验证',async()=>{
+  const f=fixture(),read=async()=>({url:'https://example.org/',status:200,contentType:'text/html',bytes:Buffer.from(`<script src="https://shop.example/api/site-tracker/${'a'.repeat(64)}"></script>`)});
+  await f.management.verifyAnalysisSite(1,otherId,'https://shop.example',read);
+  await assert.rejects(f.management.verifyAnalysisSite(1,otherId,'https://shop.example',read),error=>error.status===429);
+  f.state().site_analysis_integrations[0].verify_requested_at='';
+  const race=async()=>{await f.management.deleteAnalysisSite(1,otherId);return read();};
+  await assert.rejects(f.management.verifyAnalysisSite(1,otherId,'https://shop.example',race),error=>error.status===409);assert.ok(f.state().site_analysis_integrations[0].deleted_at);
+});
+
+test('访问上报不能验证站点，校验域名和事件大小，匿名脚本不依赖商城会话且不泄露统计',async()=>{
+  const f=fixture({verified:false}),token='a'.repeat(64),context={params:Promise.resolve({token})};
+  const payload={id:'visit-event-00000001',session:'anonymous-session-0001',page:'https://example.org/page?private=secret#fragment',referrer:'https://mail.google.com/inbox?secret=1',medium:''};
+  const post=(body=payload,origin='https://example.org')=>f.trackerRoute.POST(new Request('https://shop.example/api/site-tracker/'+token,{method:'POST',headers:{origin,'content-type':'text/plain'},body:JSON.stringify(body)}),context);
+  assert.equal((await f.trackerRoute.GET(new Request('https://shop.example/api/site-tracker/'+token),context)).status,200);
+  assert.equal((await post()).status,403);assert.equal(f.state().site_analysis_integrations[0].verified_at,'');assert.equal(f.state().site_analysis_visits.length,0);
+  f.state().site_analysis_integrations[0].verified_at='2026-01-01';
+  assert.equal((await post(payload,'https://evil.org')).status,403);assert.equal((await post({...payload,page:'https://other.org/'})).status,403);assert.equal((await post(payload,'null')).status,403);
+  assert.equal((await post({...payload,id:'x'.repeat(5000)})).status,413);
+  const response=await post();assert.equal(response.status,204);assert.equal(response.headers.get('access-control-allow-origin'),'https://example.org');assert.equal(response.headers.get('access-control-allow-credentials'),null);
+  assert.equal((await f.route.GET(f.request({user:0,query:'?tool=50&statistics='+otherId}))).status,200);
+  assert.equal((await(await f.route.GET(f.request({user:0,query:'?tool=50&statistics='+otherId}))).json()).authenticated,false);
+  assert.equal((await f.route.GET(f.request({user:2,query:'?tool=50&statistics='+otherId}))).status,404);
+  const event=f.state().site_analysis_visits[0];assert.equal(event.page_path,'/page');assert.equal(event.channel,'email');assert.equal(event.country_code,'');assert.ok(!JSON.stringify(event).includes('secret'));assert.notEqual(event.session_key,payload.session);
+});
+
+test('上报幂等并按会话统计来源；删除不丢历史，旧脚本立即失效，重加域名生成新脚本且重新验证',async()=>{
+  const f=fixture(),token='a'.repeat(64),body={id:'visit-event-00000001',session:'anonymous-session-0001',page:'https://example.org/page',referrer:'https://www.google.com/search?q=word',medium:''};
+  const request=()=>new Request('https://shop.example/api/site-tracker/'+token,{method:'POST',headers:{origin:'https://example.org'}});
+  await f.tracking.recordSiteVisit(token,request(),body);await f.tracking.recordSiteVisit(token,request(),body);await f.tracking.recordSiteVisit(token,request(),{...body,id:'visit-event-00000002',page:'https://example.org/second',referrer:'https://facebook.com/',medium:'social'});
+  let stats=await f.management.siteStatistics(1,otherId);assert.equal(stats.pageviews,2);assert.equal(stats.sessions,1);assert.equal(stats.channels.find(row=>row.channel==='search').share,100);assert.deepEqual(clone(stats.countries),[{code:'',visits:1,share:100}]);
+  await f.route.POST(f.request({body:f.body()}));await f.management.deleteAnalysisSite(1,otherId);
+  assert.equal((await f.management.listAnalysisSites(1)).length,0);assert.equal(f.state().site_analysis_runs.length,1);assert.equal(f.state().site_analysis_visits.length,2);
+  assert.equal((await f.trackerRoute.GET(new Request('https://shop.example/api/site-tracker/'+token),{params:Promise.resolve({token})})).status,404);
+  await assert.rejects(f.tracking.recordSiteVisit(token,request(),{...body,id:'visit-event-00000003'}),error=>error.status===403);
+  stats=await f.management.siteStatistics(1,otherId);assert.equal(stats.active,false);assert.equal(stats.pageviews,2);
+  const restored=await f.management.registerAnalysisSite(1,'example.org');assert.equal(restored.id,otherId);assert.notEqual(restored.scriptToken,token);assert.equal(restored.verifiedAt,'');assert.equal(f.state().site_analysis_visits.length,2);
+});
+
+test('访问来源分类使用域名边界和明确medium，不把伪装搜索域或邮件访问误记为搜索',()=>{
+  const classify=fixture().tracking.trafficChannel;
+  for(const [url,medium,want] of [['','', 'direct'],['https://example.org/other','', 'direct'],['https://www.baidu.com/s','', 'search'],['https://mail.google.com/','', 'email'],['https://google.com.evil.org/','', 'referral'],['https://facebook.com/','', 'social'],['','newsletter','email'],['','unknown-medium','other']])assert.equal(classify(url,medium,'example.org'),want);
+});
+
+test('实际浏览器脚本不读Cookie或上报敏感URL，支持SPA去重、匿名会话、隐私选择和HTTPS代理',()=>{
+  const script=fixture().tracking.siteTrackerScript('http://shop.example/api/site-tracker/'+ 'a'.repeat(64));
+  function browser({dnt='0',deniedStorage=false}={}){
+    const sent=[],events=new Map(),storage=new Map();let counter=0;
+    const location=new URL('https://example.org/start?secret=private&utm_medium=email#token'),document={currentScript:{src:'https://shop.example/api/site-tracker/'+'a'.repeat(64)},referrer:'https://mail.google.com/private?password=hidden'};
+    Object.defineProperty(document,'cookie',{get(){throw Error('Cookies must not be read');}});
+    const window={addEventListener(name,callback){if(!events.has(name))events.set(name,[]);events.get(name).push(callback);},dispatchEvent(event){for(const callback of events.get(event.type)||[])callback();}};
+    const history={pushState(_state,_title,path){location.href=new URL(path,location).href;},replaceState(_state,_title,path){location.href=new URL(path,location).href;}};
+    const context={window,document,location,history,navigator:{doNotTrack:dnt},URL,URLSearchParams,Event,Date,Math,Number,crypto:{randomUUID:()=>`00000000-0000-4000-8000-${String(++counter).padStart(12,'0')}`},sessionStorage:{getItem(key){if(deniedStorage)throw Error('Storage disabled');return storage.get(key);},setItem(key,value){if(deniedStorage)throw Error('Storage disabled');storage.set(key,value);}},fetch:async(endpoint,options)=>{sent.push({endpoint,options,body:JSON.parse(options.body)});return new Response(null,{status:204});}};
+    vm.runInNewContext(script,context);return{sent,history,context};
+  }
+  const b=browser();assert.equal(b.sent.length,1);assert.ok(b.sent[0].endpoint.startsWith('https://'));assert.equal(b.sent[0].options.credentials,'omit');assert.equal(b.sent[0].body.page,'https://example.org/start');assert.equal(b.sent[0].body.referrer,'https://mail.google.com');assert.equal(b.sent[0].body.medium,'email');
+  b.history.pushState({},'', '/next?secret=hidden#fragment');assert.equal(b.sent.length,2);assert.equal(b.sent[0].body.session,b.sent[1].body.session);assert.notEqual(b.sent[0].body.id,b.sent[1].body.id);assert.equal(b.sent[1].body.page,'https://example.org/next');
+  b.history.replaceState({},'', '/next?other=query');assert.equal(b.sent.length,2);vm.runInNewContext(script,b.context);assert.equal(b.sent.length,2);
+  assert.equal(browser({dnt:'1'}).sent.length,0);assert.equal(browser({deniedStorage:true}).sent.length,1);
+});
+
+test('站点管理默认位于首位，只有验证站点才能进入分析，地址来自配置且不能自由改写',()=>{
+  const f=dashboardFixture();delete f.slots[0];const tree=f.render(),markup=renderToStaticMarkup(tree),$=require('cheerio').load(markup);
+  assert.equal($('.seo-sidebar nav button').first().attr('aria-current'),'page');assert.ok($('.seo-sidebar nav button').first().text().includes('站点管理'));assert.equal($('.seo-controls').length,0);
+  const manager=uiElements(tree).find(node=>typeof node.type==='function'&&node.type.name==='SiteManagement');assert.ok(manager);manager.props.onAnalyze(f.sites[0]);
+  const overview=f.render();assert.equal(f.slots[0],'overview');assert.equal(uiElements(overview).find(node=>node.type==='input'&&node.props.autoComplete==='url').props.readOnly,true);
+  f.sites[0].verifiedAt='';const pending=f.render();assert.equal(uiElements(pending).find(node=>node.type==='button'&&node.props.type==='submit').props.disabled,true);
+});
+
+test('站点管理可添加、复制唯一脚本、验证、进入看板并确认删除；英文界面保留域名与脚本原文',async()=>{
+  const translations=loader()('lib/i18n.ts');
+  for(const locale of ['zh-CN','en']){
+    const slots=[],refs=[],calls=[],effects=[];let cursor=0,refCursor=0,copied='',selected=null,changed=0,installed=false;
+    const site={id:otherId,host:'example.org',url:'https://example.org/',updatedAt:'2026-01-01',scriptToken:'a'.repeat(64),verifiedAt:'',lastSeenAt:''};
+    const react={...React,useState(initial){const index=cursor++;if(!(index in slots))slots[index]=initial;return[slots[index],value=>{slots[index]=typeof value==='function'?value(slots[index]):value;}];},useRef(initial){return refs[refCursor++]??={current:initial};},useEffect(effect){effects.push(effect);}};
+    const ui=loader({react,'./language-provider':{useI18n:()=>({locale,t:translations.translator(locale)})},'../lib/site-analysis-client':{async siteAnalysisRequest(_path,options){const body=JSON.parse(options.body);calls.push(body);if(body.action==='site-verify')installed=true;return{site:{...site,verifiedAt:installed?'2026-01-02':'',updatedAt:installed?'2026-01-02':'2026-01-01'}};}}},{window:{location:{origin:'https://shop.example'}},navigator:{clipboard:{async writeText(text){copied=text;}}}})('components/site-management.tsx');
+    const props={sites:[],toolId:50,onChanged(){changed++;},onAnalyze(site){selected=site;}},render=()=>{cursor=0;refCursor=0;return ui.SiteManagement(props);},settle=()=>new Promise(resolve=>setImmediate(resolve));
+    let tree=render();effects[0]();await settle();
+    uiElements(tree).find(node=>node.type==='input').props.onChange({target:{value:'example.org'}});tree=render();uiElements(tree).find(node=>node.type==='form').props.onSubmit({preventDefault(){}});await settle();tree=render();
+    assert.equal(calls.length,1);assert.equal(calls[0].action,'site-add');assert.equal(calls[0].domain,'example.org');
+    const code=uiElements(tree).find(node=>node.type==='textarea');assert.equal(code.props.readOnly,true);assert.equal(code.props.value,`<script async src="https://shop.example/api/site-tracker/${site.scriptToken}"></script>`);
+    const text=label=>translations.translator(locale)(label),button=label=>uiElements(tree).find(node=>node.type==='button'&&uiElements(node.props.children).some(child=>typeof child.props?.children==='string'&&child.props.children===text(label)))||uiElements(tree).find(node=>node.type==='button'&&(Array.isArray(node.props.children)?node.props.children.includes(text(label)):node.props.children===text(label)));
+    assert.equal(button('进入综合看板').props.disabled,true);button('复制脚本').props.onClick();await settle();assert.equal(copied,code.props.value);
+    button('已安装，开始验证').props.onClick();await settle();tree=render();assert.equal(calls[1].action,'site-verify');assert.equal(button('进入综合看板').props.disabled,false);button('进入综合看板').props.onClick();assert.equal(selected.id,site.id);
+    const remove=uiElements(tree).find(node=>node.type==='button'&&node.props['aria-label']===text('删除站点 example.org'));remove.props.onClick();tree=render();button('确认删除').props.onClick();await settle();tree=render();assert.equal(calls[2].action,'site-delete');assert.equal(changed,3);assert.ok(!renderToStaticMarkup(tree).includes('seo-site-script'));
+  }
+});
+
+test('真实访问统计显示会话占比及未知国家，旧报告可读；读取失败不会冒充零流量或未接入',()=>{
+  const translations=loader()('lib/i18n.ts'),report=collector.blankReport('example.org',model.analysisOptions({}));
+  const statistics={siteId:otherId,connected:true,active:true,verified:true,lastSeenAt:'2026-01-01',since:'2026-01-01',pageviews:4,sessions:3,channels:[{channel:'search',visits:2,share:66.7},{channel:'direct',visits:1,share:33.3}],countries:[{code:'',visits:3,share:100}]};
+  for(const locale of ['zh-CN','en']){
+    const ui=loader({'./language-provider':{useI18n:()=>({locale,t:translations.translator(locale)})},react:{...React,useState:()=>[false,()=>{}]}})('components/site-analysis-overview-panels.tsx');
+    let markup=renderToStaticMarkup(ui.SiteAnalysisOverviewPanels({report,statistics,onKeyword(){}}));assert.ok(markup.includes('66.7%'));assert.ok(markup.includes('33.3%'));assert.ok(markup.includes(locale==='en'?'Unidentified country':'未识别国家'));assert.ok(markup.includes('100%'));assert.ok(!markup.includes(locale==='en'?'Data not connected':'尚未接入数据'));
+    markup=renderToStaticMarkup(ui.SiteAnalysisOverviewPanels({report,statistics:null,statisticsError:'访问统计读取失败',onKeyword(){}}));const $=require('cheerio').load(markup);assert.ok($('.seo-channel-list dd').toArray().every(node=>$(node).text()==='—'));assert.ok(markup.includes(locale==='en'?'could not be loaded':'读取失败'));
+  }
+});
+
+test('站点迁移只新增接入和访问表，不删历史；统计限流有界并允许普通站点请求',()=>{
+  const ddl=readFileSync(new URL('sql/11_site_management_20261026.sql',root),'utf8');assert.equal((ddl.match(/CREATE TABLE IF NOT EXISTS /g)||[]).length,2);assert.match(ddl,/UNIQUE KEY uq_site_script/);assert.match(ddl,/PRIMARY KEY\(site_id,event_id\)/);assert.doesNotMatch(ddl,/DELETE FROM|DROP TABLE|TRUNCATE|UPDATE users|ALTER TABLE site_analysis_runs/i);
+  const tracking=fixture().tracking;for(let index=0;index<12000;index++)assert.equal(tracking.trackingRateAllowed('rate-test'),true);assert.equal(tracking.trackingRateAllowed('rate-test'),false);
 });
 test('跨账号报告读取返回404；跨站写入、无效工具与过大参数在采集前被拒绝',async()=>{
   const f=fixture();await f.route.POST(f.request({body:f.body()}));assert.equal((await f.route.GET(f.request({user:2,query:'?tool=50&run='+id}))).status,404);
@@ -414,7 +574,7 @@ test('所选版面SSR保持左侧工作台、匿名入口和规划模块状态�
 test('真实报告界面显示缺失/受限状态和业务原文，开始分析只提交当前表单条件与幂等编号', async()=>{
   const translation=loader()('lib/i18n.ts'), report=collector.blankReport('example.org',model.analysisOptions({}));report.profile.name='独有网站标题';report.keywords=[{word:'独有业务关键词',kind:'manual',score:100,sources:[{kind:'manual',url:''}]}];report.issues=[{code:'title',severity:'medium',title:'页面缺少标题',url:'https://example.org/',advice:'为页面设置清晰且独立的标题'}];report.engines.find(e=>e.id==='bing').state='restricted';report.engines=report.engines.filter(e=>!['duckduckgo','yandex'].includes(e.id));
   const run={id,siteId:otherId,host:'example.org',status:'completed',progress:100,stage:'report',error:'',createdAt:'2026-10-25T00:00:00Z',updatedAt:'2026-10-25T00:00:00Z',completedAt:'2026-10-25T00:00:00Z',charged:false,pointsSpent:0,report};
-  const slots={2:id,5:{owner:1,data:{sites:[{id:otherId,host:'example.org',url:'https://example.org/'}],history:[run],total:1,page:1,workerReady:true,access:{canAnalyze:true,chargeType:'free',pointsCost:0,balance:null,hasMembership:false}}},6:{owner:1,run},9:'https://new.example.org/path'};let cursor=0,submitted;
+  const slots={0:'overview',1:otherId,2:id,5:{owner:1,data:{sites:[{verifiedAt:'2026-01-01',id:otherId,host:'example.org',url:'https://example.org/'}],history:[run],total:1,page:1,workerReady:true,access:{canAnalyze:true,chargeType:'free',pointsCost:0,balance:null,hasMembership:false}}},6:{owner:1,run},9:'https://new.example.org/path'};let cursor=0,submitted;
   const react={...React,useEffect(){},useRef:value=>({current:value}),useState:initial=>{const index=cursor++;if(!(index in slots))slots[index]=initial;return[slots[index],value=>{slots[index]=typeof value==='function'?value(slots[index]):value;}];}};
   const moduleLoader=loader({'./language-provider':{useI18n:()=>({locale:'en',t:translation.translator('en')})},'../lib/account-client':{useAccount:()=>({account:{authenticated:true,user:{id:1}},loading:false}),notifyAccountChanged(){}},react},{window:{location:{href:'https://shop.example/tools/webmaster-tools.html'},history:{replaceState(){}}},async fetch(_path,options){submitted=JSON.parse(options.body);return Response.json({run:{...run,id:otherId,status:'queued',report:null}});}});
   const {SiteAnalysisDashboard}=moduleLoader('components/site-analysis-dashboard.tsx');const tree=SiteAnalysisDashboard({tool:{id:50,slug:'webmaster-tools'}}), markup=renderToStaticMarkup(tree);
@@ -423,16 +583,16 @@ test('真实报告界面显示缺失/受限状态和业务原文，开始分析�
   const checkboxes=elements(tree).filter(n=>n.type==='input'&&n.props.type==='checkbox');assert.equal(checkboxes.length,5);assert.ok(checkboxes.every(node=>node.props.checked&&!node.props.disabled));
   assert.ok(markup.includes('5 engines selected'));assert.ok(!markup.includes('{0} engines selected'));
   assert.ok(markup.includes('Analysis settings'));assert.ok(markup.includes('Report sections'));assert.ok(markup.includes('This report does not include this engine'));assert.ok(markup.includes('duckduckgo.com'));assert.ok(markup.includes('yandex.com'));assert.ok(!markup.includes('Analysis workbench'));assert.ok(markup.includes('https://www.google.com/search?'));assert.ok(markup.includes('site%3Aexample.org'));assert.ok(markup.includes('All engines are selected by default'));
-  await elements(tree).find(n=>n.type==='form').props.onSubmit({preventDefault(){}});assert.equal(submitted.domain,'https://new.example.org/path');assert.equal(submitted.tool,50);assert.ok(submitted.id);assert.equal(submitted.userId,undefined);assert.equal(submitted.options.device,'desktop');assert.equal(submitted.options.maxPages,20);assert.deepEqual(submitted.options.engines,['baidu','google','bing','duckduckgo','yandex']);
+  await elements(tree).find(n=>n.type==='form').props.onSubmit({preventDefault(){}});assert.equal(submitted.domain,'https://example.org/');assert.equal(submitted.tool,50);assert.ok(submitted.id);assert.equal(submitted.userId,undefined);assert.equal(submitted.options.device,'desktop');assert.equal(submitted.options.maxPages,20);assert.deepEqual(submitted.options.engines,['baidu','google','bing','duckduckgo','yandex']);
 });
 
 function uiElements(node) { if(Array.isArray(node))return node.flatMap(uiElements);return React.isValidElement(node)?[node,...uiElements(node.props.children)]:[]; }
 function dashboardFixture({effectsEnabled=false}={}) {
   const translation=loader()('lib/i18n.ts'), report=collector.blankReport('example.org',model.analysisOptions({}));
   const run={id,siteId:otherId,host:'example.org',status:'completed',progress:100,stage:'report',error:'',createdAt:'2026-10-26T00:00:00Z',pointsSpent:0,report};
-  const third='33333333-3333-4333-8333-333333333333', sites=[{id:otherId,host:'example.org',url:'https://example.org/'},{id:third,host:'www.next.example.org',url:'http://www.next.example.org/'}];
+  const third='33333333-3333-4333-8333-333333333333', sites=[{id:otherId,host:'example.org',url:'https://example.org/',verifiedAt:'2026-01-01'},{id:third,host:'www.next.example.org',url:'http://www.next.example.org/',verifiedAt:'2026-01-01'}];
   const workspace={sites,history:[run],total:1,page:1,workerReady:true,access:{canAnalyze:true,chargeType:'free'}};
-  const slots={2:id,5:{owner:1,data:workspace},6:{owner:1,run}}, refs=[], pendingEffects=[], deps=[], requests=[];
+  const slots={0:'overview',1:otherId,2:id,5:{owner:1,data:workspace},6:{owner:1,run}}, refs=[], pendingEffects=[], deps=[], requests=[];
   let cursor=0,refCursor=0,effectCursor=0;
   const react={...React,useState(initial){const n=cursor++;if(!(n in slots))slots[n]=initial;return[slots[n],value=>{slots[n]=typeof value==='function'?value(slots[n]):value;}];},useRef(initial){return refs[refCursor++]??=( {current:initial} );},useEffect(fn,next){const n=effectCursor++;if(!effectsEnabled)return;if(deps[n]&&next.every((v,i)=>v===deps[n][i]))return;deps[n]=next;pendingEffects.push(fn);}};
   const ui=loader({'./language-provider':{useI18n:()=>({locale:'zh-CN',t:translation.translator('zh-CN')})},'../lib/account-client':{useAccount:()=>({account:{authenticated:true,user:{id:1}},loading:false}),notifyAccountChanged(){}},react},{window:{location:{href:'https://shop.example/tools/webmaster-tools.html',search:''},history:{replaceState(){}}},async fetch(path,options){requests.push({path,body:options?.body&&JSON.parse(options.body)});return Response.json(options?.method==='POST'?{run:{...run,status:'queued',report:null}}:String(path).includes('&run=')?{run}:workspace);}})('components/site-analysis-dashboard.tsx');
@@ -451,19 +611,18 @@ test('选择站点只填充完整URL，保留当前报告，点击分析才提�
 test('清空地址不会回退分析旧站点，站点管理选择同样仅填入地址',async()=>{
   const f=dashboardFixture();let tree=f.render();
   uiElements(tree).find(n=>n.type==='select'&&n.props['aria-label']==='选择已有站点').props.onChange({target:{value:f.sites[1].id}});
-  tree=f.render();uiElements(tree).find(n=>n.type==='input'&&n.props.autoComplete==='url').props.onChange({target:{value:''}});
+  tree=f.render();assert.equal(uiElements(tree).find(n=>n.type==='input'&&n.props.autoComplete==='url').props.readOnly,true);uiElements(tree).find(n=>n.type==='select'&&n.props['aria-label']==='选择已有站点').props.onChange({target:{value:''}});
   tree=f.render();await uiElements(tree).find(n=>n.type==='form').props.onSubmit({preventDefault(){}});
-  assert.equal(f.requests.length,0);assert.equal(f.slots[7],'请输入域名或选择已有站点');
-  f.slots[0]='sites';tree=f.render();const button=uiElements(tree).find(n=>n.type==='strong'&&n.props.children==='www.next.example.org');assert.ok(button);
-  uiElements(tree).find(n=>n.type==='button'&&uiElements(n.props.children).includes(button)).props.onClick();
+  assert.equal(f.requests.length,0);assert.equal(f.slots[7],'请先在站点管理添加并验证该域名');
+  f.slots[0]='sites';tree=f.render();const manager=uiElements(tree).find(n=>typeof n.type==='function'&&n.type.name==='SiteManagement');assert.ok(manager);manager.props.onAnalyze(f.sites[1]);
   assert.equal(f.slots[9],f.sites[1].url);assert.equal(f.slots[0],'overview');assert.equal(f.requests.length,0);
 });
 
-test('迟到的历史报告填充不能覆盖用户已编辑的网站地址',async()=>{
+test('迟到的历史报告填充不能覆盖用户已选择的配置站点',async()=>{
   const f=dashboardFixture({effectsEnabled:true});let tree=f.render();f.flushEffects();await Promise.resolve();
   tree=f.render();f.flushEffects();
-  uiElements(tree).find(n=>n.type==='input'&&n.props.autoComplete==='url').props.onChange({target:{value:'https://typed.example.org/'}});
-  await Promise.resolve();assert.equal(f.slots[9],'https://typed.example.org/');
+  uiElements(tree).find(n=>n.type==='select'&&n.props['aria-label']==='选择已有站点').props.onChange({target:{value:f.sites[1].id}});
+  await Promise.resolve();assert.equal(f.slots[9],f.sites[1].url);
   assert.ok(f.requests.every(request=>!request.body));assert.ok(f.requests.every(request=>!request.path.includes('&site=')));
 });
 
@@ -503,7 +662,7 @@ test('四个概况面板使用真实候选词，未知统计显示未接入，�
     uiElements(tree).find(n=>n.type==='button'&&n.props.children==='业务词原文').props.onClick();assert.equal(selected,'业务词原文');
     uiElements(tree).find(n=>n.type==='button'&&n.props['aria-controls']==='seo-statistics-setup').props.onClick();
     const expanded=ui.SiteAnalysisOverviewPanels(props), details=uiElements(expanded).find(n=>n.type==='details');assert.equal(details.props.open,true);
-    assert.ok(markup.includes(locale==='en'?'DNS TXT record':'DNS TXT记录'));assert.ok(markup.includes(locale==='en'?'Verification itself does not collect visits':'验证本身不会收集访问数据'));
+    assert.ok(markup.includes(locale==='en'?'unique script':'唯一脚本'));assert.ok(markup.includes(locale==='en'?'Visit submissions do not prove ownership':'不通过伪造访问上报取得验证'));
     assert.ok(markup.includes(locale==='en'?'Install the tracking script':'安装统计脚本'));assert.ok(!markup.includes('<script'));
     details.props.onToggle({currentTarget:{open:false}});assert.equal(open,false);
   }

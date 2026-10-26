@@ -6,6 +6,7 @@ import { usableToolOrder, type ToolOrderAccess } from './tool-entitlements';
 import { analysisOptions, compareReports, SiteAnalysisError, type AnalysisSite, type SiteReport, type SiteRun } from './site-analysis';
 import { normalizeSite } from './site-analysis-network';
 import { collectSiteReport } from './site-analysis-collector';
+import { listAnalysisSites, requireVerifiedSite } from './site-management-service';
 
 type Tool = { id: number; name: string; tool_slug: string; tool_charge_type: string; tool_points_cost: number };
 type RunRow = { id: string; site_id: string; user_id: number; product_id: number; host: string; source_url: string; request_hash: string; options_json: string; billing_mode: string; points_cost: number; status: SiteRun['status']; progress: number; stage: string; attempts: number; claim_token: string; lease_until: string; draft_json: string; error_message: string; charged: number; points_spent: number; created_at: string; updated_at: string; completed_at: string };
@@ -36,7 +37,7 @@ async function access(userId: number, tool: Tool) {
 }
 export async function analysisWorkspace(userId: number, tool: Tool, requested = 1, siteId = '') {
   if (siteId && !validId(siteId)) throw new SiteAnalysisError('站点编号不正确');
-  const sites = (await env.DB.prepare('SELECT id,host,url,updated_at AS updatedAt FROM site_analysis_sites WHERE user_id=? ORDER BY updated_at DESC LIMIT 100').bind(userId).all<AnalysisSite>()).results;
+  const sites: AnalysisSite[] = await listAnalysisSites(userId);
   const clause = siteId ? ' AND site_id=?' : '', args = siteId ? [userId, tool.id, siteId] : [userId, tool.id];
   const count = await env.DB.prepare(`SELECT COUNT(*) AS total FROM site_analysis_runs WHERE user_id=? AND product_id=?${clause}`).bind(...args).first<{ total: number }>();
   const total = Number(count?.total || 0), page = Math.max(1, Math.min(Math.ceil(total / 10) || 1, Math.floor(requested) || 1));
@@ -80,14 +81,8 @@ export async function queueAnalysis(userId: number, tool: Tool, body: Record<str
     if (active.length >= 2) throw new SiteAnalysisError('已有分析正在进行，请完成后再试', 429);
     const recent = await db.prepare('SELECT COUNT(*) AS total FROM site_analysis_runs WHERE user_id=? AND created_at>=?').bind(userId, new Date(Date.now() - 3600000).toISOString()).first<{ total: number }>();
     if (Number(recent?.total || 0) >= 20) throw new SiteAnalysisError('本小时分析次数较多，请稍后再试', 429);
-    let record = await db.prepare('SELECT id FROM site_analysis_sites WHERE user_id=? AND host=?').bind(userId, site.host).first<{ id: string }>();
+    const record = await requireVerifiedSite(db, userId, site.host);
     const timestamp = now();
-    if (!record) {
-      const count = await db.prepare('SELECT COUNT(*) AS total FROM site_analysis_sites WHERE user_id=?').bind(userId).first<{ total: number }>();
-      if (Number(count?.total || 0) >= 100) throw new SiteAnalysisError('已达到当前站点数量上限', 409);
-      record = { id: randomUUID() };
-      await db.prepare('INSERT INTO site_analysis_sites (id,user_id,host,url,created_at,updated_at) VALUES (?,?,?,?,?,?)').bind(record.id, userId, site.host, site.url, timestamp, timestamp).run();
-    } else await db.prepare('UPDATE site_analysis_sites SET url=?,updated_at=? WHERE id=? AND user_id=?').bind(site.url, timestamp, record.id, userId).run();
     await db.prepare("INSERT INTO site_analysis_runs (id,site_id,user_id,product_id,host,source_url,request_hash,options_json,billing_mode,points_cost,status,progress,stage,attempts,claim_token,lease_until,draft_json,error_message,charged,points_spent,billing_order_id,created_at,updated_at,completed_at) VALUES (?,?,?,?,?,?,?,?,?,?,'queued',0,'queued',0,'','','','',0,0,'',?,?,'')").bind(body.id, record.id, userId, tool.id, site.host, site.url, hash, JSON.stringify(options), tool.tool_charge_type, tool.tool_points_cost || 0, timestamp, timestamp).run();
     return { id: String(body.id), siteId: record.id, host: site.host, status: 'queued' as const, progress: 0, stage: 'queued', error: '', createdAt: timestamp, updatedAt: timestamp, completedAt: '', charged: false, pointsSpent: 0, report: null };
   });
@@ -181,5 +176,5 @@ export function analysisFailure(error: unknown) {
   if (error instanceof SyntaxError) return Response.json({ message: '分析参数格式不正确' }, { status: 400, headers: analysisHeaders });
   const missing = ['ER_NO_SUCH_TABLE','ER_BAD_FIELD_ERROR'].includes((error as { code?: string })?.code || '');
   console.error('[站长分析] 请求失败', (error as { code?: string })?.code || 'unavailable');
-  return Response.json({ message: missing ? '站长分析尚未初始化，请管理员执行10号增量SQL' : '分析服务暂不可用，请稍后重试' }, { status: 503, headers: analysisHeaders });
+  return Response.json({ message: missing ? '站长分析尚未初始化，请管理员依次执行10号和11号增量SQL' : '分析服务暂不可用，请稍后重试' }, { status: 503, headers: analysisHeaders });
 }
