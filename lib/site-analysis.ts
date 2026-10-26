@@ -1,16 +1,20 @@
 export const siteAnalysisPath = '/tools/webmaster-tools.html';
 export const engineDefinitions = [
-  { id: 'baidu', name: '百度', group: 'domestic', available: true },
-  { id: 'bing', name: 'Bing', group: 'overseas', available: true },
-  { id: 'google', name: 'Google', group: 'overseas', available: true },
+  { id: 'baidu', name: '百度', domain: 'www.baidu.com', icon: '/search-engines/baidu.ico', bot: 'Baiduspider', metaBot: 'baiduspider', search: 'https://www.baidu.com/s', query: 'wd', group: 'domestic', available: true },
+  { id: 'google', name: 'Google', domain: 'www.google.com', icon: '/search-engines/google.ico', bot: 'Googlebot', metaBot: 'googlebot', search: 'https://www.google.com/search', query: 'q', group: 'overseas', available: true },
+  { id: 'bing', name: 'Bing', domain: 'bing.com', icon: '/search-engines/bing.ico', bot: 'bingbot', metaBot: 'bingbot', search: 'https://www.bing.com/search', query: 'q', group: 'overseas', available: true },
+  { id: 'duckduckgo', name: 'DuckDuckGo', domain: 'duckduckgo.com', icon: '/search-engines/duckduckgo.ico', bot: 'DuckDuckBot', metaBot: '', search: 'https://duckduckgo.com/', query: 'q', group: 'overseas', available: true },
+  { id: 'yandex', name: 'Yandex', domain: 'yandex.com', icon: '/search-engines/yandex.ico', bot: 'YandexBot', metaBot: 'yandex', search: 'https://yandex.com/search/', query: 'text', group: 'overseas', available: true },
 ] as const;
-export type EngineId = 'baidu' | 'bing' | 'google';
+export type EngineId = typeof engineDefinitions[number]['id'];
 export function engineSearchUrl(engine: EngineId, query: string, language = 'zh-CN') {
-  const url = new URL(engine === 'baidu' ? 'https://www.baidu.com/s' : engine === 'bing' ? 'https://www.bing.com/search' : 'https://www.google.com/search');
-  url.searchParams.set(engine === 'baidu' ? 'wd' : 'q', query);
+  const definition = engineDefinitions.find(item => item.id === engine);
+  if (!definition) throw new Error('搜索引擎选项不正确');
+  const url = new URL(definition.search);
+  url.searchParams.set(definition.query, query);
   if (engine === 'baidu') url.searchParams.set('rn', '10');
   else if (engine === 'bing') { url.searchParams.set('count', '10'); url.searchParams.set('setlang', language); }
-  else { url.searchParams.set('num', '10'); url.searchParams.set('hl', language); }
+  else if (engine === 'google') { url.searchParams.set('num', '10'); url.searchParams.set('hl', language); }
   return url.href;
 }
 export type AnalysisOptions = { maxPages: number; keywords: string[]; engines: EngineId[]; language: 'zh-CN' | 'en'; device: 'desktop' | 'mobile'; depth: 10 };

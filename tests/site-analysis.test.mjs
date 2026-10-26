@@ -136,6 +136,8 @@ test('自然结果解析区分命中、完整范围未命中、验证页和不�
 function engineHtml(engine, target = true) {
   const urls = Array.from({length:10}, (_, i) => i === 2 && target ? 'https://example.org/article' : `https://competitor${i}.org/`);
   if (engine === 'google') return '<div id="search"><div id="rso">' + urls.map(url => `<div><a href="${url}"><h3>Result</h3></a></div>`).join('') + '</div></div>';
+  if (engine === 'duckduckgo') return urls.map(url => `<article data-testid="result"><h2><a data-testid="result-title-a" href="${url}">Result</a></h2></article>`).join('');
+  if (engine === 'yandex') return '<ul class="serp-list">'+urls.map(url => `<li class="serp-item"><div class="Organic"><h2><a class="OrganicTitle-Link" href="${url}">Result</a></h2></div></li>`).join('')+'</ul>';
   if (engine === 'bing') return '<ol id="b_results">' + urls.map(url => `<li class="b_algo"><h2><a href="${url}">Result</a></h2></li>`).join('') + '</ol>';
   return '<div id="content_left">' + urls.map(url => `<div class="result" mu="${url}"><h3><a href="https://www.baidu.com/link?opaque">Result</a></h3></div>`).join('') + '</div>';
 }
@@ -151,12 +153,13 @@ function searchIO({blocked = [], broken = [], challenge = [], forbidden = []} = 
   return {io,requests};
 }
 
-test('三个引擎的选项、查询地址和等待状态一致，显式空选项保持原基础采集兼容', () => {
+test('五个引擎的选项、查询地址、品牌图标和等待状态一致，显式空选项保持原基础采集兼容', () => {
   const ids = model.engineDefinitions.map(e=>e.id), options = model.analysisOptions({engines:ids});
-  assert.deepEqual(clone(options.engines), ['baidu','bing','google']);
+  assert.deepEqual(clone(options.engines), ['baidu','bing','duckduckgo','google','yandex']);
+  for(const engine of model.engineDefinitions){const icon=readFileSync(new URL('public'+engine.icon,root));assert.deepEqual([...icon.subarray(0,4)],[0,0,1,0]);assert.ok(icon.length>100);}
   const pending = collector.blankReport('example.org', options);assert.ok(pending.engines.every(e=>e.state==='pending'&&e.checkedAt===''&&e.hits===null));
   const disabled = collector.blankReport('example.org', model.analysisOptions({engines:[]}));assert.ok(disabled.engines.every(e=>e.state==='skipped'));
-  for (const id of ids) { const source = new URL(model.engineSearchUrl(id,'site:example.org AI & 工具','en'));assert.equal(source.searchParams.get(id==='baidu'?'wd':'q'),'site:example.org AI & 工具');assert.equal(source.protocol,'https:'); }
+  for (const id of ids) { const source = new URL(model.engineSearchUrl(id,'site:example.org AI & 工具','en'));assert.equal(source.searchParams.get(id==='baidu'?'wd':id==='yandex'?'text':'q'),'site:example.org AI & 工具');assert.equal(source.protocol,'https:'); }
 });
 
 test('Google自然结果解析排除广告、解包公开跳转；不足结果、验证和不明前序地址不会编造排名', () => {
@@ -170,10 +173,40 @@ test('Google自然结果解析排除广告、解包公开跳转；不足结果�
   assert.equal(parse('<title>Before you continue to Google</title>').state,'restricted');
 });
 
-test('同一报告执行三个引擎并保存真实查询、排名、检查时间和分阶段状态', async () => {
-  const f=searchIO(), snapshots=[], options=model.analysisOptions({maxPages:5,engines:['baidu','bing','google']});
+test('DuckDuckGo与Yandex解析自然结果、广告和公开跳转，验证或不明地址不编造排名',()=>{
+  for(const engine of ['duckduckgo','yandex']){
+    const source=model.engineSearchUrl(engine,'RankProbe'), parse=body=>parser.parseSearchResults(engine,Buffer.from(body),source,'RankProbe','example.org');
+    const good=engineHtml(engine);assert.equal(parse(good).position,3);assert.equal(parse(engineHtml(engine,false)).state,'not_found');
+    const ad=engine==='duckduckgo'?'<article data-testid="result" data-layout="ad"><a data-testid="result-title-a" href="https://example.org/ad">Ad</a></article>':'<li class="serp-item serp-item_type_ad"><a class="OrganicTitle-Link" href="https://example.org/ad">Ad</a></li>';
+    assert.equal(parse(ad+good).position,3);
+    assert.equal(parse(good.replace('https://competitor0.org/',engine==='duckduckgo'?'/l/?opaque':'https://yandex.com/clck/opaque')).state,'failed');
+    assert.equal(parse(good.replace('https://competitor0.org/','javascript:alert(1)')).state,'failed');
+    assert.equal(parse('<title>Подтвердите, что вы не робот</title>').state,'restricted');
+    assert.equal(parse('<form action="/anomaly.js"><input name="answer"></form>').state,'restricted');
+    assert.equal(parse('<html><script src="/search.js"></script><body>Loading</body></html>').state,'failed');
+    if(engine==='duckduckgo')assert.equal(parse(good.replace('https://example.org/article','//duckduckgo.com/l/?uddg=https%3A%2F%2Fexample.org%2Farticle')).position,3);
+  }
+});
+
+test('新引擎遵守各自查询路径规则，HTTP202验证挑战保留受限状态并继续其他引擎',async()=>{
+  const f=searchIO(), read=f.io.request;
+  f.io.request=async raw=>{const response=await read(raw),url=new URL(raw);if(url.hostname==='duckduckgo.com'&&url.pathname==='/robots.txt')response.bytes=Buffer.from('User-agent: *\nDisallow: /html\nDisallow: /lite\nDisallow: /*?\nAllow: /?*');if(url.hostname==='duckduckgo.com'&&url.searchParams.has('q')){response.status=202;response.bytes=Buffer.from('<form action="/anomaly.js"></form>');}return response;};
+  const report=await collector.collectSiteReport('example.org',model.analysisOptions({maxPages:5,engines:['duckduckgo','yandex']}),async()=>{},f.io);
+  assert.equal(report.engines.find(e=>e.id==='duckduckgo').state,'restricted');assert.equal(report.engines.find(e=>e.id==='duckduckgo').hits,null);
+  assert.equal(report.engines.find(e=>e.id==='yandex').state,'complete');assert.ok(f.requests.some(raw=>raw.startsWith('https://duckduckgo.com/?q=')));assert.ok(!f.requests.some(raw=>/duckduckgo.com\/(html|lite)/.test(raw)));
+});
+
+test('新引擎目标站规则分别使用DuckDuckBot与YandexBot，Yandex元指令和通用noindex正确保存',async()=>{
+  const f=searchIO(), read=f.io.request;f.io.request=async raw=>{const response=await read(raw),url=new URL(raw);if(url.host==='example.org'&&url.pathname==='/robots.txt')response.bytes=Buffer.from('User-agent: DuckDuckBot\nDisallow: /\nUser-agent: *\nAllow: /');if(url.host==='example.org'&&url.pathname==='/')response.bytes=Buffer.from('<html><title>RankProbe</title><meta name="yandex" content="noindex"><body>RankProbe</body></html>');return response;};
+  const report=await collector.collectSiteReport('example.org',model.analysisOptions({maxPages:5,engines:[]}),async()=>{},f.io);
+  assert.equal(report.engines.find(e=>e.id==='duckduckgo').siteRobotsAllowed,false);assert.equal(report.engines.find(e=>e.id==='yandex').siteRobotsAllowed,true);assert.equal(report.engines.find(e=>e.id==='yandex').htmlIndexAllowed,false);assert.equal(report.engines.find(e=>e.id==='duckduckgo').htmlIndexAllowed,true);
+  assert.ok(parser.parseSitePage(Buffer.from('<meta name="robots" content="noindex">'),'https://example.org/').noindex);
+});
+
+test('同一报告执行五个引擎并保存真实查询、排名、检查时间和分阶段状态', async () => {
+  const f=searchIO(), snapshots=[], options=model.analysisOptions({maxPages:5,engines:model.engineDefinitions.map(e=>e.id)});
   const report=await collector.collectSiteReport('example.org',options,async draft=>snapshots.push(clone(draft)),f.io);
-  assert.equal(report.rankings.length,3);assert.ok(report.engines.every(e=>e.state==='complete'&&e.queried===1&&e.hits===1&&e.top10===1&&e.checkedAt));
+  assert.equal(report.rankings.length,5);assert.ok(report.engines.every(e=>e.state==='complete'&&e.queried===1&&e.hits===1&&e.top10===1&&e.checkedAt));
   assert.ok(report.rankings.every(r=>r.state==='found'&&r.position===3&&r.source.startsWith('https://')));
   assert.ok(snapshots.some(r=>r.engines.find(e=>e.id==='google').state==='running'));
   assert.ok(f.requests.some(url=>url.startsWith('https://www.google.com/search?')));
@@ -191,8 +224,8 @@ test('重点关键词按输入顺序优先查询，去重并限制五个，留�
   }
 });
 
-test('三个引擎遵守禁止规则，受限记录检查时间但不发送搜索、不填零排名', async () => {
-  const f=searchIO({blocked:['baidu','bing','google']}), report=await collector.collectSiteReport('example.org',model.analysisOptions({maxPages:5,engines:['baidu','bing','google']}),async()=>{},f.io);
+test('五个引擎遵守禁止规则，受限记录检查时间但不发送搜索、不填零排名', async () => {
+  const f=searchIO({blocked:model.engineDefinitions.map(e=>e.id)}), report=await collector.collectSiteReport('example.org',model.analysisOptions({maxPages:5,engines:model.engineDefinitions.map(e=>e.id)}),async()=>{},f.io);
   assert.ok(report.engines.every(e=>e.state==='restricted'&&e.queried===0&&e.hits===null&&e.top10===null&&e.checkedAt));
   assert.equal(report.rankings.length,0);assert.equal(f.requests.filter(url=>url.includes('www.')&&!url.endsWith('/robots.txt')).length,0);
   assert.ok(report.engines.every(e=>e.message.includes('robots')));
@@ -357,7 +390,7 @@ test('所选版面SSR保持左侧工作台、匿名入口和规划模块状态�
   }
 });
 test('真实报告界面显示缺失/受限状态和业务原文，开始分析只提交当前表单条件与幂等编号', async()=>{
-  const translation=loader()('lib/i18n.ts'), report=collector.blankReport('example.org',model.analysisOptions({}));report.profile.name='独有网站标题';report.keywords=[{word:'独有业务关键词',kind:'manual',score:100,sources:[{kind:'manual',url:''}]}];report.issues=[{code:'title',severity:'medium',title:'页面缺少标题',url:'https://example.org/',advice:'为页面设置清晰且独立的标题'}];report.engines.find(e=>e.id==='bing').state='restricted';
+  const translation=loader()('lib/i18n.ts'), report=collector.blankReport('example.org',model.analysisOptions({}));report.profile.name='独有网站标题';report.keywords=[{word:'独有业务关键词',kind:'manual',score:100,sources:[{kind:'manual',url:''}]}];report.issues=[{code:'title',severity:'medium',title:'页面缺少标题',url:'https://example.org/',advice:'为页面设置清晰且独立的标题'}];report.engines.find(e=>e.id==='bing').state='restricted';report.engines=report.engines.filter(e=>!['duckduckgo','yandex'].includes(e.id));
   const run={id,siteId:otherId,host:'example.org',status:'completed',progress:100,stage:'report',error:'',createdAt:'2026-10-25T00:00:00Z',updatedAt:'2026-10-25T00:00:00Z',completedAt:'2026-10-25T00:00:00Z',charged:false,pointsSpent:0,report};
   const slots={2:id,5:{owner:1,data:{sites:[{id:otherId,host:'example.org',url:'https://example.org/'}],history:[run],total:1,page:1,workerReady:true,access:{canAnalyze:true,chargeType:'free',pointsCost:0,balance:null,hasMembership:false}}},6:{owner:1,run},9:'https://new.example.org/path'};let cursor=0,submitted;
   const react={...React,useEffect(){},useRef:value=>({current:value}),useState:initial=>{const index=cursor++;if(!(index in slots))slots[index]=initial;return[slots[index],value=>{slots[index]=typeof value==='function'?value(slots[index]):value;}];}};
@@ -365,9 +398,9 @@ test('真实报告界面显示缺失/受限状态和业务原文，开始分析�
   const {SiteAnalysisDashboard}=moduleLoader('components/site-analysis-dashboard.tsx');const tree=SiteAnalysisDashboard({tool:{id:50,slug:'webmaster-tools'}}), markup=renderToStaticMarkup(tree);
   assert.ok(markup.includes('独有网站标题'));assert.ok(markup.includes('独有业务关键词'));assert.ok(markup.includes('Access restricted'));assert.ok(markup.includes('Unavailable'));assert.ok(markup.includes('Search this domain'));assert.ok(markup.includes('Engines not queried in this report'));
   function elements(node){if(Array.isArray(node))return node.flatMap(elements);return React.isValidElement(node)?[node,...elements(node.props.children)]:[];}
-  const checkboxes=elements(tree).filter(n=>n.type==='input'&&n.props.type==='checkbox');assert.equal(checkboxes.length,3);assert.ok(checkboxes.every(node=>node.props.checked&&!node.props.disabled));
-  assert.ok(markup.includes('Analysis settings'));assert.ok(markup.includes('Report sections'));assert.ok(!markup.includes('Analysis workbench'));assert.ok(markup.includes('https://www.google.com/search?'));assert.ok(markup.includes('site%3Aexample.org'));assert.ok(markup.includes('New analyses select Baidu, Bing and Google by default'));
-  await elements(tree).find(n=>n.type==='form').props.onSubmit({preventDefault(){}});assert.equal(submitted.domain,'https://new.example.org/path');assert.equal(submitted.tool,50);assert.ok(submitted.id);assert.equal(submitted.userId,undefined);assert.equal(submitted.options.device,'desktop');assert.equal(submitted.options.maxPages,20);assert.deepEqual(submitted.options.engines,['baidu','bing','google']);
+  const checkboxes=elements(tree).filter(n=>n.type==='input'&&n.props.type==='checkbox');assert.equal(checkboxes.length,5);assert.ok(checkboxes.every(node=>node.props.checked&&!node.props.disabled));
+  assert.ok(markup.includes('Analysis settings'));assert.ok(markup.includes('Report sections'));assert.ok(markup.includes('This report does not include this engine'));assert.ok(markup.includes('duckduckgo.com'));assert.ok(markup.includes('yandex.com'));assert.ok(!markup.includes('Analysis workbench'));assert.ok(markup.includes('https://www.google.com/search?'));assert.ok(markup.includes('site%3Aexample.org'));assert.ok(markup.includes('All engines are selected by default'));
+  await elements(tree).find(n=>n.type==='form').props.onSubmit({preventDefault(){}});assert.equal(submitted.domain,'https://new.example.org/path');assert.equal(submitted.tool,50);assert.ok(submitted.id);assert.equal(submitted.userId,undefined);assert.equal(submitted.options.device,'desktop');assert.equal(submitted.options.maxPages,20);assert.deepEqual(submitted.options.engines,['baidu','google','bing','duckduckgo','yandex']);
 });
 
 function uiElements(node) { if(Array.isArray(node))return node.flatMap(uiElements);return React.isValidElement(node)?[node,...uiElements(node.props.children)]:[]; }
@@ -411,7 +444,7 @@ test('迟到的历史报告填充不能覆盖用户已编辑的网站地址',asy
   assert.ok(f.requests.every(request=>!request.body));assert.ok(f.requests.every(request=>!request.path.includes('&site=')));
 });
 
-test('基本信息中英文切换、Title/Keywords/Description顺序与Unicode计数正确，长内容不截断',()=>{
+test('站点基本信息双语、域名档案默认展开，元信息顺序与Unicode计数正确且原文不截断',()=>{
   const translations=loader()('lib/i18n.ts'), report=collector.blankReport('example.org',model.analysisOptions({}));
   const title='星'.repeat(39)+'🌍', description='描'.repeat(69), keyword='关键词原文'.repeat(23);
   report.profile.title=title;report.profile.description=description;report.pages=[{title,description,declared:[keyword],url:'https://example.org/'}];
@@ -420,9 +453,13 @@ test('基本信息中英文切换、Title/Keywords/Description顺序与Unicode�
     const ui=loader({'./language-provider':{useI18n:()=>({locale,t:translations.translator(locale)})}})('components/site-analysis-profile.tsx');
     const markup=renderToStaticMarkup(React.createElement(ui.SiteAnalysisProfile,{report,date:value=>value}));
     for(const text of [title,description,keyword])assert.ok(markup.includes(text));
-    const labels=locale==='en'?['Website title (Title)','Website keywords (Keywords)','Website description (Description)']:['网站标题（Title）','网站关键词（Keywords）','网站描述（Description）'];
-    assert.ok(labels.every(label=>markup.includes(`<dt>${label}</dt><dd>`)));assert.ok(markup.indexOf(labels[0])<markup.indexOf(labels[1])&&markup.indexOf(labels[1])<markup.indexOf(labels[2]));
-    assert.ok(markup.includes(locale==='en'?'DOMAIN PROFILE':'基本信息'));assert.equal(markup.includes('DOMAIN PROFILE'),locale==='en');
+    const $=require('cheerio').load(markup), labels=locale==='en'?['Website title','Website keywords','Website description']:['网站标题','网站关键词','网站描述'];
+    assert.deepEqual($('.seo-metadata-field dt>span').map((_,node)=>$(node).text()).get(),labels);
+    assert.deepEqual($('.seo-metadata-field dt>small').map((_,node)=>$(node).text()).get(),['Title','Keywords','Description']);
+    assert.equal($('#seo-site-profile-title').text(),locale==='en'?'Site information':'站点基本信息');
+    assert.equal($('.seo-profile-section h3').length,2);assert.equal($('details.seo-domain-archive[open]').length,1);
+    assert.ok($('details.seo-domain-archive summary').text().includes(locale==='en'?'Full domain profile':'完整域名档案'));
+    assert.equal($('.seo-profile-facts .seo-profile-field').length,6);
     assert.ok(markup.includes(locale==='en'?'Suggested maximum: 39 characters. Current: 40.':'建议不超过 39 字，当前 40 字'));
     assert.ok(markup.includes(locale==='en'?'Suggested maximum: 100':'建议不超过 100'));assert.ok(markup.includes(locale==='en'?'Suggested maximum: 68':'建议不超过 68'));
     assert.ok(!markup.includes('href="javascript:')&&!markup.includes('href="https://user:password'));
@@ -436,6 +473,7 @@ test('四个概况面板使用真实候选词，未知统计显示未接入，�
     const ui=loader({'./language-provider':{useI18n:()=>({locale,t:translations.translator(locale)})},react:{...React,useState:()=>[open,value=>{open=value;}]}})('components/site-analysis-overview-panels.tsx');
     const props={report,onKeyword:word=>{selected=word;}}, tree=ui.SiteAnalysisOverviewPanels(props), markup=renderToStaticMarkup(tree);
     assert.match(markup,/role="region" tabindex="0"/);assert.ok(markup.includes('业务词原文'));
+    const $=require('cheerio').load(markup);assert.equal($('.seo-engine-scroll[role="region"][tabindex="0"] .seo-engine-identity').length,5);assert.equal($('.seo-country-scroll[role="region"][tabindex="0"]').length,1);assert.deepEqual($('.seo-country-table th').map((_,node)=>$(node).text()).get(),locale==='en'?['Country','Traffic share']:['国家','访问占比']);assert.equal($('.seo-country-table tbody tr td[colspan="2"]').length,1);for(const engine of model.engineDefinitions)assert.equal($(`.seo-engine-scroll img[src="${engine.icon}"]`).length,1);
     assert.equal((markup.match(/seo-overview-panel"/g)||[]).length,4);assert.equal((markup.match(/seo-data-state/g)||[]).length,2);
     assert.ok(markup.includes(locale==='en'?'Index statistics not connected':'尚未接入收录统计'));assert.ok(markup.includes(locale==='en'?'5 pages collected':'本轮读取 5 页'));
     assert.ok(!markup.includes('0%'));assert.ok(markup.includes('site%3Aexample.org'));
@@ -452,7 +490,7 @@ test('旧报告缺少页面元信息仍可显示未读取，深色操作区与�
   const translations=loader()('lib/i18n.ts'), report=collector.blankReport('example.org',model.analysisOptions({}));
   const profile=loader({'./language-provider':{useI18n:()=>({locale:'zh-CN',t:translations.translator('zh-CN')})}})('components/site-analysis-profile.tsx');
   const markup=renderToStaticMarkup(React.createElement(profile.SiteAnalysisProfile,{report,date:value=>value}));assert.equal((markup.match(/页面未设置或尚未读取/g)||[]).length,3);
-  const f=dashboardFixture(), page=renderToStaticMarkup(f.render());assert.ok(page.indexOf('分析条件')<page.indexOf('任务进度与导出'));assert.ok(page.indexOf('任务进度与导出')<page.indexOf('分析报告'));assert.ok(page.indexOf('分析报告')<page.indexOf('基本信息'));
+  const f=dashboardFixture(), page=renderToStaticMarkup(f.render());assert.ok(page.indexOf('分析条件')<page.indexOf('任务进度与导出'));assert.ok(page.indexOf('任务进度与导出')<page.indexOf('分析报告'));assert.ok(page.indexOf('分析报告')<page.indexOf('站点基本信息'));
   for(const anchor of ['seo-domain-profile','seo-overview-panels','seo-engine-visibility','seo-keyword-details','seo-report-findings'])assert.ok(page.includes(`href="#${anchor}"`)&&page.includes(`id="${anchor}"`));
   assert.ok(page.includes('aria-describedby="seo-keyword-purpose"'));assert.ok(page.includes('不会修改网站的关键词设置'));assert.ok(page.includes('seo-controls seo-console'));assert.ok(page.includes('seo-run-state seo-console'));
 });

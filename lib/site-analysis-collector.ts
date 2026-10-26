@@ -48,7 +48,7 @@ export async function collectSiteReport(input: string, options: AnalysisOptions,
     const finalOrigin = new URL(rulesResponse.url).origin;
     if (normalizeSite(finalOrigin).host.replace(/^www\./, '') !== site.host.replace(/^www\./, '')) throw new Error('站点跳转超出当前域名范围');
     let origin = finalOrigin, policy = robotsParser(`${origin}/robots.txt`, rulesResponse.status === 200 ? rulesResponse.bytes.toString('utf8') : '');
-    const recordSitePolicy = () => { for (const engine of report.engines) { engine.siteRobotsAllowed = policy.isAllowed(`${origin}/`, { baidu: 'Baiduspider', bing: 'bingbot', google: 'Googlebot' }[engine.id]) !== false; engine.siteCheckedAt = new Date().toISOString(); } };
+    const recordSitePolicy = () => { for (const engine of report.engines) { const definition = engineDefinitions.find(item => item.id === engine.id)!; engine.siteRobotsAllowed = policy.isAllowed(`${origin}/`, definition.bot) !== false; engine.siteCheckedAt = new Date().toISOString(); } };
     recordSitePolicy();
     const allowed = (url: string) => eligible(url, origin) && policy.isAllowed(url, bot) !== false;
     let delay = Math.max(500, Number(policy.getCrawlDelay(bot) || 0) * 1000);
@@ -149,7 +149,11 @@ export async function collectSiteReport(input: string, options: AnalysisOptions,
         const response = await engineRead(source.href);
         summary.checkedAt = new Date().toISOString();
         if ([401, 403, 429].includes(response.status)) { summary.state = 'restricted'; summary.message = '搜索引擎限制当前查询，请稍后再试'; break; }
-        if (response.status !== 200) throw new Error('搜索结果暂不可用');
+        if (response.status !== 200) {
+          const challenge = parseSearchResults(engine, response.bytes, source.href, keyword, site.host);
+          if (challenge.state === 'restricted') { summary.state = 'restricted'; summary.message = challenge.message; break; }
+          throw new Error('搜索结果暂不可用');
+        }
         const record = parseSearchResults(engine, response.bytes, source.href, keyword, site.host); report.rankings.push(record); summary.queried++;
         if (record.state === 'restricted') { summary.state = 'restricted'; summary.message = record.message; break; }
         await stage(`engine:${engine}`, 'running', summary.message, progress);

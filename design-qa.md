@@ -88,3 +88,24 @@ final result for this iteration: blocked (visual verification only; code checks 
 - Code verification: 397 regressions and production build pass; updated interface checks cover bilingual labels and all five anchor targets. Changed-file ESLint and CSS syntax pass. Primary action / filter-label color contrast is 4.75 / 4.89. The existing 20 unrelated TypeScript errors remain; no new diagnostics in the changed components.
 
 final result for this polish: blocked (visual verification only; code checks complete)
+
+## 2026-10-26 Site information screenshot refinement
+
+- Reference: `codex-clipboard-55cc7e5c-dadb-4b2e-8267-ded846da83cc.png`, with the user's four requested corrections.
+- Implemented: Site information / 站点基本信息 as the section title and navigation label; page metadata and site facts share one white surface with a subtle divider; no separate gray facts backplate. Metadata labels align across Title / Keywords / Description, length hints are quieter, and the inferred-industry note is inline.
+- The full domain profile is open by default with a native collapsible control. Existing public domain / DNS fields, counts, raw content, missing-data states and safe external links remain. Responsive stacking and print pagination are defined.
+- Verification: 55 targeted regressions pass (43 analytics, 6 language and 6 production-handler checks); production build, changed-file ESLint and CSS syntax pass. Existing 20 unrelated type errors remain.
+- Visual verification is **blocked / pending user acceptance**, following the standing user instruction not to open browsers or start app / preview services. The supplied screenshot was inspected; no rendered comparison or visual acceptance is claimed.
+
+final result for this refinement: blocked (visual verification only; code checks complete)
+
+## 2026-10-26 Engine identity and scrollable report panels
+
+- Reference: `codex-clipboard-aae5e205-7d26-4b98-a348-0973f94622aa.png` and the requested Google / Bing / DuckDuckGo / Yandex additions. Existing Baidu remains.
+- All five engines use locally stored official favicons, names and domains across the form, report table and index-count list. Assets were validated as ICO files and confirmed in the production package; no visual asset acceptance is claimed.
+- Each report panel has a prominent heading. The index-count list and country-share table have bounded 260px vertical scroll regions with keyboard focus. Country / traffic-share headers remain visible, and unavailable traffic / index data remains explicitly missing.
+- The previous site-profile refinement and expanded domain archive remain included. Existing report anchors, raw data, collection limits, ownership and charging checks remain.
+- Verification: 400 regressions and production build pass; changed-file ESLint and CSS syntax pass. Three new parser / rules / challenge tests cover the new engines. Existing 20 unrelated type errors remain.
+- Visual comparison remains **blocked / pending user acceptance** under the standing instruction not to open browsers or start preview / app services. Public HTTP / robots checks do not constitute browser QA or successful live ranking acceptance.
+
+final result for this addition: blocked (visual verification only; code checks complete)
