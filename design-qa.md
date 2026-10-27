@@ -1,5 +1,11 @@
 # Design QA
 
+## 2026-10-27 Remove dark workspace panels
+
+- User preference now supersedes the earlier navy references: remove dark backgrounds from the workspace title, site cards, analysis conditions, module/report headings and task-progress/export panel. Use white / near-white surfaces, dark readable text and pale borders. Preserve compact heading heights, orange actions and selected states, layout, icons and all business behavior.
+- Adapt badges, secondary controls, metadata, progress tracks and stage-state text to light surfaces so no pale-on-white text or dark status blocks remain. Seven key text/background pairs exceed 4.5:1. CSS parsing, production build, whitespace checks and 7 production-handler regressions pass. No SQL or configuration changes.
+- Visual acceptance remains **pending user acceptance** under the standing no-browser / no-preview instruction. No application service or browser was started, and no real business database was accessed.
+
 ## 2026-10-26 Compact dark panel headings
 
 - User feedback: the dark heading in the real-time visitors panel is too tall (`codex-clipboard-c6f44d35-6ce2-4706-af17-88b28640147d.png`, supplied inline). Reduce shared panel-heading vertical padding to 10px on desktop and mobile, tighten the description spacing and reduce framed icons to 34px. Overview heading minimum height changes from 80px to 54px; site identity headers also lose excess vertical padding. Titles retain their font sizes; long text can still wrap.
