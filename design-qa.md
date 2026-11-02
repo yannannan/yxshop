@@ -1,5 +1,14 @@
 # Design QA
 
+## 2026-11-02 Online image editor and tool credit settings
+
+- Implement the requested left vertical menu, top editing toolbar and original/result comparison area. Three active menus: watermark removal, stitching and compression; the fourth remains disabled as planned. The toolbar exposes sharpening, repair, erase, background removal and text replacement. White / pale surfaces and orange actions follow the user's latest preference; no navy panels were reintroduced.
+- The user confirmed manual selection and basic processing for the first version. Features execute real server-side pixel operations, PNG/JPG encoding and local-font text rendering. The interface explains basic repair limitations, solid-color cutout, replacement by covering the selected area, processing resolution and lossless PNG size behavior. No AI recognition or generated-image service is claimed.
+- Include rectangle selection with percentage inputs, stitch ordering / layout / spacing, quality and format controls, a clear result download action and credit summary. Successful tasks are saved; recent results and result URLs can restore downloads. Network retries retain the same task ID even if the remaining balance has reached zero. Mobile layout stacks the comparison panes and wraps controls; motion respects reduced-motion preferences.
+- Admin Tool Services gains a direct credit-settings action for every tool. Image functions can override the default cost individually. Generation settles only after processing succeeds, in the same transaction as result storage; existing memberships / uses take priority. Saved-result downloads do not charge again. Account ownership, quote changes, concurrent last-credit use, rollback, CSRF and bounded uploads are covered by meaningful checks.
+- Verification: 457 full regressions passed; two additional targeted cases bring the checked set to 459. The final image suite has 23 passing cases, and 8 production-handler cases pass. Production build, changed-file ESLint, CSS parsing and migration-script Bash syntax pass. The existing 20 unrelated TypeScript diagnostics remain; no changed image / pricing module has a type diagnostic.
+- Visual acceptance remains **pending user acceptance** under the standing no-browser / no-preview instruction. No browser or application preview service was started; no real business database, SQL migration or OSS bucket was accessed. Deployment requires the user to execute SQL 12 and deploy the code, as documented in `docs/图片在线处理与积分配置.md`.
+
 ## 2026-10-27 Remove dark workspace panels
 
 - User preference now supersedes the earlier navy references: remove dark backgrounds from the workspace title, site cards, analysis conditions, module/report headings and task-progress/export panel. Use white / near-white surfaces, dark readable text and pale borders. Preserve compact heading heights, orange actions and selected states, layout, icons and all business behavior.

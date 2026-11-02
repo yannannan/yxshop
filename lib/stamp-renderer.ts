@@ -114,3 +114,11 @@ export async function renderStamp(options: StampOptions, preview = false): Promi
     finally { result.free(); }
   } finally { renderer.free(); }
 }
+
+// Fixed local fonts and escaped text only; no user SVG, paths or remote resources.
+export async function renderImageText(width:number,height:number,text:string,size:number,color:string,background:string):Promise<Uint8Array> {
+  const buffers=await resources('sans'),lines=text.split('\n').slice(0,12),fontSize=Math.min(size,height/Math.max(1,lines.length)/1.4,width*.96/Math.max(1,...lines.map(line=>[...line].length)));
+  const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><rect width="100%" height="100%" fill="${background}"/><g fill="${color}" font-family="Noto Sans CJK SC" font-size="${fontSize}" text-anchor="middle">${lines.map((line,i)=>`<text x="${width/2}" y="${(height-fontSize*lines.length*1.4)/2+fontSize*(i*1.4+1)}">${escape(line)}</text>`).join('')}</g></svg>`;
+  const renderer=new Resvg(svg,{font:{fontBuffers:buffers,defaultFontFamily:'Noto Sans CJK SC'}});
+  try { const result=renderer.render();try{return new Uint8Array(result.pixels);}finally{result.free();} }finally{renderer.free();}
+}

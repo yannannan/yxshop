@@ -40,6 +40,7 @@ const rows = [
   { id: 35, name: '链接视频提取工具', tool_slug: 'video-extractor' },
   { id: 37, name: '印章在线制作', tool_slug: 'stamp-maker' },
   { id: 50, name: '站长分析工具', tool_slug: 'webmaster-tools' },
+  { id: 80, name: '图片在线处理', tool_slug: 'image-processor' },
 ].map(row => ({ ...row, description: '公开工具介绍', detail: '使用说明', tool_charge_type: 'free', entry_configured: 1, updated_at: '2026-10-24T00:00:00Z' }));
 let queries = 0;
 // 只允许页面读取模拟的公开工具数据；没有真实连接或写业务数据库。
@@ -64,7 +65,7 @@ for (const spec of ${JSON.stringify(paths)}) {
   const html = await response.text();
   const trackerSource = 'https://www.yxstar.shop/s/RDYfVdtkRd-iXLHGxvrdEA';
   const trackerTags = [...html.matchAll(/<script[^>]*>/g)].filter(match => match[0].includes('src="' + trackerSource + '"'));
-  pages.push({ path, script: (path.startsWith('/api/site-tracker/') || path.startsWith('/s/')) && response.status === 200 ? html : undefined, siteTrackerCount: trackerTags.length, siteTrackerInHead: trackerTags.every(match => match.index < html.indexOf('</head>')), siteTrackerSkipsAdmin: trackerTags.every(match => match[0].includes('data-exclude-path="/admin"')), status: response.status, failed: html.includes('This page couldn'), hasBrand: html.includes('宇星脉通'), hasVideoForm: html.includes('粘贴视频链接'), hasStampPreview: html.includes('效果预览'), language: /<html[^>]*lang="([^"]+)"/.exec(html)?.[1], englishNav: html.includes('AI Digital Services'), englishPoints: html.includes('One balance. Many possibilities.'), englishStamp: html.includes('Design Your Stamp'), englishVideo: html.includes('Paste a Video Link'), chineseAdmin: html.includes('正在验证管理权限') });
+  pages.push({ path, script: (path.startsWith('/api/site-tracker/') || path.startsWith('/s/')) && response.status === 200 ? html : undefined, siteTrackerCount: trackerTags.length, siteTrackerInHead: trackerTags.every(match => match.index < html.indexOf('</head>')), siteTrackerSkipsAdmin: trackerTags.every(match => match[0].includes('data-exclude-path="/admin"')), status: response.status, failed: html.includes('This page couldn'), hasBrand: html.includes('宇星脉通'), hasVideoForm: html.includes('粘贴视频链接'), hasStampPreview: html.includes('效果预览'), language: /<html[^>]*lang="([^"]+)"/.exec(html)?.[1], hasImageWorkspace: html.includes('ip-workspace'), englishImage: html.includes('Online Image Editor'), englishNav: html.includes('AI Digital Services'), englishPoints: html.includes('One balance. Many possibilities.'), englishStamp: html.includes('Design Your Stamp'), englishVideo: html.includes('Paste a Video Link'), chineseAdmin: html.includes('正在验证管理权限') });
 }
 console.log(JSON.stringify({ pages, errors, queries }));
 `;
@@ -130,4 +131,13 @@ test('综合看板生产页面可中英文匿名渲染，个人分析接口不�
   const result = await renderPages([{ path: '/tools/webmaster-tools.html', locale: 'zh-CN' }, { path: '/tools/webmaster-tools.html', locale: 'en' }, '/api/tools/site-analysis?tool=50', { path: '/api/tools/site-analysis', method: 'POST' }]);
   assert.deepEqual(result.errors, []); assert.deepEqual(result.pages.map(p => p.status), [200,200,200,401]);
   assert.equal(result.pages[1].englishNav, true); assert.equal(result.pages[0].failed, false); assert.equal(result.pages[1].failed, false);
+});
+
+
+test('图片工作区生产页面可中英文加载，匿名处理与成品下载返回401而不连接业务库', async () => {
+  const result = await renderPages(['/tools/image-processor.html', {path:'/tools/image-processor.html',locale:'en'}, {path:'/api/tools/image-processor',method:'POST'}, '/api/tools/image-processor/11111111-1111-4111-8111-111111111111']);
+  assert.deepEqual(result.pages.map(page=>page.status), [200,200,401,401]);
+  assert.ok(result.pages[0].hasImageWorkspace);
+  assert.ok(result.pages[1].englishImage);
+  assert.deepEqual(result.errors, []);
 });
