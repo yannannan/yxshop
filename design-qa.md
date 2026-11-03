@@ -1,5 +1,11 @@
 # Design QA
 
+## 2026-11-03 Image editor workspace styling
+
+- Apply the user's dark style specifically to the image editor. Use a dark sidebar, compact toolbar and panel headers, orange selection indicators and action accents, and light settings and image comparison surfaces. Add recognizable icons to the toolbar and source/result/recent headers; the upload and result empty states use matching inset cards.
+- Preserve the side-by-side comparison on desktop, stacked previews on narrower screens, and a scrollable mobile tool menu. Long English titles and badges can wrap. Image processing, download and billing behavior are unchanged.
+- CSS parsing, changed-component ESLint, production build, 23 image tests and 8 production-handler tests pass. Seven checked dark text/background pairs exceed 4.5:1. Browser visual acceptance remains pending the user under the standing no-browser / no-preview instruction.
+
 ## 2026-11-02 Online image editor and tool credit settings
 
 - Implement the requested left vertical menu, top editing toolbar and original/result comparison area. Three active menus: watermark removal, stitching and compression; the fourth remains disabled as planned. The toolbar exposes sharpening, repair, erase, background removal and text replacement. White / pale surfaces and orange actions follow the user's latest preference; no navy panels were reintroduced.
