@@ -1,5 +1,11 @@
 # Design QA
 
+## 2026-11-03 Image controls in their preview panels
+
+- Respond to the user's current-workspace screenshot by rebuilding the sidebar title and menu as compact cards, with a grouped logo/title, consistent icon tiles, an orange selected edge and a lower return link.
+- Remove the separate operation card. Source upload lives in the source heading; source size and selection controls live below its preview. Output format, action settings and download sit in the result footer. Both footers share the dark header color. Equal-height previews fit the full image; the source selection bounds follow its displayed image. Keep the generation and credit bar below the previews so it cannot cover the controls.
+- Preserve English labels and the mobile stacked layout. CSS parsing, changed-file ESLint, build, 23 image tests and 8 production-handler tests pass. Visual and pointer-position acceptance remain pending the user under the standing no-browser / no-preview instruction.
+
 ## 2026-11-03 Image editor workspace styling
 
 - Apply the user's dark style specifically to the image editor. Use a dark sidebar, compact toolbar and panel headers, orange selection indicators and action accents, and light settings and image comparison surfaces. Add recognizable icons to the toolbar and source/result/recent headers; the upload and result empty states use matching inset cards.
