@@ -1,5 +1,12 @@
 # Design QA
 
+## 2026-11-05 Image editor sidebar navigation
+
+- Use the user's latest sidebar screenshot as the target for refinement. Remove the enclosing title card and menu borders, align the standalone outline icons and labels, and add a quiet navigation label beneath the title divider.
+- Highlight the selected tool with a pale orange surface, dark orange text, a small edge indicator and a trailing arrow. Keep hover surfaces subdued. Separate the planned entry, remove the footer note's box, and give the return link its own divider. Retain the horizontally scrolling mobile menu and wrapping English title.
+- Existing image checks pass 23 of 23. Production-handler checks pass 8 of 8. Production build, changed-component ESLint, CSS parsing and whitespace checks pass. Five key sidebar foreground/background pairs exceed 4.5 to 1 contrast.
+- Visual acceptance is pending user review. The standing project workflow reserves browser and live runtime acceptance for the user. Verification used isolated handlers and simulated data. Build-generated tracked files were restored before committing.
+
 ## 2026-11-03 Image controls in their preview panels
 
 - Respond to the user's current-workspace screenshot by rebuilding the sidebar title and menu as compact cards, with a grouped logo/title, consistent icon tiles, an orange selected edge and a lower return link.

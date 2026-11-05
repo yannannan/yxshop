@@ -2,7 +2,7 @@
 /* eslint-disable @next/next/no-html-link-for-pages -- Native cross-page navigation follows the existing tool workspace convention. */
 /* eslint-disable @next/next/no-img-element -- Local blob previews and authenticated results must bypass the image optimizer. */
 import { useCallback,useEffect,useRef,useState,type PointerEvent } from 'react';
-import { AdjustmentsHorizontalIcon,ArrowDownTrayIcon,ArrowPathIcon,ArrowUpTrayIcon,ArrowsPointingOutIcon,ChevronLeftIcon,ClockIcon,PaintBrushIcon,PencilSquareIcon,PhotoIcon,RectangleGroupIcon,RectangleStackIcon,ScissorsIcon,SparklesIcon,TrashIcon,WrenchScrewdriverIcon,XMarkIcon } from '@heroicons/react/24/outline';
+import { AdjustmentsHorizontalIcon,ArrowDownTrayIcon,ArrowPathIcon,ArrowUpTrayIcon,ArrowsPointingOutIcon,ChevronLeftIcon,ChevronRightIcon,ClockIcon,PaintBrushIcon,PencilSquareIcon,PhotoIcon,RectangleGroupIcon,RectangleStackIcon,ScissorsIcon,SparklesIcon,TrashIcon,WrenchScrewdriverIcon,XMarkIcon } from '@heroicons/react/24/outline';
 import { useI18n } from './language-provider';
 import { notifyAccountChanged,useAccount } from '../lib/account-client';
 import { accountLoginHref } from '../lib/account';
@@ -36,10 +36,21 @@ export function ImageProcessor({tool}:{tool:ToolService}) {
   function selectionNumber(key:keyof ImageRect,value:number){const r=rectangle||{x:0,y:0,width:.2,height:.1};const next={...r,[key]:Math.max(0,Math.min(100,value))/100};next.width=Math.min(next.width,1-next.x);next.height=Math.min(next.height,1-next.y);update({rect:next});}
   return <div className="ip-workspace">
     <aside className="ip-sidebar">
-      <div className="ip-brand"><PhotoIcon aria-hidden="true"/><div><h1>{t('图片在线处理')}</h1><p>{t('上传、编辑、预览与下载')}</p></div></div>
+      <div className="ip-brand">
+        <PhotoIcon aria-hidden="true"/>
+        <div><h1>{t('图片在线处理')}</h1><p>{t('上传、编辑、预览与下载')}</p></div>
+      </div>
+      <p className="ip-nav-label">{t('图像处理工具')}</p>
       <nav aria-label={t('图片处理菜单')}>
-        {menu.map(([id,Icon])=><button type="button" key={id} aria-current={action===id?'page':undefined} disabled={busy||uploading} onClick={()=>change(id)}><span className="ip-menu-icon"><Icon aria-hidden="true"/></span><span>{t(imageActions[id])}</span></button>)}
-        <button type="button" disabled><span className="ip-menu-icon"><SparklesIcon aria-hidden="true"/></span><span>{t('更多功能')}</span><small>{t('待定')}</small></button>
+        {menu.map(([id,Icon])=><button type="button" key={id} aria-current={action===id?'page':undefined} disabled={busy||uploading} onClick={()=>change(id)}>
+          <span className="ip-menu-icon"><Icon aria-hidden="true"/></span>
+          <span>{t(imageActions[id])}</span>
+          <ChevronRightIcon className="ip-menu-arrow" aria-hidden="true"/>
+        </button>)}
+        <button type="button" className="ip-menu-planned" disabled>
+          <span className="ip-menu-icon"><SparklesIcon aria-hidden="true"/></span>
+          <span>{t('更多功能')}</span><small>{t('待定')}</small>
+        </button>
       </nav>
       <div className="ip-sidebar-end">
         <div className="ip-sidebar-note"><p>{t('手动圈选与基础处理')}</p><small>{t('上传和查看原图不扣积分，成功生成结果后结算。')}</small></div>
