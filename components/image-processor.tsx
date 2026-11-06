@@ -2,7 +2,7 @@
 /* eslint-disable @next/next/no-html-link-for-pages -- Native cross-page navigation follows the existing tool workspace convention. */
 /* eslint-disable @next/next/no-img-element -- Local blob previews and authenticated results must bypass the image optimizer. */
 import { useCallback,useEffect,useRef,useState,type PointerEvent } from 'react';
-import { AdjustmentsHorizontalIcon,ArrowDownTrayIcon,ArrowPathIcon,ArrowUpTrayIcon,ArrowsPointingOutIcon,ChevronLeftIcon,ChevronRightIcon,ClockIcon,PaintBrushIcon,PencilSquareIcon,PhotoIcon,RectangleGroupIcon,RectangleStackIcon,ScissorsIcon,SparklesIcon,TrashIcon,WrenchScrewdriverIcon,XMarkIcon } from '@heroicons/react/24/outline';
+import { AdjustmentsHorizontalIcon,ArrowDownTrayIcon,ArrowPathIcon,ArrowUpTrayIcon,ArrowsPointingOutIcon,ChevronLeftIcon,ClockIcon,PaintBrushIcon,PencilSquareIcon,PhotoIcon,RectangleGroupIcon,RectangleStackIcon,ScissorsIcon,SparklesIcon,TrashIcon,WrenchScrewdriverIcon,XMarkIcon } from '@heroicons/react/24/outline';
 import { useI18n } from './language-provider';
 import { notifyAccountChanged,useAccount } from '../lib/account-client';
 import { accountLoginHref } from '../lib/account';
@@ -38,26 +38,19 @@ export function ImageProcessor({tool}:{tool:ToolService}) {
     <aside className="ip-sidebar">
       <div className="ip-brand">
         <PhotoIcon aria-hidden="true"/>
-        <div><h1>{t('图片在线处理')}</h1><p>{t('上传、编辑、预览与下载')}</p></div>
+        <h1>{t('图片在线处理')}</h1>
       </div>
-      <p className="ip-nav-label">{t('图像处理工具')}</p>
       <nav aria-label={t('图片处理菜单')}>
         {menu.map(([id,Icon])=><button type="button" key={id} aria-current={action===id?'page':undefined} disabled={busy||uploading} onClick={()=>change(id)}>
           <span className="ip-menu-icon"><Icon aria-hidden="true"/></span>
           <span>{t(imageActions[id])}</span>
-          <ChevronRightIcon className="ip-menu-arrow" aria-hidden="true"/>
         </button>)}
-        <button type="button" className="ip-menu-planned" disabled>
-          <span className="ip-menu-icon"><SparklesIcon aria-hidden="true"/></span>
-          <span>{t('更多功能')}</span><small>{t('待定')}</small>
-        </button>
       </nav>
       <div className="ip-sidebar-end">
-        <div className="ip-sidebar-note"><p>{t('手动圈选与基础处理')}</p><small>{t('上传和查看原图不扣积分，成功生成结果后结算。')}</small></div>
         <a className="ip-return" href="/tools"><ChevronLeftIcon aria-hidden="true"/>{t('工具服务')}</a>
       </div>
     </aside>
-    <main className="ip-main"><header className="ip-topbar"><div><strong>{t('图像处理工具')}</strong><span>{t('选择功能开始编辑')}</span></div><div className="ip-tool-buttons" role="toolbar" aria-label={t('图像处理工具')}>{topActions.map(([id,Icon])=><button type="button" key={id} aria-pressed={action===id} disabled={busy||uploading} onClick={()=>change(id)}><Icon aria-hidden="true"/>{t(imageActions[id])}</button>)}</div></header>
+    <main className="ip-main"><header className="ip-topbar"><div><strong>{t('图像处理工具')}</strong></div><div className="ip-tool-buttons" role="toolbar" aria-label={t('图像处理工具')}>{topActions.map(([id,Icon])=><button type="button" key={id} aria-pressed={action===id} disabled={busy||uploading} onClick={()=>change(id)}><Icon aria-hidden="true"/>{t(imageActions[id])}</button>)}</div></header>
       {error&&<p className="ip-feedback error" role="alert">{t(error)}</p>}{notice&&<p className="ip-feedback success" role="status">{t(notice)}</p>}
       <div className="ip-canvases">
         <section className="ip-preview" aria-labelledby="ip-source-title">

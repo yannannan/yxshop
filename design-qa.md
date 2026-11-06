@@ -1,5 +1,12 @@
 # Design QA
 
+## 2026-11-06 Minimal image editor navigation
+
+- The user requests a cleaner sidebar without explanatory text. Keep the title, three available actions and return link. Remove the subtitle, navigation section label, footer note, planned placeholder and trailing selected arrow. Remove the top toolbar's instruction line as well.
+- Reduce the desktop sidebar to 216px, use a standalone title icon and consistent menu spacing, and use orange foregrounds on a navy selected surface. Retain the mobile horizontal menu and bilingual labels.
+- Two existing image UI/client checks and the production image-page check pass. Production build, component ESLint, CSS parsing and whitespace checks pass. Three key sidebar foreground/background pairs exceed 7 to 1 contrast.
+- Visual acceptance remains pending user review under the standing project workflow. Checks use isolated handlers and simulated data. Restore generated build files and preserve the user's existing generated-file changes.
+
 ## 2026-11-05 Image editor sidebar navigation
 
 - Use the user's latest sidebar screenshot as the target for refinement. Remove the enclosing title card and menu borders, align the standalone outline icons and labels, and add a quiet navigation label beneath the title divider.

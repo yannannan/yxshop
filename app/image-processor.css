@@ -1,43 +1,32 @@
-.ip-workspace{--ip-text:#203247;--ip-muted:#64748b;--ip-line:#e0e7ef;--ip-accent:#c64b18;--ip-ink:#182537;--ip-panel:#223247;--ip-dark-line:#3a4b61;--ip-on-dark:#f5f8fc;--ip-dark-muted:#b4c2d3;--ip-warm:#ffbf94;--ip-card-shadow:0 5px 18px #192b4010;--ip-preview-size:clamp(210px,44vh,460px);display:grid;grid-template-columns:230px minmax(0,1fr);min-height:calc(100vh - 72px);color:var(--ip-text);background:#f2f5f8;font-size:15px;line-height:1.65}
+.ip-workspace{--ip-text:#203247;--ip-muted:#64748b;--ip-line:#e0e7ef;--ip-accent:#c64b18;--ip-ink:#182537;--ip-panel:#223247;--ip-dark-line:#3a4b61;--ip-on-dark:#f5f8fc;--ip-dark-muted:#b4c2d3;--ip-warm:#ffbf94;--ip-card-shadow:0 5px 18px #192b4010;--ip-preview-size:clamp(210px,44vh,460px);display:grid;grid-template-columns:216px minmax(0,1fr);min-height:calc(100vh - 72px);color:var(--ip-text);background:#f2f5f8;font-size:15px;line-height:1.65}
 .ip-workspace *{box-sizing:border-box}.ip-workspace button,.ip-workspace input,.ip-workspace select{font:inherit}.ip-workspace button{cursor:pointer}.ip-workspace button:disabled{opacity:.5;cursor:default}.ip-workspace a{color:inherit;text-decoration:none}.ip-workspace svg{width:19px;height:19px;flex-shrink:0}.ip-workspace :is(button,a,input,select,summary):focus-visible{outline:2px solid #c64b18;outline-offset:3px}
 .ip-sidebar{
   position:sticky;top:72px;align-self:start;height:calc(100vh - 72px);overflow-y:auto;
   background:var(--ip-ink);color:var(--ip-on-dark);border-right:1px solid #25364b;
-  display:flex;flex-direction:column;padding:26px 16px 18px;scrollbar-width:thin;
+  display:flex;flex-direction:column;padding:24px 14px 16px;scrollbar-width:thin;
 }
 .ip-sidebar :is(a,button):focus-visible,.ip-topbar button:focus-visible{outline-color:var(--ip-warm)}
 .ip-brand{
-  display:flex;align-items:center;gap:11px;padding:0 3px 24px;margin:0 0 21px;
+  display:flex;align-items:center;gap:10px;padding:0 10px 22px;margin:0 0 16px;
   border-bottom:1px solid #ffffff12;
 }
-.ip-brand>svg{width:38px;height:38px;padding:9px;color:#ffb58a;background:#ff9b5814;border-radius:11px;stroke-width:1.6}
-.ip-brand>div{min-width:0}
-.ip-brand h1{font-size:18px;font-weight:650;letter-spacing:.01em;margin:0;line-height:1.45;overflow-wrap:anywhere}
-.ip-brand p{color:#9eafc3;font-size:11px;line-height:1.6;margin:5px 0 0}
-.ip-nav-label{font-size:11px;font-weight:500;letter-spacing:.08em;color:#93a5bb;margin:0 13px 11px}
+.ip-brand>svg{width:22px;height:22px;color:#ffb58a;stroke-width:1.6}
+.ip-brand h1{min-width:0;font-size:17px;font-weight:650;letter-spacing:.01em;margin:0;line-height:1.5;overflow-wrap:anywhere}
 .ip-sidebar nav{display:grid;gap:6px}
 .ip-sidebar nav button{
-  position:relative;display:grid;grid-template-columns:22px minmax(0,1fr) auto;align-items:center;gap:12px;min-height:48px;
-  padding:11px 13px;border:0;border-radius:9px;text-align:left;background:transparent;color:#c3cfdf;font-size:14px;
+  position:relative;display:grid;grid-template-columns:22px minmax(0,1fr);align-items:center;gap:12px;min-height:48px;
+  padding:11px 12px;border:0;border-radius:8px;text-align:left;background:transparent;color:#c3cfdf;font-size:14px;
   transition:background-color .15s ease,color .15s ease;
 }
 .ip-sidebar nav button>span:nth-child(2){overflow-wrap:anywhere}
 .ip-menu-icon{display:grid;place-items:center;width:22px;height:22px;color:#9fb0c5}
 .ip-menu-icon>svg{width:20px;height:20px;stroke-width:1.6}
-.ip-sidebar nav button>.ip-menu-arrow{width:14px;height:14px;visibility:hidden}
 .ip-sidebar nav button:hover:not(:disabled):not([aria-current]){background:#24354b;color:#f5f8fc}
-.ip-sidebar nav button[aria-current]{background:#fff0e4;color:#983b15;font-weight:650}
-.ip-sidebar nav button[aria-current]::before{content:"";position:absolute;left:0;top:14px;bottom:14px;width:3px;border-radius:0 3px 3px 0;background:#ee783d}
-.ip-sidebar nav button[aria-current] .ip-menu-icon{color:#b94b1d}
-.ip-sidebar nav button[aria-current]>.ip-menu-arrow{visibility:visible;color:#bb5325}
-.ip-sidebar nav .ip-menu-planned{margin-top:9px;padding-top:17px;border-top:1px solid #ffffff12;border-radius:0;color:#91a2b8;opacity:1}
-.ip-menu-planned .ip-menu-icon{color:#7c8ea7}
-.ip-sidebar nav button small{font-size:10px;line-height:1.5;padding:2px 6px;background:#26374b;color:#b3c1d2;border-radius:4px;white-space:nowrap}
-.ip-sidebar-end{margin-top:auto;padding-top:40px;display:grid;gap:18px}
-.ip-sidebar-note{padding:0 12px;color:#9eafc3}
-.ip-sidebar-note p{font-size:12px;font-weight:500;margin:0 0 6px;color:#c3cfdf}
-.ip-sidebar-note small{font-size:11px;line-height:1.85;display:block}
-.ip-sidebar .ip-return{display:flex;align-items:center;gap:9px;padding:14px 12px 2px;border-top:1px solid #ffffff12;font-size:13px;color:#afbed0}
+.ip-sidebar nav button[aria-current]{background:#2b3b4f;color:#ffbd98;font-weight:650}
+.ip-sidebar nav button[aria-current]::before{content:"";position:absolute;left:0;top:14px;bottom:14px;width:2px;border-radius:0 2px 2px 0;background:#ff9b63}
+.ip-sidebar nav button[aria-current] .ip-menu-icon{color:#ffbd98}
+.ip-sidebar-end{margin-top:auto;padding-top:24px}
+.ip-sidebar .ip-return{display:flex;align-items:center;gap:9px;padding:14px 12px 4px;border-top:1px solid #ffffff12;font-size:13px;color:#afbed0}
 .ip-sidebar .ip-return>svg{width:15px;height:15px}
 .ip-sidebar .ip-return:hover{color:#fff}
 .ip-main{min-width:0;width:100%;max-width:1600px;padding:24px 28px 28px;margin:0 auto}
@@ -46,9 +35,8 @@
   padding:12px 16px;margin-bottom:18px;border:1px solid var(--ip-dark-line);border-radius:12px;
   background:var(--ip-ink);color:var(--ip-on-dark);box-shadow:var(--ip-card-shadow);
 }
-.ip-topbar>div:first-child{display:flex;flex-direction:column;gap:2px;padding:0 3px;min-width:0}
+.ip-topbar>div:first-child{padding:0 3px;min-width:0}
 .ip-topbar strong{font-size:16px;line-height:1.35}
-.ip-topbar span{color:var(--ip-dark-muted);font-size:12px}
 .ip-tool-buttons{display:flex;gap:7px;flex-wrap:wrap}
 .ip-tool-buttons button{
   display:inline-flex;align-items:center;gap:7px;padding:7px 11px;min-height:36px;
@@ -128,8 +116,8 @@
 }
 @media(max-width:950px){
   .ip-workspace{grid-template-columns:184px minmax(0,1fr);--ip-preview-size:clamp(205px,42vh,380px)}
-  .ip-sidebar{padding:22px 10px 16px}.ip-brand{gap:8px;padding:0 3px 20px}.ip-brand>svg{width:32px;height:32px;padding:7px}.ip-brand h1{font-size:16px}
-  .ip-sidebar nav button{gap:9px;padding-left:10px;padding-right:10px}.ip-nav-label{margin-left:10px}
+  .ip-sidebar{padding:22px 10px 16px}.ip-brand{gap:8px;padding:0 8px 20px}.ip-brand>svg{width:20px;height:20px}.ip-brand h1{font-size:16px}
+  .ip-sidebar nav button{gap:9px;padding-left:10px;padding-right:10px}
   .ip-canvases{grid-template-columns:1fr}
   .ip-main{padding:17px 16px 22px}
 }
@@ -137,15 +125,15 @@
   .ip-workspace{display:block;--ip-preview-size:clamp(195px,43vh,335px)}
   .ip-sidebar{position:static;height:auto;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:9px;padding:10px 12px;border-right:0;border-bottom:1px solid var(--ip-dark-line)}
   .ip-brand{grid-column:1;grid-row:1;margin:0;padding:0;border:0;background:none}
-  .ip-brand>svg{width:31px;height:31px;padding:6px}.ip-brand h1{font-size:17px}.ip-brand p,.ip-nav-label,.ip-sidebar-note{display:none}
+  .ip-brand>svg{width:21px;height:21px}.ip-brand h1{font-size:17px}
   .ip-sidebar-end{grid-column:2;grid-row:1;margin:0;padding:0}
   .ip-sidebar .ip-return{padding:4px 5px;font-size:12px;border:0}
   .ip-sidebar nav{grid-column:1/-1;display:flex;gap:5px;overflow:auto;padding:2px 2px 4px}
   .ip-sidebar nav button{grid-template-columns:22px auto;white-space:nowrap;flex-shrink:0;padding:5px 8px;min-height:36px;font-size:12px;gap:5px}
-  .ip-menu-icon{width:22px;height:22px}.ip-menu-icon>svg{width:17px;height:17px}.ip-sidebar nav button small,.ip-sidebar nav button>.ip-menu-arrow{display:none}
-  .ip-sidebar nav button[aria-current]::before{display:none}.ip-sidebar nav .ip-menu-planned{margin:0;padding:5px 8px;border:0;border-radius:9px}
+  .ip-menu-icon{width:22px;height:22px}.ip-menu-icon>svg{width:17px;height:17px}
+  .ip-sidebar nav button[aria-current]::before{display:none}
   .ip-main{padding:12px 12px 16px}
-  .ip-topbar{gap:8px;margin-bottom:12px;padding:10px 12px}.ip-topbar span{display:none}
+  .ip-topbar{gap:8px;margin-bottom:12px;padding:10px 12px}
   .ip-tool-buttons{gap:5px}.ip-tool-buttons button{padding:6px 9px;font-size:12px;min-height:34px}
   .ip-canvases{gap:12px;margin-bottom:14px}
   .ip-preview-heading{padding:7px 10px;min-height:44px}.ip-panel-footer{padding:10px}
