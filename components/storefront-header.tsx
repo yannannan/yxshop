@@ -36,7 +36,6 @@ export function StorefrontHeader({ channel = 'mall', onNavigate, children, onSig
       <a href="/#channel-content" className={channel === 'mall' ? 'active' : ''} aria-current={channel === 'mall' ? 'location' : undefined} onClick={event => navigate(event, 'mall', 'content')}>{t("AI数字服务")}</a>
       <a href="/?channel=technical#channel-content" className={channel === 'technical' ? 'active' : ''} aria-current={channel === 'technical' ? 'location' : undefined} onClick={event => navigate(event, 'technical', 'content')}>{t("上门技术服务")}</a>
       <a href="/ai-leads" className={channel === 'ai-leads' ? 'active' : ''} aria-current={channel === 'ai-leads' ? 'page' : undefined}>{t("AI智能获客")}</a>
-      <a href="/ai-operations" className={channel === 'ai-operations' ? 'active' : ''} aria-current={channel === 'ai-operations' ? 'page' : undefined}>{t("AI运营工具")}</a>
     </nav>
     {children}<div className="storefront-account-actions"><LanguageSwitcher /><AccountMenu onSignIn={onSignIn} onSignedOut={onSignedOut} /></div>
   </header>;
