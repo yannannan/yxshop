@@ -38,10 +38,10 @@
 }
 .ds-modes button > span { min-width: 0; overflow-wrap: anywhere; }
 .ds-modes svg { width: 20px; height: 20px; color: #a3b4c7; stroke-width: 1.6; }
-.ds-modes button:hover:not(:disabled):not(:is([aria-pressed=true], [aria-expanded=true])) { background: #24354b; color: var(--ds-on-dark); }
-.ds-modes button:is([aria-pressed=true], [aria-expanded=true]) { background: #2b3b4f; color: var(--ds-warm); font-weight: 650; }
-.ds-modes button:is([aria-pressed=true], [aria-expanded=true]) svg { color: currentColor; }
-.ds-modes button:is([aria-pressed=true], [aria-expanded=true])::before {
+.ds-modes button:hover:not(:disabled):not([aria-pressed=true]) { background: #24354b; color: var(--ds-on-dark); }
+.ds-modes button[aria-pressed=true] { background: #2b3b4f; color: var(--ds-warm); font-weight: 650; }
+.ds-modes button[aria-pressed=true] svg { color: currentColor; }
+.ds-modes button[aria-pressed=true]::before {
   position: absolute; inset: 13px auto 13px 0; width: 2px; border-radius: 0 2px 2px 0; background: #ff9b63; content: "";
 }
 .ds-sidebar .ds-return {
@@ -58,12 +58,10 @@
 .ds-toolbar {
   justify-content: space-between; flex-wrap: wrap; min-height: 54px; margin-bottom: 16px; padding: 8px 16px;
   border: 1px solid var(--ds-line); border-radius: 11px; background: #fff;
+  scroll-margin-top: calc(var(--ds-topbar-height) + 12px);
 }
 .ds-toolbar h2 { margin: 0; font-size: 17px; font-weight: 650; }
 .ds-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 320px); align-items: start; gap: 18px; }
-.ds-layout.ds-layout-with-stamp { grid-template-columns: minmax(0, 1fr) minmax(320px, 410px); }
-.ds-side { display: grid; gap: 14px; min-width: 0; }
-.ds-stamp-maker-heading { scroll-margin-top: calc(var(--ds-topbar-height) + 12px); }
 .ds-panel { min-width: 0; overflow: hidden; border: 1px solid var(--ds-line); border-radius: 12px; background: #fff; box-shadow: 0 4px 16px #2133480b; }
 .ds-panel-heading { justify-content: space-between; flex-wrap: wrap; min-height: 50px; padding: 8px 16px; background: var(--ds-panel-bar); color: var(--ds-on-dark); }
 .ds-panel-heading h3 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 15px; font-weight: 650; }
@@ -71,7 +69,7 @@
 .ds-panel-heading > span { padding: 3px 7px; border-radius: 5px; background: #ffffff12; color: #d5e0ed; font-size: 12px; }
 .ds-panel-body { padding: 16px; }
 .ds-form-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px; margin-bottom: 14px; }
-.ds-workspace label { display: grid; gap: 6px; min-width: 0; color: var(--ds-muted); font-size: 13px; }
+.ds-layout label { display: grid; gap: 6px; min-width: 0; color: var(--ds-muted); font-size: 13px; }
 .ds-form-row input { min-width: 0; width: 100%; min-height: 40px; padding: 7px 10px; border: 1px solid var(--ds-line); border-radius: 7px; color: var(--ds-ink); background: #fafcfe; }
 .ds-form-row input[type=color] { min-width: 54px; padding: 4px 6px; }
 .ds-draw-surface { position: relative; overflow: hidden; border: 1px dashed #b7c9dc; border-radius: 9px; background: #f8fafc; }
@@ -145,10 +143,9 @@
   .ds-sidebar { padding-inline: 10px; }
   .ds-main { padding: 18px 16px 24px; }
   .ds-layout { grid-template-columns: minmax(0, 1fr) minmax(225px, 260px); gap: 12px; }
-  .ds-layout.ds-layout-with-stamp { grid-template-columns: minmax(0, 1fr) minmax(300px, 340px); }
 }
 @media (max-width: 900px) {
-  .ds-layout, .ds-layout.ds-layout-with-stamp { grid-template-columns: minmax(0, 1fr); }
+  .ds-layout { grid-template-columns: minmax(0, 1fr); }
   .ds-library-list { max-height: 230px; }
 }
 @media (max-width: 800px) {
@@ -161,7 +158,7 @@
   .ds-brand h1 { font-size: 15px; }
   .ds-modes { grid-column: 1 / -1; grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .ds-modes button { min-height: 40px; padding: 6px 8px; gap: 7px; font-size: 13px; }
-  .ds-modes button:is([aria-pressed=true], [aria-expanded=true])::before { display: none; }
+  .ds-modes button[aria-pressed=true]::before { display: none; }
   .ds-sidebar .ds-return { grid-column: 2; grid-row: 1; margin: 0; padding: 6px 4px; border: 0; }
   .ds-main { padding: 12px; }
 }

@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState, type DragEvent, type PointerEvent } from 'react';
 import {
   ArrowDownTrayIcon, ArrowLeftIcon, ArrowPathIcon, ArrowUpTrayIcon, ChevronLeftIcon, ChevronRightIcon,
-  CheckBadgeIcon, ClockIcon, DocumentCheckIcon, DocumentTextIcon, PencilSquareIcon, PlusIcon, RectangleStackIcon, TrashIcon, XMarkIcon,
+  CheckBadgeIcon, ClockIcon, DocumentCheckIcon, DocumentTextIcon, PencilSquareIcon, PlusIcon, RectangleStackIcon, TrashIcon,
 } from '@heroicons/react/24/outline';
 import type { RenderTask } from 'pdfjs-dist';
 import { useI18n } from './language-provider';
@@ -21,6 +21,7 @@ import {
 import type { ToolService } from '../lib/tool-services';
 
 type Placement = SignaturePlacement & { key: string };
+type WorkspaceMode = SignatureAction | 'stamp';
 type SigningChoice = Pick<SavedSignature, 'id' | 'name' | 'width' | 'height' | 'previewUrl'> & Pick<SignaturePlacement, 'asset'>;
 type PageSize = { page: number; width: number; height: number };
 const clamp = (value: number, max: number) => Math.max(0, Math.min(max, value));
@@ -64,7 +65,7 @@ export function DocumentSignature({ tool, stampTool }: SignatureEditorProps) {
 
 function SignatureEditor({ tool, stampTool }: SignatureEditorProps) {
   const { t, locale } = useI18n();
-  const [mode, setMode] = useState<SignatureAction>('create');
+  const [mode, setMode] = useState<WorkspaceMode>('create');
   const [access, setAccess] = useState<SignatureAccess | null>(null);
   const [busy, setBusy] = useState(false);
   const [fileLoading, setFileLoading] = useState('');
@@ -81,8 +82,7 @@ function SignatureEditor({ tool, stampTool }: SignatureEditorProps) {
   const [placements, setPlacements] = useState<Placement[]>([]);
   const [activeKey, setActiveKey] = useState('');
   const [result, setResult] = useState<SignedDocument | null>(null);
-  const [stampPanel, setStampPanel] = useState<'unopened' | 'open' | 'closed'>('unopened');
-  const stampMakerOpen = stampPanel === 'open';
+  const [stampVisited, setStampVisited] = useState(false);
   const penCanvas = useRef<HTMLCanvasElement>(null);
   const draft = useRef<ImageData | null>(null);
   const preview = useRef<HTMLCanvasElement>(null);
@@ -94,8 +94,7 @@ function SignatureEditor({ tool, stampTool }: SignatureEditorProps) {
   const operation = useRef<AbortController | null>(null);
   const taskIds = useRef({ create: '', sign: '' });
   const stampReload = useRef<AbortController | null>(null);
-  const stampMakerHeading = useRef<HTMLDivElement>(null);
-  const stampMenu = useRef<HTMLButtonElement>(null);
+  const toolbar = useRef<HTMLElement>(null);
 
   async function refresh(signal: AbortSignal) {
     const data = await signatureAccess(signal);
@@ -115,12 +114,6 @@ function SignatureEditor({ tool, stampTool }: SignatureEditorProps) {
   }, []);
 
   useEffect(() => () => { if (source) disposeSignatureSource(source); }, [source]);
-  useEffect(() => {
-    if (!stampMakerOpen) return;
-    stampMakerHeading.current?.focus({ preventScroll: true });
-    stampMakerHeading.current?.scrollIntoView({ block: 'nearest' });
-  }, [stampMakerOpen]);
-
   useEffect(() => {
     if (mode !== 'create' || !draft.current) return;
     penCanvas.current?.getContext('2d')?.putImageData(draft.current, 0, 0);
@@ -179,14 +172,17 @@ function SignatureEditor({ tool, stampTool }: SignatureEditorProps) {
     }
   }
 
-  function switchMode(next: SignatureAction) {
+  function switchMode(next: WorkspaceMode) {
+    if (mode === next) return;
     if (mode === 'create' && hasInk) {
       const canvas = penCanvas.current;
       draft.current = canvas?.getContext('2d')?.getImageData(0, 0, canvas.width, canvas.height) ?? null;
     }
     setError('');
     setNotice('');
+    if (next === 'stamp') setStampVisited(true);
     setMode(next);
+    toolbar.current?.scrollIntoView({ block: 'nearest' });
   }
 
   function draw(event: PointerEvent<HTMLCanvasElement>, start: boolean) {
@@ -396,7 +392,8 @@ function SignatureEditor({ tool, stampTool }: SignatureEditorProps) {
     switchMode('sign');
   }
 
-  function loadCreatedStamp(id: string) {
+  function syncStamp(id: string, useInDocument = false) {
+    if (useInDocument) switchMode('sign');
     stampReload.current?.abort();
     const request = new AbortController();
     stampReload.current = request;
@@ -406,7 +403,7 @@ function SignatureEditor({ tool, stampTool }: SignatureEditorProps) {
       if (data.stamps.some(stamp => stamp.id === id)) {
         setAssetType('stamp');
         setSelectedAssetKey(signingAssetKey({ asset: 'stamp', signatureId: id }));
-        setNotice('新印章已加入素材列表');
+        if (useInDocument) setNotice('新印章已加入素材列表');
       }
     }).catch(reason => { if (!request.signal.aborted) setError(reason.message); });
   }
@@ -429,8 +426,8 @@ function SignatureEditor({ tool, stampTool }: SignatureEditorProps) {
           {action === 'create' ? <PencilSquareIcon aria-hidden="true" /> : <DocumentTextIcon aria-hidden="true" />}
           <span>{t(signatureActions[action])}</span>
         </button>)}
-        {stampTool && <button ref={stampMenu} type="button" aria-controls="ds-stamp-maker" aria-expanded={stampMakerOpen}
-          onClick={() => setStampPanel(stampMakerOpen ? 'closed' : 'open')}>
+        {stampTool && <button type="button" aria-controls="ds-stamp-maker" aria-pressed={mode === 'stamp'}
+          disabled={busy} onClick={() => switchMode('stamp')}>
           <CheckBadgeIcon aria-hidden="true" /><span>{t('印章制作')}</span>
         </button>}
       </nav>
@@ -440,18 +437,18 @@ function SignatureEditor({ tool, stampTool }: SignatureEditorProps) {
       if (event.key !== 'Delete' || event.repeat || event.defaultPrevented || event.nativeEvent.isComposing ||
         event.ctrlKey || event.altKey || event.metaKey || event.shiftKey || mode !== 'sign' || !activePlacement || busy) return;
       const target = event.target;
-      if (target instanceof HTMLElement && (target.isContentEditable || target.closest('#ds-stamp-maker, input:not([type=range]), textarea, select'))) return;
+      if (target instanceof HTMLElement && (target.isContentEditable || target.closest('input:not([type=range]), textarea, select'))) return;
       event.preventDefault();
       removePlacement();
     }}>
-      <header className="ds-toolbar">
-        <h2 id="ds-mode-title">{t(signatureActions[mode])}</h2>
-        {access?.signedIn && <a className="ds-secondary" href="/account/activity"><ClockIcon aria-hidden="true" />{t('工具记录')}</a>}
+      <header className="ds-toolbar" ref={toolbar}>
+        <h2 id="ds-mode-title">{t(mode === 'stamp' ? '印章制作' : signatureActions[mode])}</h2>
+        {access?.signedIn && <a className="ds-secondary" href={mode === 'stamp' ? '/account/activity?filter=stamp' : '/account/activity'}><ClockIcon aria-hidden="true" />{t('工具记录')}</a>}
       </header>
       {error && <p className="ds-feedback ds-error" role="alert">{t(error)}</p>}
       {notice && <p className="ds-feedback ds-success" role="status">{t(notice)}</p>}
 
-      <div className={`ds-layout${stampMakerOpen ? ' ds-layout-with-stamp' : ''}`}>
+      {mode !== 'stamp' && <div className="ds-layout">
         {mode === 'create' ? (
           <section className="ds-panel" aria-labelledby="ds-draw-heading">
             <div className="ds-panel-heading"><h3 id="ds-draw-heading"><PencilSquareIcon aria-hidden="true" />{t('签名画板')}</h3>
@@ -543,70 +540,60 @@ function SignatureEditor({ tool, stampTool }: SignatureEditorProps) {
             </button>}
           </section>
         )}
-        <div className="ds-side">
-          {stampTool && <section id="ds-stamp-maker" className="ds-panel" hidden={!stampMakerOpen} aria-labelledby="ds-stamp-maker-title">
-            {stampPanel !== 'unopened' && <>
-              <div className="ds-panel-heading ds-stamp-maker-heading" ref={stampMakerHeading} tabIndex={-1}>
-                <h3 id="ds-stamp-maker-title"><CheckBadgeIcon aria-hidden="true" />{t('印章制作')}</h3>
-                <button className="ds-icon-button" type="button" aria-label={t('收起印章制作')} onClick={() => {
-                  setStampPanel('closed');
-                  stampMenu.current?.focus({ preventScroll: true });
-                }}><XMarkIcon aria-hidden="true" /></button>
+        {mode === 'create' ? (
+          <aside className="ds-panel">
+            <div className="ds-panel-heading"><h3><RectangleStackIcon aria-hidden="true" />{t('签名库')}</h3><span>{signatures.length} / {signatureLimits.savedSignatures}</span></div>
+            <div className="ds-panel-body"><SigningAssetList items={signatures} busy={busy} onChoose={chooseLibrarySignature} onRemove={removeSignature} /></div>
+          </aside>
+        ) : (
+          <aside className="ds-panel">
+            <div className="ds-panel-heading"><h3><DocumentCheckIcon aria-hidden="true" />{t('选择签名或印章')}</h3></div>
+            <div className="ds-panel-body ds-placement-settings">
+              <div className="ds-asset-tabs" role="group" aria-label={t('选择签名或印章')}>
+                <button type="button" disabled={busy} aria-pressed={assetType === 'signature'} onClick={() => setAssetType('signature')}>{t('签名')}</button>
+                <button type="button" disabled={busy} aria-pressed={assetType === 'stamp'} onClick={() => setAssetType('stamp')}>{t('印章')}</button>
               </div>
-              <StampMaker tool={stampTool} onCreated={loadCreatedStamp} />
-            </>}
-          </section>}
-          {mode === 'create' ? (
-            <aside className="ds-panel">
-              <div className="ds-panel-heading"><h3><RectangleStackIcon aria-hidden="true" />{t('签名库')}</h3><span>{signatures.length} / {signatureLimits.savedSignatures}</span></div>
-              <div className="ds-panel-body"><SigningAssetList items={signatures} busy={busy} onChoose={chooseLibrarySignature} onRemove={removeSignature} /></div>
-            </aside>
-          ) : (
-            <aside className="ds-panel">
-              <div className="ds-panel-heading"><h3><DocumentCheckIcon aria-hidden="true" />{t('选择签名或印章')}</h3></div>
-              <div className="ds-panel-body ds-placement-settings">
-                <div className="ds-asset-tabs" role="group" aria-label={t('选择签名或印章')}>
-                  <button type="button" disabled={busy} aria-pressed={assetType === 'signature'} onClick={() => setAssetType('signature')}>{t('签名')}</button>
-                  <button type="button" disabled={busy} aria-pressed={assetType === 'stamp'} onClick={() => setAssetType('stamp')}>{t('印章')}</button>
-                </div>
-                {assetType === 'stamp' && stampTool && !stampMakerOpen && <button type="button" className="ds-secondary"
-                  aria-controls="ds-stamp-maker" onClick={() => setStampPanel('open')}>
-                    <CheckBadgeIcon aria-hidden="true" />{t('印章制作')}
-                </button>}
-                {assetType === 'stamp' && !stamps.length ? <p className="ds-empty-copy">{t('暂无已保存的印章')}</p>
-                  : <SigningAssetList items={choices} busy={busy} draggable={Boolean(pageSize)} selectedKey={currentAsset && choiceKey(currentAsset)}
-                  onChoose={item => setSelectedAssetKey(choiceKey(item))} />}
-                <p>{t('点击素材后在页面上放置，也可以直接拖入页面。')}</p>
-                <button className="ds-secondary" type="button" disabled={busy || !pageSize || !currentAsset || placements.length >= signatureLimits.placements}
-                  onClick={() => place(.5, .5)}><PlusIcon aria-hidden="true" />{t('在页面中央放置')}</button>
-                {activePlacement && <div className="ds-position">
-                  <label>{t(activePlacement.asset === 'stamp' ? '印章大小' : '签名大小')}<input type="range" min=".1" max="100" step=".1" disabled={busy}
-                    value={activePlacement.width * 100} onChange={event => resizePlacement(activePlacement, Number(event.target.value) / 100)} /></label>
-                  <label>{t('横向位置')}<input type="range" min="0" max={(1 - activePlacement.width) * 100} step=".1" disabled={busy}
-                    value={activePlacement.x * 100} onChange={event => movePlacement(activeKey, Number(event.target.value) / 100, activePlacement.y)} /></label>
-                  <label>{t('纵向位置')}<input type="range" min="0" max={(1 - activePlacement.height) * 100} step=".1" disabled={busy}
-                    value={activePlacement.y * 100} onChange={event => movePlacement(activeKey, activePlacement.x, Number(event.target.value) / 100)} /></label>
-                  <button className="ds-secondary" type="button" disabled={busy} onClick={removePlacement} aria-keyshortcuts="Delete">
-                    <TrashIcon aria-hidden="true" />{t('移除选中项')}<kbd className="ds-key">Delete</kbd>
-                  </button>
-                </div>}
-                <div className="ds-summary">
-                  <span>{t('已放置')} <b>{placements.length}</b></span>{priceNote('sign')}
-                </div>
-                <p>{t(access?.wordReady === false ? 'PDF 输出 PDF，图片输出 PNG。成品保留7天。' : 'PDF 和 DOCX 输出 PDF，图片输出 PNG。成品保留7天。')}</p>
-                {access && !access.storageReady && <p className="ds-error">{t('签署文件云存储暂未配置')}</p>}
-                {result ? <a className="ds-primary" href={result.downloadUrl} download><ArrowDownTrayIcon aria-hidden="true" />{t('下载签署文件')}</a>
-                  : access?.signedIn ? <button type="button" className="ds-primary"
-                    disabled={busy || !source || !placements.length || !access.storageReady || !canRun} onClick={signDocument}>
-                    <DocumentCheckIcon aria-hidden="true" />{t(busy ? '正在处理…' : '生成签署文件')}
-                  </button> : signIn}
+              {assetType === 'stamp' && stampTool && <button type="button" className="ds-secondary" disabled={busy}
+                aria-controls="ds-stamp-maker" onClick={() => switchMode('stamp')}>
+                  <CheckBadgeIcon aria-hidden="true" />{t('印章制作')}
+              </button>}
+              {assetType === 'stamp' && !stamps.length ? <p className="ds-empty-copy">{t('暂无已保存的印章')}</p>
+                : <SigningAssetList items={choices} busy={busy} draggable={Boolean(pageSize)} selectedKey={currentAsset && choiceKey(currentAsset)}
+                onChoose={item => setSelectedAssetKey(choiceKey(item))} />}
+              <p>{t('点击素材后在页面上放置，也可以直接拖入页面。')}</p>
+              <button className="ds-secondary" type="button" disabled={busy || !pageSize || !currentAsset || placements.length >= signatureLimits.placements}
+                onClick={() => place(.5, .5)}><PlusIcon aria-hidden="true" />{t('在页面中央放置')}</button>
+              {activePlacement && <div className="ds-position">
+                <label>{t(activePlacement.asset === 'stamp' ? '印章大小' : '签名大小')}<input type="range" min=".1" max="100" step=".1" disabled={busy}
+                  value={activePlacement.width * 100} onChange={event => resizePlacement(activePlacement, Number(event.target.value) / 100)} /></label>
+                <label>{t('横向位置')}<input type="range" min="0" max={(1 - activePlacement.width) * 100} step=".1" disabled={busy}
+                  value={activePlacement.x * 100} onChange={event => movePlacement(activeKey, Number(event.target.value) / 100, activePlacement.y)} /></label>
+                <label>{t('纵向位置')}<input type="range" min="0" max={(1 - activePlacement.height) * 100} step=".1" disabled={busy}
+                  value={activePlacement.y * 100} onChange={event => movePlacement(activeKey, activePlacement.x, Number(event.target.value) / 100)} /></label>
+                <button className="ds-secondary" type="button" disabled={busy} onClick={removePlacement} aria-keyshortcuts="Delete">
+                  <TrashIcon aria-hidden="true" />{t('移除选中项')}<kbd className="ds-key">Delete</kbd>
+                </button>
+              </div>}
+              <div className="ds-summary">
+                <span>{t('已放置')} <b>{placements.length}</b></span>{priceNote('sign')}
               </div>
-            </aside>
-          )}
-        </div>
-      </div>
+              <p>{t(access?.wordReady === false ? 'PDF 输出 PDF，图片输出 PNG。成品保留7天。' : 'PDF 和 DOCX 输出 PDF，图片输出 PNG。成品保留7天。')}</p>
+              {access && !access.storageReady && <p className="ds-error">{t('签署文件云存储暂未配置')}</p>}
+              {result ? <a className="ds-primary" href={result.downloadUrl} download><ArrowDownTrayIcon aria-hidden="true" />{t('下载签署文件')}</a>
+                : access?.signedIn ? <button type="button" className="ds-primary"
+                  disabled={busy || !source || !placements.length || !access.storageReady || !canRun} onClick={signDocument}>
+                  <DocumentCheckIcon aria-hidden="true" />{t(busy ? '正在处理…' : '生成签署文件')}
+                </button> : signIn}
+            </div>
+          </aside>
+        )}
+      </div>}
 
-      {Boolean(access?.documents.length) && <section className="ds-panel ds-history">
+      {stampTool && <section id="ds-stamp-maker" hidden={mode !== 'stamp'} aria-labelledby="ds-mode-title">
+        {stampVisited && <StampMaker tool={stampTool} onStampReady={syncStamp} />}
+      </section>}
+
+      {mode !== 'stamp' && Boolean(access?.documents.length) && <section className="ds-panel ds-history">
         <div className="ds-panel-heading"><h3><ClockIcon aria-hidden="true" />{t('最近签署文件')}</h3><span>{t('重复下载不扣积分')}</span></div>
         <ul>{access?.documents.map(file => <li key={file.id}>
           <div><strong>{file.name}</strong><small>{(file.bytes / 1024).toFixed(0)} KB · {t('有效期至')} {new Date(file.expiresAt).toLocaleString(locale)}</small></div>

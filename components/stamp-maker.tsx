@@ -32,9 +32,12 @@ function entitlementText(access: StampAccess | null) {
   return `${access.membershipName || toolBillingLabels[(access.cycle || 'once') as keyof typeof toolBillingLabels]}权益生效中`;
 }
 
-export function StampMaker({ tool, onCreated }: { tool: ToolService; onCreated?: (id: string) => void }) {
+export function StampMaker({ tool, onStampReady }: {
+  tool: ToolService;
+  onStampReady?: (id: string, useInDocument?: boolean) => void;
+}) {
   const { locale, t } = useI18n();
-  const embedded = Boolean(onCreated);
+  const inSignatureTool = Boolean(onStampReady);
   const [options, setOptions] = useState(defaultStampOptions);
   const [preview, setPreview] = useState('/stamp-previews/circle.png');
   const [previewBusy, setPreviewBusy] = useState(false);
@@ -74,14 +77,14 @@ export function StampMaker({ tool, onCreated }: { tool: ToolService; onCreated?:
   }, []);
   useEffect(() => { const timer = window.setTimeout(() => void refresh(), 0); return () => window.clearTimeout(timer); }, [refresh]);
   useEffect(() => {
-    if (embedded) return;
+    if (inSignatureTool) return;
     const id = new URLSearchParams(window.location.search).get('result');
     const controller = new AbortController();
     if (id) void savedStamp(id, controller.signal).then(stamp => {
       if (!controller.signal.aborted) { setResult(stamp); setMessageSuccess(true); setMessage('已打开已制作的成品，重复下载不扣次。'); }
     }).catch(error => { if (!controller.signal.aborted) setMessage((error as Error).message || '成品读取失败'); });
     return () => controller.abort();
-  }, [embedded]);
+  }, [inSignatureTool]);
   useEffect(() => {
     if (!signature) return;
     const controller = new AbortController();
@@ -109,7 +112,7 @@ export function StampMaker({ tool, onCreated }: { tool: ToolService; onCreated?:
 
   function update(patch: Partial<StampOptions>) { setOptions(previous => { const next = { ...previous, ...patch }; return next.format === 'jpeg' ? { ...next, background: 'white' } : next; }); setMessage(''); setRetryPending(false); }
   async function generate() {
-    if (working.current || !normalized || (embedded && !access?.signedIn) || (!access?.canGenerate && !retryPending)) return;
+    if (working.current || !normalized || (inSignatureTool && !access?.signedIn) || (!access?.canGenerate && !retryPending)) return;
     working.current = true; setBusy(true); setMessage(''); setMessageSuccess(false);
     if (!request.current || request.current.signature !== signature) request.current = { id: crypto.randomUUID(), signature };
     try {
@@ -117,7 +120,7 @@ export function StampMaker({ tool, onCreated }: { tool: ToolService; onCreated?:
       const data = await response.json() as { result?: StampResult; message?: string };
       if (!response.ok || !data.result) { setRetryPending(response.status >= 500); setMessage(data.message || '制作失败，请重试'); return; }
       setResult({ ...data.result, signature });
-      if (access?.signedIn) onCreated?.(data.result.id);
+      if (access?.signedIn) onStampReady?.(data.result.id);
       notifyAccountChanged();
       setRetryPending(false);
       setMessageSuccess(true);
@@ -161,7 +164,7 @@ export function StampMaker({ tool, onCreated }: { tool: ToolService; onCreated?:
         <label>{t("图片背景")}<select value={options.background} disabled={options.format === 'jpeg'} onChange={event => update({ background: event.target.value as StampOptions['background'] })}><option value="transparent">{t("透明背景")}</option><option value="white">{t("白色背景")}</option></select></label>
       </fieldset>
       <div className="stamp-export-action">
-        {embedded && access && !access.signedIn ?
+        {inSignatureTool && access && !access.signedIn ?
           <Link className="stamp-create-button" href={accountLoginHref(toolPagePath('document-signature'))}>{t('登录后使用')}</Link>
           : access && ['paid', 'points'].includes(access.chargeType) && !access.canGenerate && !retryPending ?
             <Link className="stamp-create-button" href={buyHref}>{t(access.chargeType === 'points' ? access.signedIn ? '充值积分' : '登录领取积分' : access.signedIn ? '购买 / 续购套餐' : '登录并购买套餐')} <span>↗</span></Link>
@@ -193,7 +196,7 @@ export function StampMaker({ tool, onCreated }: { tool: ToolService; onCreated?:
   const resultCard = result && <div className="stamp-panel stamp-result" ref={resultPanel} tabIndex={-1} aria-labelledby="stamp-result-title">
     <div><span className="stamp-success-icon">✓</span><div><h2 id="stamp-result-title">{t(result.signature ? '你的印章已制作完成' : '已打开的印章成品')}</h2><p>{t(result.size)} × {t(result.size)} px · {t(resultFormat.label)}{t(result.signature && !sameResult ? ' · 这是修改参数前的成品' : '')}</p></div></div>
     <Image unoptimized src={result.image} alt={t("已制作的高清印章成品")} width={160} height={160} />
-    {onCreated && <button className="stamp-history-open stamp-embedded-use" type="button" onClick={() => onCreated(result.id)}>{t('使用此印章')}</button>}
+    {onStampReady && <button className="stamp-history-open stamp-signature-use" type="button" onClick={() => onStampReady(result.id, true)}>{t('使用此印章')}</button>}
     <a className="stamp-download-button" href={result.image} download={`yxstar-stamp-${result.id}.${resultFormat.extension}`}>{t("下载 ")}{t(resultFormat.label)} <span>↓</span></a>
     <small>{t("重复下载此成品不会扣次。修改参数并重新制作属于一次新的处理。")}</small>
   </div>;
@@ -203,23 +206,7 @@ export function StampMaker({ tool, onCreated }: { tool: ToolService; onCreated?:
     {tool.chargeType === 'paid' && <section className="stamp-panel stamp-plan-panel"><h2>{t("选择工具套餐")}</h2><p>{t("支付核验后，回到本页刷新权益。")}</p><div className="stamp-plan-options">{tool.plans.map(plan => <label key={toolPlanKey(plan)} className={selectedPlan === toolPlanKey(plan) ? 'selected' : ''}><input type="radio" name="stamp-plan" checked={selectedPlan === toolPlanKey(plan)} onChange={() => setSelectedPlan(toolPlanKey(plan))} /><span>{t(toolPlanLabel(plan))}</span><b>{t(toolPlanPrice(plan))}</b></label>)}</div><Link href={buyHref}>{t("查看套餐与支付方式 →")}</Link></section>}
   </>;
 
-  if (embedded) return <div className="stamp-embedded">
-    {previewPanel}
-    {settingsPanel}
-    <details className="stamp-embedded-details">
-      <summary>{t("颜色与排版")}</summary>
-      {layoutPanel}
-    </details>
-    {exportPanel}
-    {resultCard}
-    {purchasePanel}
-  </div>;
-
-  return <main className="stamp-page">
-    {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- 工具跨页入口使用原生导航，避免客户端路由异常时点击无反应。 */}
-    <nav className="stamp-breadcrumb" aria-label={t("面包屑")}><a href="/">{t("商城首页")}</a><span>／</span><a href="/tools">{t("工具服务")}</a><span>／</span><span>{t(tool.name)}</span></nav>
-    <header className="stamp-heading"><div><span className="stamp-kicker">YXSTAR CREATIVE TOOLS</span><h1>{t(tool.name)}</h1><p>{t("选一个样式，写下你的文字。让每一枚印章，都有自己的表达。")}</p></div><div className="stamp-help"><span>{t("简单三步，完成制作")}</span><ol><li><b>{t("选择样式")}</b><p>{t("从经典圆章、椭圆、方章或姓名章开始。")}</p></li><li><b>{t("调整文字")}</b><p>{t("编辑文字、配色与排版，查看实时效果。")}</p></li><li><b>{t("制作并下载")}</b><p>{t("生成高清 PNG，透明背景便于使用。")}</p></li></ol></div><div className="stamp-feature-pills"><span>PNG · JPG · SVG</span><span>{t("最高 4096 像素")}</span><span>{t("预览不扣次")}</span><a className="stamp-history-jump" href="#stamp-history">{t("印章制作记录")}</a></div></header>
-
+  const workspace = (
     <div className="stamp-workspace">
       {settingsPanel}
 
@@ -259,9 +246,19 @@ export function StampMaker({ tool, onCreated }: { tool: ToolService; onCreated?:
         {t(layoutPanel)}
         {purchasePanel}
         {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- 工具跨页入口使用原生导航，避免客户端路由异常时点击无反应。 */}
-        <a className="stamp-back-tools" href="/tools">{t("← 发现更多实用工具")}</a>
+        {!inSignatureTool && <a className="stamp-back-tools" href="/tools">{t("← 发现更多实用工具")}</a>}
       </aside>
     </div>
+  );
+
+  if (inSignatureTool) return <div className="stamp-signature-view">{workspace}</div>;
+
+  return <main className="stamp-page">
+    {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- 工具跨页入口使用原生导航，避免客户端路由异常时点击无反应。 */}
+    <nav className="stamp-breadcrumb" aria-label={t("面包屑")}><a href="/">{t("商城首页")}</a><span>／</span><a href="/tools">{t("工具服务")}</a><span>／</span><span>{t(tool.name)}</span></nav>
+    <header className="stamp-heading"><div><span className="stamp-kicker">YXSTAR CREATIVE TOOLS</span><h1>{t(tool.name)}</h1><p>{t("选一个样式，写下你的文字。让每一枚印章，都有自己的表达。")}</p></div><div className="stamp-help"><span>{t("简单三步，完成制作")}</span><ol><li><b>{t("选择样式")}</b><p>{t("从经典圆章、椭圆、方章或姓名章开始。")}</p></li><li><b>{t("调整文字")}</b><p>{t("编辑文字、配色与排版，查看实时效果。")}</p></li><li><b>{t("制作并下载")}</b><p>{t("生成高清 PNG，透明背景便于使用。")}</p></li></ol></div><div className="stamp-feature-pills"><span>PNG · JPG · SVG</span><span>{t("最高 4096 像素")}</span><span>{t("预览不扣次")}</span><a className="stamp-history-jump" href="#stamp-history">{t("印章制作记录")}</a></div></header>
+
+    {workspace}
     <section className="stamp-about"><h2>{t("关于印章在线制作")}</h2><p>{t("在浏览器中设计印章图片，支持圆形、椭圆形、方形和个人姓名章。调整名称、辅助文字、边框与颜色，导出 PNG、JPG 图片或文字已转为轮廓的 SVG 矢量文件。")}</p>{tool.detail && !tool.detail.includes('实际工具入口') && <p>{tool.detail}</p>}<div><article><h3>{t("预览会消耗积分吗？")}</h3><p>{t("不会。修改文字、颜色和样式可以免费预览；成功生成成品后才消耗积分或按次权益。")}</p></article><article><h3>{t("包月、包年如何使用？")}</h3><p>{t("沿用本工具后台配置的套餐及价格，在有效期内使用；有效时长权益优先于按次权益。")}</p></article><article><h3>{t("下载失败怎么办？")}</h3><p>{t("登录后制作的成品保存在印章制作记录中，重新打开和下载均免费。")}</p></article></div></section>
   </main>;
 }

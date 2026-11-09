@@ -41,33 +41,19 @@
 .stamp-history-open:disabled { opacity: .5; }
 .stamp-history-empty { margin: 0; padding: 24px 0; text-align: center; }
 .stamp-history-empty p { margin: 0 0 8px; }
-.stamp-embedded {
-  display: grid; align-content: start; gap: 10px; max-height: min(65dvh, 680px);
-  overflow-y: auto; padding: 12px; background: #f2f5f8; scrollbar-width: thin;
+.stamp-signature-view { container: stamp-signature / inline-size; }
+.stamp-signature-view .stamp-workspace { grid-template-columns: minmax(240px, 300px) minmax(0, 1fr) minmax(230px, 270px); }
+.stamp-signature-use { display: block; max-width: 260px; width: 100%; margin: 0 auto 10px; }
+@container stamp-signature (max-width: 980px) {
+  .stamp-signature-view .stamp-workspace { grid-template-columns: minmax(230px, 265px) minmax(0, 1fr); }
+  .stamp-signature-view .stamp-sidebar { grid-column: 1 / -1; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+  .stamp-signature-view .stamp-layout-panel { grid-column: 1 / -1; }
+  .stamp-signature-view .stamp-layout-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .stamp-signature-view .stamp-preview-stage { min-height: 340px; }
 }
-.stamp-embedded .stamp-panel { min-width: 0; border-radius: 10px; }
-.stamp-embedded .stamp-panel-heading { min-height: 44px; padding: 9px 12px; }
-.stamp-embedded .stamp-step, .stamp-embedded .stamp-templates small { display: none; }
-.stamp-embedded .stamp-preview-stage { min-height: 170px; margin: 10px; padding-bottom: 36px; }
-.stamp-embedded .stamp-preview-stage > img { max-width: 138px; }
-.stamp-embedded .stamp-preview-caption { bottom: 6px; }
-.stamp-embedded .stamp-preview-footer { padding: 0 10px 10px; }
-.stamp-embedded .stamp-fields { min-width: 0; padding: 12px; }
-.stamp-embedded .stamp-templates { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; }
-.stamp-embedded .stamp-templates button { padding: 6px 2px; }
-.stamp-embedded .stamp-templates img { width: 42px; height: 42px; }
-.stamp-embedded .stamp-templates b { font-size: 10px; overflow-wrap: anywhere; }
-.stamp-embedded .stamp-form-section { margin-top: 12px; padding-top: 12px; }
-.stamp-embedded .stamp-layout-grid { grid-template-columns: minmax(0, 1fr); gap: 12px; }
-.stamp-embedded-details > summary {
-  padding: 10px 12px; border: 1px solid #dce5ef; border-radius: 8px; background: #fff;
-  font-size: 13px; font-weight: 650; cursor: pointer;
+@container stamp-signature (max-width: 680px) {
+  .stamp-signature-view .stamp-workspace, .stamp-signature-view .stamp-sidebar { grid-template-columns: minmax(0, 1fr); }
+  .stamp-signature-view .stamp-center { grid-row: 1; }
+  .stamp-signature-view .stamp-settings { grid-row: 2; }
+  .stamp-signature-view .stamp-layout-grid { grid-template-columns: minmax(0, 1fr); }
 }
-.stamp-embedded-details .stamp-layout-panel { margin-top: 6px; }
-.stamp-embedded-details .stamp-layout-panel > .stamp-panel-heading { display: none; }
-.stamp-embedded .stamp-export-panel .stamp-export-bar { grid-template-columns: minmax(0, 1fr); gap: 10px; padding: 12px; }
-.stamp-embedded .stamp-export-options { grid-template-columns: minmax(0, 1fr); gap: 8px; }
-.stamp-embedded .stamp-export-panel .stamp-export-entitlement { margin-left: 0; }
-.stamp-embedded .stamp-plan-options { grid-template-columns: minmax(0, 1fr); }
-.stamp-embedded .stamp-download-button { width: 100%; max-width: 100%; }
-.stamp-embedded-use { display: block; width: 100%; margin-bottom: 8px; }
