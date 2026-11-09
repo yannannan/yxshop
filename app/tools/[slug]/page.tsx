@@ -45,7 +45,8 @@ export default async function ToolPage({ params }: Props) {
   if (slug === 'image-processor') { const { ImageProcessor } = await import('@/components/image-processor'); return <><StorefrontHeader /><ImageProcessor tool={tool} /><script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData).replace(/</g, '\\u003c') }} /></>; }
   if (slug === 'document-signature') {
     const { DocumentSignature } = await import('@/components/document-signature');
-    return <><StorefrontHeader /><DocumentSignature tool={tool} /></>;
+    const stampTool = await getPublishedTool('stamp-maker');
+    return <><StorefrontHeader /><DocumentSignature tool={tool} stampTool={stampTool} /></>;
   }
   if (isWebsiteAnalysis(slug, tool.name)) { const { SiteAnalysisDashboard } = await import('@/components/site-analysis-dashboard'); return <><StorefrontHeader /><SiteAnalysisDashboard tool={tool} /></>; }
   return <><StorefrontHeader /><main className="tools-page">

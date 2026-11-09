@@ -8,7 +8,7 @@ import { accountLoginHref } from '../lib/account';
 import { notifyAccountChanged } from '../lib/account-client';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { defaultStampOptions, parseStampOptions, stampFonts, stampFormats, stampPresets, stampSizes, type StampAccess, type StampOptions, type StampResult } from '../lib/stamp-options';
-import { toolBillingLabels, toolPlanPrice, toolPlanKey, toolPlanQuery, toolPlanLabel, type ToolService } from '../lib/tool-services';
+import { toolBillingLabels, toolPagePath, toolPlanPrice, toolPlanKey, toolPlanQuery, toolPlanLabel, type ToolService } from '../lib/tool-services';
 
 function time(value: string, locale: string = 'zh-CN', withYear = false) {
   const date = new Date(value);
@@ -32,8 +32,9 @@ function entitlementText(access: StampAccess | null) {
   return `${access.membershipName || toolBillingLabels[(access.cycle || 'once') as keyof typeof toolBillingLabels]}权益生效中`;
 }
 
-export function StampMaker({ tool }: { tool: ToolService }) {
+export function StampMaker({ tool, onCreated }: { tool: ToolService; onCreated?: (id: string) => void }) {
   const { locale, t } = useI18n();
+  const embedded = Boolean(onCreated);
   const [options, setOptions] = useState(defaultStampOptions);
   const [preview, setPreview] = useState('/stamp-previews/circle.png');
   const [previewBusy, setPreviewBusy] = useState(false);
@@ -73,13 +74,14 @@ export function StampMaker({ tool }: { tool: ToolService }) {
   }, []);
   useEffect(() => { const timer = window.setTimeout(() => void refresh(), 0); return () => window.clearTimeout(timer); }, [refresh]);
   useEffect(() => {
+    if (embedded) return;
     const id = new URLSearchParams(window.location.search).get('result');
     const controller = new AbortController();
     if (id) void savedStamp(id, controller.signal).then(stamp => {
       if (!controller.signal.aborted) { setResult(stamp); setMessageSuccess(true); setMessage('已打开已制作的成品，重复下载不扣次。'); }
     }).catch(error => { if (!controller.signal.aborted) setMessage((error as Error).message || '成品读取失败'); });
     return () => controller.abort();
-  }, []);
+  }, [embedded]);
   useEffect(() => {
     if (!signature) return;
     const controller = new AbortController();
@@ -107,7 +109,7 @@ export function StampMaker({ tool }: { tool: ToolService }) {
 
   function update(patch: Partial<StampOptions>) { setOptions(previous => { const next = { ...previous, ...patch }; return next.format === 'jpeg' ? { ...next, background: 'white' } : next; }); setMessage(''); setRetryPending(false); }
   async function generate() {
-    if (working.current || !normalized || (!access?.canGenerate && !retryPending)) return;
+    if (working.current || !normalized || (embedded && !access?.signedIn) || (!access?.canGenerate && !retryPending)) return;
     working.current = true; setBusy(true); setMessage(''); setMessageSuccess(false);
     if (!request.current || request.current.signature !== signature) request.current = { id: crypto.randomUUID(), signature };
     try {
@@ -115,6 +117,7 @@ export function StampMaker({ tool }: { tool: ToolService }) {
       const data = await response.json() as { result?: StampResult; message?: string };
       if (!response.ok || !data.result) { setRetryPending(response.status >= 500); setMessage(data.message || '制作失败，请重试'); return; }
       setResult({ ...data.result, signature });
+      if (access?.signedIn) onCreated?.(data.result.id);
       notifyAccountChanged();
       setRetryPending(false);
       setMessageSuccess(true);
@@ -157,12 +160,60 @@ export function StampMaker({ tool }: { tool: ToolService }) {
         <label>{t("导出格式")}<select value={options.format} onChange={event => update({ format: event.target.value as StampOptions['format'] })}>{Object.entries(stampFormats).map(([format, info]) => <option key={format} value={format}>{t(info.label)}{t(format === 'svg' ? ' · 矢量' : format === 'jpeg' ? ' · 白底' : '')}</option>)}</select></label>
         <label>{t("图片背景")}<select value={options.background} disabled={options.format === 'jpeg'} onChange={event => update({ background: event.target.value as StampOptions['background'] })}><option value="transparent">{t("透明背景")}</option><option value="white">{t("白色背景")}</option></select></label>
       </fieldset>
-      <div className="stamp-export-action">{access && ['paid', 'points'].includes(access.chargeType) && !access.canGenerate && !retryPending ? <Link className="stamp-create-button" href={buyHref}>{t(access.chargeType === 'points' ? access.signedIn ? '充值积分' : '登录领取积分' : access.signedIn ? '购买 / 续购套餐' : '登录并购买套餐')} <span>↗</span></Link> : <button className="stamp-create-button" type="button" disabled={busy || checking || (!access?.canGenerate && !retryPending) || Boolean(validationError) || sameResult} onClick={() => void generate()}>{t(busy ? '正在处理…' : sameResult ? '制作完成，请下载' : retryPending ? '重试本次制作' : '制作高清印章')}<span>{t(busy ? '…' : '→')}</span></button>}</div>
+      <div className="stamp-export-action">
+        {embedded && access && !access.signedIn ?
+          <Link className="stamp-create-button" href={accountLoginHref(toolPagePath('document-signature'))}>{t('登录后使用')}</Link>
+          : access && ['paid', 'points'].includes(access.chargeType) && !access.canGenerate && !retryPending ?
+            <Link className="stamp-create-button" href={buyHref}>{t(access.chargeType === 'points' ? access.signedIn ? '充值积分' : '登录领取积分' : access.signedIn ? '购买 / 续购套餐' : '登录并购买套餐')} <span>↗</span></Link>
+            : <button className="stamp-create-button" type="button" disabled={busy || checking || (!access?.canGenerate && !retryPending) || Boolean(validationError) || sameResult} onClick={() => void generate()}>{t(busy ? '正在处理…' : sameResult ? '制作完成，请下载' : retryPending ? '重试本次制作' : '制作高清印章')}<span>{t(busy ? '…' : '→')}</span></button>}
+      </div>
     </div>
     <p className="stamp-charge-note">{t(options.format === 'jpeg' ? 'JPG 使用白色背景。' : '')}{t("失败和重复下载不消耗积分或次数。有效会员 / 次数优先使用，之后按工具积分价格扣分。")}</p>
     {accessError && <p className="stamp-inline-error" role="alert">{t(accessError)}</p>}
     {message && <p className={`stamp-operation-message${messageSuccess ? ' success' : ''}`} role={messageSuccess ? 'status' : 'alert'}>{t(message)}</p>}
   </section>;
+
+  const settingsPanel = (
+    <section className="stamp-panel stamp-settings" aria-labelledby="stamp-settings-title">
+      <div className="stamp-panel-heading"><div><span className="stamp-step">01</span><h2 id="stamp-settings-title">{t("设计你的印章")}</h2></div><button type="button" className="stamp-text-button" disabled={busy} onClick={() => update(defaultStampOptions())}>{t("重置")}</button></div>
+      <fieldset disabled={busy} className="stamp-fields"><legend className="sr-only">{t("印章设置")}</legend>
+        <label className="stamp-field-title">{t("选择样式")}</label>
+        <div className="stamp-templates">{stampPresets.map(preset => <button type="button" key={preset.shape} className={options.shape === preset.shape ? 'selected' : ''} aria-pressed={options.shape === preset.shape} onClick={() => update({ ...preset.options, size: options.size, background: options.background, color: options.color, font: options.font, textInset: options.textInset, format: options.format })}><Image src={`/stamp-previews/${preset.shape}.png`} alt="" width={76} height={76} unoptimized /><b>{t(preset.name)}</b><small>{t(preset.note)}</small></button>)}</div>
+        <div className="stamp-form-section"><h3>{t("印章内容")}</h3><label>{t("印章名称")}<span>{t([...options.text].length)} / {t(maxText)}</span><input value={options.text} maxLength={maxText} onChange={event => update({ text: event.target.value })} placeholder={t(options.shape === 'name' ? '填写二至四个字' : '例如：宇星创意工作室')} /></label>
+          {options.shape !== 'name' && <><label>{t("辅助文字")}<small>{t("选填")}</small><input value={options.subtitle} maxLength={12} onChange={event => update({ subtitle: event.target.value })} placeholder={t("例如：设计专用章")} /></label><label>{t("底部编号")}<small>{t("选填")}</small><input value={options.code} maxLength={20} onChange={event => update({ code: event.target.value })} placeholder={t("字母、数字或短横线")} /></label></>}
+        </div>
+      </fieldset>
+    </section>
+  );
+
+  const previewPanel = (
+    <div className="stamp-panel stamp-preview-panel"><div className="stamp-panel-heading"><div><span className="stamp-step">02</span><h2 id="stamp-preview-title">{t("效果预览")}</h2></div><span className="stamp-preview-indicator">{t(updatingPreview ? '正在更新' : '实时预览')}</span></div><div className={`stamp-preview-stage ${options.background === 'white' ? 'white' : ''}`} aria-busy={updatingPreview}><span className="stamp-corner top-left" /><span className="stamp-corner bottom-right" /><Image className={updatingPreview ? 'is-updating' : ''} unoptimized src={preview} width={420} height={420} alt={t("当前印章的带水印效果预览")} /><div className="stamp-preview-caption">{t(options.background === 'transparent' ? '棋盘格表示透明背景' : '白色背景')}<span>{t("成品将移除预览水印")}</span></div></div>{(validationError || previewError) && <div className="stamp-inline-error stamp-preview-error" role="alert"><span>{t(validationError || previewError)}</span>{previewError && !validationError && <button type="button" className="stamp-preview-retry" disabled={updatingPreview} onClick={() => setPreviewVersion(previous => previous + 1)}>{t("重新预览")}</button>}</div>}<div className="stamp-preview-footer"><span>{t("修改参数后自动更新")}</span><b>{t("预览免费 · 制作成功才使用权益")}</b></div></div>
+  );
+
+  const resultCard = result && <div className="stamp-panel stamp-result" ref={resultPanel} tabIndex={-1} aria-labelledby="stamp-result-title">
+    <div><span className="stamp-success-icon">✓</span><div><h2 id="stamp-result-title">{t(result.signature ? '你的印章已制作完成' : '已打开的印章成品')}</h2><p>{t(result.size)} × {t(result.size)} px · {t(resultFormat.label)}{t(result.signature && !sameResult ? ' · 这是修改参数前的成品' : '')}</p></div></div>
+    <Image unoptimized src={result.image} alt={t("已制作的高清印章成品")} width={160} height={160} />
+    {onCreated && <button className="stamp-history-open stamp-embedded-use" type="button" onClick={() => onCreated(result.id)}>{t('使用此印章')}</button>}
+    <a className="stamp-download-button" href={result.image} download={`yxstar-stamp-${result.id}.${resultFormat.extension}`}>{t("下载 ")}{t(resultFormat.label)} <span>↓</span></a>
+    <small>{t("重复下载此成品不会扣次。修改参数并重新制作属于一次新的处理。")}</small>
+  </div>;
+
+  const purchasePanel = <>
+    {tool.chargeType === 'points' && <section className="stamp-panel stamp-plan-panel"><h2>{t("全工具通用积分")}</h2><p>{t("本工具每次成功制作消耗 ")}{t(access?.pointsCost ?? tool.pointsCost)}{t(" 积分；预览和重复下载免费。")}</p><p>{t("当前余额：")}{t(access?.signedIn ? `${access.pointsBalance} 积分` : '登录后领取 100 积分')}</p>{access?.cycle && <p>{t("优先使用已有本工具会员 / 次数权益。")}</p>}<Link href={buyHref}>{t("我的积分与充值 →")}</Link></section>}
+    {tool.chargeType === 'paid' && <section className="stamp-panel stamp-plan-panel"><h2>{t("选择工具套餐")}</h2><p>{t("支付核验后，回到本页刷新权益。")}</p><div className="stamp-plan-options">{tool.plans.map(plan => <label key={toolPlanKey(plan)} className={selectedPlan === toolPlanKey(plan) ? 'selected' : ''}><input type="radio" name="stamp-plan" checked={selectedPlan === toolPlanKey(plan)} onChange={() => setSelectedPlan(toolPlanKey(plan))} /><span>{t(toolPlanLabel(plan))}</span><b>{t(toolPlanPrice(plan))}</b></label>)}</div><Link href={buyHref}>{t("查看套餐与支付方式 →")}</Link></section>}
+  </>;
+
+  if (embedded) return <div className="stamp-embedded">
+    {previewPanel}
+    {settingsPanel}
+    <details className="stamp-embedded-details">
+      <summary>{t("颜色与排版")}</summary>
+      {layoutPanel}
+    </details>
+    {exportPanel}
+    {resultCard}
+    {purchasePanel}
+  </div>;
 
   return <main className="stamp-page">
     {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- 工具跨页入口使用原生导航，避免客户端路由异常时点击无反应。 */}
@@ -170,21 +221,12 @@ export function StampMaker({ tool }: { tool: ToolService }) {
     <header className="stamp-heading"><div><span className="stamp-kicker">YXSTAR CREATIVE TOOLS</span><h1>{t(tool.name)}</h1><p>{t("选一个样式，写下你的文字。让每一枚印章，都有自己的表达。")}</p></div><div className="stamp-help"><span>{t("简单三步，完成制作")}</span><ol><li><b>{t("选择样式")}</b><p>{t("从经典圆章、椭圆、方章或姓名章开始。")}</p></li><li><b>{t("调整文字")}</b><p>{t("编辑文字、配色与排版，查看实时效果。")}</p></li><li><b>{t("制作并下载")}</b><p>{t("生成高清 PNG，透明背景便于使用。")}</p></li></ol></div><div className="stamp-feature-pills"><span>PNG · JPG · SVG</span><span>{t("最高 4096 像素")}</span><span>{t("预览不扣次")}</span><a className="stamp-history-jump" href="#stamp-history">{t("印章制作记录")}</a></div></header>
 
     <div className="stamp-workspace">
-      <section className="stamp-panel stamp-settings" aria-labelledby="stamp-settings-title">
-        <div className="stamp-panel-heading"><div><span className="stamp-step">01</span><h2 id="stamp-settings-title">{t("设计你的印章")}</h2></div><button type="button" className="stamp-text-button" disabled={busy} onClick={() => update(defaultStampOptions())}>{t("重置")}</button></div>
-        <fieldset disabled={busy} className="stamp-fields"><legend className="sr-only">{t("印章设置")}</legend>
-          <label className="stamp-field-title">{t("选择样式")}</label>
-          <div className="stamp-templates">{stampPresets.map(preset => <button type="button" key={preset.shape} className={options.shape === preset.shape ? 'selected' : ''} aria-pressed={options.shape === preset.shape} onClick={() => update({ ...preset.options, size: options.size, background: options.background, color: options.color, font: options.font, textInset: options.textInset, format: options.format })}><Image src={`/stamp-previews/${preset.shape}.png`} alt="" width={76} height={76} unoptimized /><b>{t(preset.name)}</b><small>{t(preset.note)}</small></button>)}</div>
-          <div className="stamp-form-section"><h3>{t("印章内容")}</h3><label>{t("印章名称")}<span>{t([...options.text].length)} / {t(maxText)}</span><input value={options.text} maxLength={maxText} onChange={event => update({ text: event.target.value })} placeholder={t(options.shape === 'name' ? '填写二至四个字' : '例如：宇星创意工作室')} /></label>
-            {options.shape !== 'name' && <><label>{t("辅助文字")}<small>{t("选填")}</small><input value={options.subtitle} maxLength={12} onChange={event => update({ subtitle: event.target.value })} placeholder={t("例如：设计专用章")} /></label><label>{t("底部编号")}<small>{t("选填")}</small><input value={options.code} maxLength={20} onChange={event => update({ code: event.target.value })} placeholder={t("字母、数字或短横线")} /></label></>}
-          </div>
-        </fieldset>
-      </section>
+      {settingsPanel}
 
       <section className="stamp-center" aria-labelledby="stamp-preview-title">
-        <div className="stamp-panel stamp-preview-panel"><div className="stamp-panel-heading"><div><span className="stamp-step">02</span><h2 id="stamp-preview-title">{t("效果预览")}</h2></div><span className="stamp-preview-indicator">{t(updatingPreview ? '正在更新' : '实时预览')}</span></div><div className={`stamp-preview-stage ${options.background === 'white' ? 'white' : ''}`} aria-busy={updatingPreview}><span className="stamp-corner top-left" /><span className="stamp-corner bottom-right" /><Image className={updatingPreview ? 'is-updating' : ''} unoptimized src={preview} width={420} height={420} alt={t("当前印章的带水印效果预览")} /><div className="stamp-preview-caption">{t(options.background === 'transparent' ? '棋盘格表示透明背景' : '白色背景')}<span>{t("成品将移除预览水印")}</span></div></div>{(validationError || previewError) && <div className="stamp-inline-error stamp-preview-error" role="alert"><span>{t(validationError || previewError)}</span>{previewError && !validationError && <button type="button" className="stamp-preview-retry" disabled={updatingPreview} onClick={() => setPreviewVersion(previous => previous + 1)}>{t("重新预览")}</button>}</div>}<div className="stamp-preview-footer"><span>{t("修改参数后自动更新")}</span><b>{t("预览免费 · 制作成功才使用权益")}</b></div></div>
+        {previewPanel}
         {t(exportPanel)}
-        {result && <div className="stamp-panel stamp-result" ref={resultPanel} tabIndex={-1} aria-labelledby="stamp-result-title"><div><span className="stamp-success-icon">✓</span><div><h2 id="stamp-result-title">{t(result.signature ? '你的印章已制作完成' : '已打开的印章成品')}</h2><p>{t(result.size)} × {t(result.size)} px · {t(resultFormat.label)}{t(result.signature && !sameResult ? ' · 这是修改参数前的成品' : '')}</p></div></div><Image unoptimized src={result.image} alt={t("已制作的高清印章成品")} width={160} height={160} /><a className="stamp-download-button" href={result.image} download={`yxstar-stamp-${result.id}.${resultFormat.extension}`}>{t("下载 ")}{t(resultFormat.label)} <span>↓</span></a><small>{t("重复下载此成品不会扣次。修改参数并重新制作属于一次新的处理。")}</small></div>}
+        {resultCard}
 
         <section id="stamp-history" className="stamp-panel stamp-history" aria-labelledby="stamp-history-title" aria-busy={checking}>
           <div className="stamp-panel-heading">
@@ -215,8 +257,7 @@ export function StampMaker({ tool }: { tool: ToolService }) {
 
       <aside className="stamp-sidebar" aria-labelledby="stamp-layout-title">
         {t(layoutPanel)}
-        {tool.chargeType === 'points' && <section className="stamp-panel stamp-plan-panel"><h2>{t("全工具通用积分")}</h2><p>{t("本工具每次成功制作消耗 ")}{t(access?.pointsCost ?? tool.pointsCost)}{t(" 积分；预览和重复下载免费。")}</p><p>{t("当前余额：")}{t(access?.signedIn ? `${access.pointsBalance} 积分` : '登录后领取 100 积分')}</p>{access?.cycle && <p>{t("优先使用已有本工具会员 / 次数权益。")}</p>}<Link href={buyHref}>{t("我的积分与充值 →")}</Link></section>}
-        {tool.chargeType === 'paid' && <section className="stamp-panel stamp-plan-panel"><h2>{t("选择工具套餐")}</h2><p>{t("支付核验后，回到本页刷新权益。")}</p><div className="stamp-plan-options">{tool.plans.map(plan => <label key={toolPlanKey(plan)} className={selectedPlan === toolPlanKey(plan) ? 'selected' : ''}><input type="radio" name="stamp-plan" checked={selectedPlan === toolPlanKey(plan)} onChange={() => setSelectedPlan(toolPlanKey(plan))} /><span>{t(toolPlanLabel(plan))}</span><b>{t(toolPlanPrice(plan))}</b></label>)}</div><Link href={buyHref}>{t("查看套餐与支付方式 →")}</Link></section>}
+        {purchasePanel}
         {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- 工具跨页入口使用原生导航，避免客户端路由异常时点击无反应。 */}
         <a className="stamp-back-tools" href="/tools">{t("← 发现更多实用工具")}</a>
       </aside>

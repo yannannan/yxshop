@@ -1,13 +1,14 @@
 'use client';
 /* eslint-disable @next/next/no-img-element -- Private signature previews and local image URLs use native images. */
 /* eslint-disable @next/next/no-html-link-for-pages -- Cross-page tool navigation uses native links. */
-import { useEffect, useRef, useState, type PointerEvent } from 'react';
+import { useEffect, useRef, useState, type DragEvent, type PointerEvent } from 'react';
 import {
   ArrowDownTrayIcon, ArrowLeftIcon, ArrowPathIcon, ArrowUpTrayIcon, ChevronLeftIcon, ChevronRightIcon,
-  CheckBadgeIcon, ClockIcon, DocumentCheckIcon, DocumentTextIcon, PencilSquareIcon, PlusIcon, RectangleStackIcon, TrashIcon,
+  CheckBadgeIcon, ClockIcon, DocumentCheckIcon, DocumentTextIcon, PencilSquareIcon, PlusIcon, RectangleStackIcon, TrashIcon, XMarkIcon,
 } from '@heroicons/react/24/outline';
 import type { RenderTask } from 'pdfjs-dist';
 import { useI18n } from './language-provider';
+import { StampMaker } from './stamp-maker';
 import { notifyAccountChanged, useAccount } from '../lib/account-client';
 import { accountLoginHref } from '../lib/account';
 import {
@@ -17,19 +18,20 @@ import {
   signatureActions, signatureLimits, signingAssetKey, type SavedSignature, type SignatureAccess, type SignatureAction,
   type SignaturePlacement, type SignedDocument,
 } from '../lib/signature-tool';
-import { toolPagePath, type ToolService } from '../lib/tool-services';
+import type { ToolService } from '../lib/tool-services';
 
 type Placement = SignaturePlacement & { key: string };
 type SigningChoice = Pick<SavedSignature, 'id' | 'name' | 'width' | 'height' | 'previewUrl'> & Pick<SignaturePlacement, 'asset'>;
 type PageSize = { page: number; width: number; height: number };
 const clamp = (value: number, max: number) => Math.max(0, Math.min(max, value));
-const stampPage = toolPagePath('stamp-maker');
+const assetDragType = 'application/x-yxstar-signing-asset';
 const choiceKey = (item: SigningChoice) => signingAssetKey({ signatureId: item.id, asset: item.asset });
 
-function SigningAssetList({ items, busy, selectedKey, onChoose, onRemove }: {
+function SigningAssetList({ items, busy, selectedKey, draggable = false, onChoose, onRemove }: {
   items: SigningChoice[];
   busy: boolean;
   selectedKey?: string;
+  draggable?: boolean;
   onChoose: (item: SigningChoice) => void;
   onRemove?: (id: string) => void;
 }) {
@@ -39,8 +41,13 @@ function SigningAssetList({ items, busy, selectedKey, onChoose, onRemove }: {
     {items.map(item => <li key={choiceKey(item)}>
       <button type="button" className="ds-signature-choice" disabled={busy}
         aria-pressed={selectedKey === undefined ? undefined : choiceKey(item) === selectedKey}
+        draggable={draggable && !busy}
+        onDragStart={draggable && !busy ? event => {
+          event.dataTransfer.effectAllowed = 'copy';
+          event.dataTransfer.setData(assetDragType, choiceKey(item));
+        } : undefined}
         onClick={() => onChoose(item)}>
-        <img src={item.previewUrl} alt="" loading="lazy" /><span title={item.name}>{item.name}</span>
+        <img src={item.previewUrl} alt="" loading="lazy" draggable={false} /><span title={item.name}>{item.name}</span>
       </button>
       {onRemove && <button type="button" className="ds-icon-button" aria-label={t('删除签名')}
         disabled={busy} onClick={() => onRemove(item.id)}><TrashIcon /></button>}
@@ -48,12 +55,14 @@ function SigningAssetList({ items, busy, selectedKey, onChoose, onRemove }: {
   </ul>;
 }
 
-export function DocumentSignature({ tool }: { tool: ToolService }) {
+type SignatureEditorProps = { tool: ToolService; stampTool: ToolService | null };
+
+export function DocumentSignature({ tool, stampTool }: SignatureEditorProps) {
   const { account } = useAccount();
-  return <SignatureEditor key={account?.user?.id ?? 'guest'} tool={tool} />;
+  return <SignatureEditor key={account?.user?.id ?? 'guest'} tool={tool} stampTool={stampTool} />;
 }
 
-function SignatureEditor({ tool }: { tool: ToolService }) {
+function SignatureEditor({ tool, stampTool }: SignatureEditorProps) {
   const { t, locale } = useI18n();
   const [mode, setMode] = useState<SignatureAction>('create');
   const [access, setAccess] = useState<SignatureAccess | null>(null);
@@ -72,6 +81,8 @@ function SignatureEditor({ tool }: { tool: ToolService }) {
   const [placements, setPlacements] = useState<Placement[]>([]);
   const [activeKey, setActiveKey] = useState('');
   const [result, setResult] = useState<SignedDocument | null>(null);
+  const [stampPanel, setStampPanel] = useState<'unopened' | 'open' | 'closed'>('unopened');
+  const stampMakerOpen = stampPanel === 'open';
   const penCanvas = useRef<HTMLCanvasElement>(null);
   const draft = useRef<ImageData | null>(null);
   const preview = useRef<HTMLCanvasElement>(null);
@@ -82,7 +93,9 @@ function SignatureEditor({ tool }: { tool: ToolService }) {
   const drag = useRef<{ key: string; id: number; x: number; y: number } | null>(null);
   const operation = useRef<AbortController | null>(null);
   const taskIds = useRef({ create: '', sign: '' });
-  const stampWindowOpened = useRef(false);
+  const stampReload = useRef<AbortController | null>(null);
+  const stampMakerHeading = useRef<HTMLDivElement>(null);
+  const stampMenu = useRef<HTMLButtonElement>(null);
 
   async function refresh(signal: AbortSignal) {
     const data = await signatureAccess(signal);
@@ -91,30 +104,22 @@ function SignatureEditor({ tool }: { tool: ToolService }) {
 
   useEffect(() => {
     const request = new AbortController();
-    let reload: AbortController | undefined;
     void signatureAccess(request.signal).then(data => {
       if (!request.signal.aborted) setAccess(data);
     }).catch(reason => { if (!request.signal.aborted) setError(reason.message); });
-    function reloadStamps() {
-      if (!stampWindowOpened.current || operation.current) return;
-      stampWindowOpened.current = false;
-      reload?.abort();
-      const refresh = new AbortController();
-      reload = refresh;
-      void signatureAccess(refresh.signal).then(data => {
-        if (!refresh.signal.aborted) setAccess(old => old ? { ...old, stamps: data.stamps } : data);
-      }).catch(reason => { if (!refresh.signal.aborted) setError(reason.message); });
-    }
-    window.addEventListener('focus', reloadStamps);
     return () => {
-      window.removeEventListener('focus', reloadStamps);
       request.abort();
-      reload?.abort();
+      stampReload.current?.abort();
       operation.current?.abort();
     };
   }, []);
 
   useEffect(() => () => { if (source) disposeSignatureSource(source); }, [source]);
+  useEffect(() => {
+    if (!stampMakerOpen) return;
+    stampMakerHeading.current?.focus({ preventScroll: true });
+    stampMakerHeading.current?.scrollIntoView({ block: 'nearest' });
+  }, [stampMakerOpen]);
 
   useEffect(() => {
     if (mode !== 'create' || !draft.current) return;
@@ -282,17 +287,32 @@ function SignatureEditor({ tool }: { tool: ToolService }) {
     setResult(null);
   }
 
-  function place(x: number, y: number) {
-    if (!pageSize || !currentAsset || busy || placements.length >= signatureLimits.placements) return;
-    const ratio = pageSize.width / pageSize.height * currentAsset.height / currentAsset.width;
+  function place(x: number, y: number, asset = currentAsset) {
+    if (!pageSize || !asset || busy || operation.current || placements.length >= signatureLimits.placements) return false;
+    const ratio = pageSize.width / pageSize.height * asset.height / asset.width;
     const width = Math.min(.25, .8 / ratio), height = width * ratio;
     const entry: Placement = {
-      key: crypto.randomUUID(), signatureId: currentAsset.id, asset: currentAsset.asset, page,
+      key: crypto.randomUUID(), signatureId: asset.id, asset: asset.asset, page,
       x: clamp(x - width / 2, 1 - width), y: clamp(y - height / 2, 1 - height), width, height,
     };
     setPlacements(previous => [...previous, entry]);
     setActiveKey(entry.key);
     resetResult();
+    return true;
+  }
+
+  function dropAsset(event: DragEvent<HTMLDivElement>) {
+    if (!event.dataTransfer.types.includes(assetDragType)) return;
+    event.preventDefault();
+    const key = event.dataTransfer.getData(assetDragType);
+    const availableAssets: SigningChoice[] = [...signatures, ...stamps];
+    const asset = availableAssets.find(item => choiceKey(item) === key);
+    if (!asset) return;
+    const bounds = event.currentTarget.getBoundingClientRect();
+    if (!place((event.clientX - bounds.left) / bounds.width, (event.clientY - bounds.top) / bounds.height, asset)) return;
+    event.currentTarget.focus({ preventScroll: true });
+    setAssetType(asset.asset === 'stamp' ? 'stamp' : 'signature');
+    setSelectedAssetKey(key);
   }
 
   function movePlacement(key: string, x: number, y: number) {
@@ -376,12 +396,26 @@ function SignatureEditor({ tool }: { tool: ToolService }) {
     switchMode('sign');
   }
 
+  function loadCreatedStamp(id: string) {
+    stampReload.current?.abort();
+    const request = new AbortController();
+    stampReload.current = request;
+    void signatureAccess(request.signal).then(data => {
+      if (request.signal.aborted) return;
+      setAccess(old => old ? { ...old, stamps: data.stamps, pointsBalance: data.pointsBalance } : data);
+      if (data.stamps.some(stamp => stamp.id === id)) {
+        setAssetType('stamp');
+        setSelectedAssetKey(signingAssetKey({ asset: 'stamp', signatureId: id }));
+        setNotice('新印章已加入素材列表');
+      }
+    }).catch(reason => { if (!request.signal.aborted) setError(reason.message); });
+  }
+
   const priceNote = (action: SignatureAction) => <span className="ds-cost">
     {access?.hasMembership ? t('有效套餐优先使用') : <><b>{estimate(action)}</b> {t('积分 / 次')}</>}
   </span>;
   const signIn = <a className="ds-primary" href={accountLoginHref(signaturePage)}>{t('登录后使用')}</a>;
   const aspect = pageSize ? pageSize.width / pageSize.height : .78;
-  const openStampTool = () => { stampWindowOpened.current = true; };
 
   return <div className="ds-workspace">
     <aside className="ds-sidebar">
@@ -395,9 +429,10 @@ function SignatureEditor({ tool }: { tool: ToolService }) {
           {action === 'create' ? <PencilSquareIcon aria-hidden="true" /> : <DocumentTextIcon aria-hidden="true" />}
           <span>{t(signatureActions[action])}</span>
         </button>)}
-        <a href={stampPage} target="_blank" rel="noopener" onClick={openStampTool}>
+        {stampTool && <button ref={stampMenu} type="button" aria-controls="ds-stamp-maker" aria-expanded={stampMakerOpen}
+          onClick={() => setStampPanel(stampMakerOpen ? 'closed' : 'open')}>
           <CheckBadgeIcon aria-hidden="true" /><span>{t('印章制作')}</span>
-        </a>
+        </button>}
       </nav>
       <a className="ds-return" href="/tools"><ArrowLeftIcon aria-hidden="true" />{t('工具服务')}</a>
     </aside>
@@ -405,7 +440,7 @@ function SignatureEditor({ tool }: { tool: ToolService }) {
       if (event.key !== 'Delete' || event.repeat || event.defaultPrevented || event.nativeEvent.isComposing ||
         event.ctrlKey || event.altKey || event.metaKey || event.shiftKey || mode !== 'sign' || !activePlacement || busy) return;
       const target = event.target;
-      if (target instanceof HTMLElement && (target.isContentEditable || target.closest('input:not([type=range]), textarea, select'))) return;
+      if (target instanceof HTMLElement && (target.isContentEditable || target.closest('#ds-stamp-maker, input:not([type=range]), textarea, select'))) return;
       event.preventDefault();
       removePlacement();
     }}>
@@ -416,136 +451,160 @@ function SignatureEditor({ tool }: { tool: ToolService }) {
       {error && <p className="ds-feedback ds-error" role="alert">{t(error)}</p>}
       {notice && <p className="ds-feedback ds-success" role="status">{t(notice)}</p>}
 
-      {mode === 'create' ? <div className="ds-layout">
-        <section className="ds-panel" aria-labelledby="ds-draw-heading">
-          <div className="ds-panel-heading"><h3 id="ds-draw-heading"><PencilSquareIcon aria-hidden="true" />{t('签名画板')}</h3>
-            <button className="ds-secondary" type="button" disabled={busy} onClick={() => signatureUpload.current?.click()}>
-              <ArrowUpTrayIcon aria-hidden="true" />{t('上传签名图片')}
-            </button>
-            <input ref={signatureUpload} hidden type="file" accept="image/png,image/jpeg,image/webp" onChange={event => {
-              const file = event.target.files?.[0]; event.target.value = ''; if (file) importDraft(file);
-            }} />
-          </div>
-          <div className="ds-panel-body">
-            <div className="ds-form-row">
-              <label>{t('签名名称')}<input value={name} maxLength={48} disabled={busy} placeholder={t('例如：我的签名')}
-                onChange={event => { setName(event.target.value); taskIds.current.create = ''; }} /></label>
-              <label>{t('笔迹颜色')}<input type="color" value={ink} disabled={busy} onChange={event => setInk(event.target.value)} /></label>
-            </div>
-            <div className="ds-draw-surface">
-              <canvas ref={penCanvas} width={840} height={300} aria-label={t('手写签名画板')}
-                onPointerDown={event => draw(event, true)} onPointerMove={event => draw(event, false)}
-                onPointerUp={() => { pen.current = null; }} onPointerCancel={() => { pen.current = null; }}
-                onLostPointerCapture={() => { pen.current = null; }} />
-              {!hasInk && <span>{t('在这里手写签名')}</span>}
-            </div>
-            <div className="ds-panel-actions">
-              <button type="button" className="ds-secondary" disabled={busy || !hasInk} onClick={clearDraft}>
-                <TrashIcon aria-hidden="true" />{t('清空画板')}
+      <div className={`ds-layout${stampMakerOpen ? ' ds-layout-with-stamp' : ''}`}>
+        {mode === 'create' ? (
+          <section className="ds-panel" aria-labelledby="ds-draw-heading">
+            <div className="ds-panel-heading"><h3 id="ds-draw-heading"><PencilSquareIcon aria-hidden="true" />{t('签名画板')}</h3>
+              <button className="ds-secondary" type="button" disabled={busy} onClick={() => signatureUpload.current?.click()}>
+                <ArrowUpTrayIcon aria-hidden="true" />{t('上传签名图片')}
               </button>
-              <div>{priceNote('create')}{access?.signedIn ? <button type="button" className="ds-primary"
-                disabled={busy || !hasInk || !name.trim() || !canRun} onClick={saveSignature}>{t(busy ? '正在处理…' : '保存签名')}</button> : signIn}</div>
+              <input ref={signatureUpload} hidden type="file" accept="image/png,image/jpeg,image/webp" onChange={event => {
+                const file = event.target.files?.[0]; event.target.value = ''; if (file) importDraft(file);
+              }} />
             </div>
-          </div>
-        </section>
-        <aside className="ds-panel">
-          <div className="ds-panel-heading"><h3><RectangleStackIcon aria-hidden="true" />{t('签名库')}</h3><span>{signatures.length} / {signatureLimits.savedSignatures}</span></div>
-          <div className="ds-panel-body"><SigningAssetList items={signatures} busy={busy} onChoose={chooseLibrarySignature} onRemove={removeSignature} /></div>
-        </aside>
-      </div> : <div className="ds-layout">
-        <section className="ds-panel" aria-labelledby="ds-file-heading">
-          <div className="ds-panel-heading"><h3 id="ds-file-heading"><DocumentTextIcon aria-hidden="true" />{t('文件预览')}</h3>
-            <button type="button" className="ds-secondary" disabled={busy} onClick={() => documentUpload.current?.click()}>
-              <ArrowUpTrayIcon aria-hidden="true" />{t(source ? '更换文件' : '上传文件')}
-            </button>
-            <input ref={documentUpload} hidden type="file" accept={access?.wordReady === false ? '.pdf,.png,.jpg,.jpeg,.webp' : '.pdf,.docx,.png,.jpg,.jpeg,.webp'} onChange={event => {
-              const file = event.target.files?.[0]; event.target.value = ''; if (file) selectFile(file);
-            }} />
-          </div>
-          {fileLoading && <p className="ds-file-status" role="status"><ArrowPathIcon aria-hidden="true" />{t(fileLoading)}</p>}
-          {access?.wordReady === false && <p className="ds-file-status">{t('当前环境暂未启用 DOCX，请先将 Word 另存为 PDF 后上传')}</p>}
-          {source ? <>
-            <div className="ds-page-tools"><span title={source.name}>{source.name}</span>
-              {source.kind === 'pdf' ? <div>
-                <button className="ds-icon-button" type="button" aria-label={t('上一页')} disabled={busy || page <= 1}
-                  onClick={() => { setPage(page - 1); setActiveKey(''); }}><ChevronLeftIcon /></button>
-                <span>{page} / {pageCount}</span>
-                <button className="ds-icon-button" type="button" aria-label={t('下一页')} disabled={busy || page >= pageCount}
-                  onClick={() => { setPage(page + 1); setActiveKey(''); }}><ChevronRightIcon /></button>
-              </div> : <div>{source.width} × {source.height}</div>}
-            </div>
-            <div className="ds-preview-surface">
-              <div ref={stage} tabIndex={-1} className="ds-page" style={{ aspectRatio: aspect, width: `min(100%, calc(var(--ds-preview-height) * ${aspect}))` }}
-                onPointerDown={event => {
-                  if (event.button !== 0) return;
-                  event.currentTarget.focus({ preventScroll: true });
-                  const bounds = event.currentTarget.getBoundingClientRect();
-                  place((event.clientX - bounds.left) / bounds.width, (event.clientY - bounds.top) / bounds.height);
-                }}>
-                {source.kind === 'image' ? <img src={source.url} alt={t('文件预览')} draggable={false} />
-                  : <canvas ref={preview} aria-label={t('文件预览')} style={{ visibility: pageSize ? 'visible' : 'hidden' }} />}
-                {!pageSize && <span className="ds-rendering"><ArrowPathIcon />{t('正在加载预览…')}</span>}
-                {pageSize && visiblePlacements.map(item => {
-                  const asset = (item.asset === 'stamp' ? stamps : signatures).find(saved => saved.id === item.signatureId);
-                  return asset && <button type="button" key={item.key} className="ds-placement"
-                    aria-label={asset.name} aria-pressed={item.key === activeKey} disabled={busy}
-                    style={{ left: `${item.x * 100}%`, top: `${item.y * 100}%`, width: `${item.width * 100}%`, height: `${item.height * 100}%` }}
-                    onClick={() => setActiveKey(item.key)} onPointerDown={event => startDrag(event, item)}
-                    onPointerMove={dragPlacement} onPointerUp={() => { drag.current = null; }}
-                    onPointerCancel={() => { drag.current = null; }} onLostPointerCapture={() => { drag.current = null; }}>
-                    <img src={asset.previewUrl} alt="" draggable={false} />
-                  </button>;
-                })}
+            <div className="ds-panel-body">
+              <div className="ds-form-row">
+                <label>{t('签名名称')}<input value={name} maxLength={48} disabled={busy} placeholder={t('例如：我的签名')}
+                  onChange={event => { setName(event.target.value); taskIds.current.create = ''; }} /></label>
+                <label>{t('笔迹颜色')}<input type="color" value={ink} disabled={busy} onChange={event => setInk(event.target.value)} /></label>
+              </div>
+              <div className="ds-draw-surface">
+                <canvas ref={penCanvas} width={840} height={300} aria-label={t('手写签名画板')}
+                  onPointerDown={event => draw(event, true)} onPointerMove={event => draw(event, false)}
+                  onPointerUp={() => { pen.current = null; }} onPointerCancel={() => { pen.current = null; }}
+                  onLostPointerCapture={() => { pen.current = null; }} />
+                {!hasInk && <span>{t('在这里手写签名')}</span>}
+              </div>
+              <div className="ds-panel-actions">
+                <button type="button" className="ds-secondary" disabled={busy || !hasInk} onClick={clearDraft}>
+                  <TrashIcon aria-hidden="true" />{t('清空画板')}
+                </button>
+                <div>{priceNote('create')}{access?.signedIn ? <button type="button" className="ds-primary"
+                  disabled={busy || !hasInk || !name.trim() || !canRun} onClick={saveSignature}>{t(busy ? '正在处理…' : '保存签名')}</button> : signIn}</div>
               </div>
             </div>
-          </> : <button type="button" className="ds-file-empty" disabled={busy} onClick={() => documentUpload.current?.click()}>
-            <DocumentTextIcon aria-hidden="true" />
-            <strong>{t('选择要签署的文件')}</strong>
-            <span>{t(access?.wordReady === false ? 'PDF、PNG、JPG、WebP，每个文件最多12MB' : 'PDF、DOCX、PNG、JPG、WebP，每个文件最多12MB')}</span>
-          </button>}
-        </section>
-
-        <aside className="ds-panel">
-          <div className="ds-panel-heading"><h3><DocumentCheckIcon aria-hidden="true" />{t('选择签名或印章')}</h3></div>
-          <div className="ds-panel-body ds-placement-settings">
-            <div className="ds-asset-tabs" role="group" aria-label={t('选择签名或印章')}>
-              <button type="button" disabled={busy} aria-pressed={assetType === 'signature'} onClick={() => setAssetType('signature')}>{t('签名')}</button>
-              <button type="button" disabled={busy} aria-pressed={assetType === 'stamp'} onClick={() => setAssetType('stamp')}>{t('印章')}</button>
-            </div>
-            {assetType === 'stamp' && !stamps.length ? <div className="ds-stamp-empty">
-              <p>{t('暂无已保存的印章')}</p>
-              <a className="ds-secondary" href={stampPage} target="_blank" rel="noopener" onClick={openStampTool}>
-                <CheckBadgeIcon aria-hidden="true" />{t('印章制作')}
-              </a>
-            </div> : <SigningAssetList items={choices} busy={busy} selectedKey={currentAsset && choiceKey(currentAsset)}
-              onChoose={item => setSelectedAssetKey(choiceKey(item))} />}
-            <p>{t('选择签名或印章后点击页面放置，拖动可调整位置。')}</p>
-            <button className="ds-secondary" type="button" disabled={busy || !pageSize || !currentAsset || placements.length >= signatureLimits.placements}
-              onClick={() => place(.5, .5)}><PlusIcon aria-hidden="true" />{t('在页面中央放置')}</button>
-            {activePlacement && <div className="ds-position">
-              <label>{t(activePlacement.asset === 'stamp' ? '印章大小' : '签名大小')}<input type="range" min=".1" max="100" step=".1" disabled={busy}
-                value={activePlacement.width * 100} onChange={event => resizePlacement(activePlacement, Number(event.target.value) / 100)} /></label>
-              <label>{t('横向位置')}<input type="range" min="0" max={(1 - activePlacement.width) * 100} step=".1" disabled={busy}
-                value={activePlacement.x * 100} onChange={event => movePlacement(activeKey, Number(event.target.value) / 100, activePlacement.y)} /></label>
-              <label>{t('纵向位置')}<input type="range" min="0" max={(1 - activePlacement.height) * 100} step=".1" disabled={busy}
-                value={activePlacement.y * 100} onChange={event => movePlacement(activeKey, activePlacement.x, Number(event.target.value) / 100)} /></label>
-              <button className="ds-secondary" type="button" disabled={busy} onClick={removePlacement} aria-keyshortcuts="Delete">
-                <TrashIcon aria-hidden="true" />{t('移除选中项')}<kbd className="ds-key">Delete</kbd>
+          </section>
+        ) : (
+          <section className="ds-panel" aria-labelledby="ds-file-heading">
+            <div className="ds-panel-heading"><h3 id="ds-file-heading"><DocumentTextIcon aria-hidden="true" />{t('文件预览')}</h3>
+              <button type="button" className="ds-secondary" disabled={busy} onClick={() => documentUpload.current?.click()}>
+                <ArrowUpTrayIcon aria-hidden="true" />{t(source ? '更换文件' : '上传文件')}
               </button>
-            </div>}
-            <div className="ds-summary">
-              <span>{t('已放置')} <b>{placements.length}</b></span>{priceNote('sign')}
+              <input ref={documentUpload} hidden type="file" accept={access?.wordReady === false ? '.pdf,.png,.jpg,.jpeg,.webp' : '.pdf,.docx,.png,.jpg,.jpeg,.webp'} onChange={event => {
+                const file = event.target.files?.[0]; event.target.value = ''; if (file) selectFile(file);
+              }} />
             </div>
-            <p>{t(access?.wordReady === false ? 'PDF 输出 PDF，图片输出 PNG。成品保留7天。' : 'PDF 和 DOCX 输出 PDF，图片输出 PNG。成品保留7天。')}</p>
-            {access && !access.storageReady && <p className="ds-error">{t('签署文件云存储暂未配置')}</p>}
-            {result ? <a className="ds-primary" href={result.downloadUrl} download><ArrowDownTrayIcon aria-hidden="true" />{t('下载签署文件')}</a>
-              : access?.signedIn ? <button type="button" className="ds-primary"
-                disabled={busy || !source || !placements.length || !access.storageReady || !canRun} onClick={signDocument}>
-                <DocumentCheckIcon aria-hidden="true" />{t(busy ? '正在处理…' : '生成签署文件')}
-              </button> : signIn}
-          </div>
-        </aside>
-      </div>}
+            {fileLoading && <p className="ds-file-status" role="status"><ArrowPathIcon aria-hidden="true" />{t(fileLoading)}</p>}
+            {access?.wordReady === false && <p className="ds-file-status">{t('当前环境暂未启用 DOCX，请先将 Word 另存为 PDF 后上传')}</p>}
+            {source ? <>
+              <div className="ds-page-tools"><span title={source.name}>{source.name}</span>
+                {source.kind === 'pdf' ? <div>
+                  <button className="ds-icon-button" type="button" aria-label={t('上一页')} disabled={busy || page <= 1}
+                    onClick={() => { setPage(page - 1); setActiveKey(''); }}><ChevronLeftIcon /></button>
+                  <span>{page} / {pageCount}</span>
+                  <button className="ds-icon-button" type="button" aria-label={t('下一页')} disabled={busy || page >= pageCount}
+                    onClick={() => { setPage(page + 1); setActiveKey(''); }}><ChevronRightIcon /></button>
+                </div> : <div>{source.width} × {source.height}</div>}
+              </div>
+              <div className="ds-preview-surface">
+                <div ref={stage} tabIndex={-1} className="ds-page" style={{ aspectRatio: aspect, width: `min(100%, calc(var(--ds-preview-height) * ${aspect}))` }}
+                  onClick={event => {
+                    if (event.button !== 0) return;
+                    event.currentTarget.focus({ preventScroll: true });
+                    const bounds = event.currentTarget.getBoundingClientRect();
+                    place((event.clientX - bounds.left) / bounds.width, (event.clientY - bounds.top) / bounds.height);
+                  }}
+                  onDragOver={event => {
+                    if (busy || !pageSize || placements.length >= signatureLimits.placements || !event.dataTransfer.types.includes(assetDragType)) return;
+                    event.preventDefault();
+                    event.dataTransfer.dropEffect = 'copy';
+                  }}
+                  onDrop={dropAsset}>
+                  {source.kind === 'image' ? <img src={source.url} alt={t('文件预览')} draggable={false} />
+                    : <canvas ref={preview} aria-label={t('文件预览')} style={{ visibility: pageSize ? 'visible' : 'hidden' }} />}
+                  {!pageSize && <span className="ds-rendering"><ArrowPathIcon />{t('正在加载预览…')}</span>}
+                  {pageSize && visiblePlacements.map(item => {
+                    const asset = (item.asset === 'stamp' ? stamps : signatures).find(saved => saved.id === item.signatureId);
+                    return asset && <button type="button" key={item.key} className="ds-placement"
+                      aria-label={asset.name} aria-pressed={item.key === activeKey} disabled={busy}
+                      style={{ left: `${item.x * 100}%`, top: `${item.y * 100}%`, width: `${item.width * 100}%`, height: `${item.height * 100}%` }}
+                      onClick={event => { event.stopPropagation(); setActiveKey(item.key); }} onPointerDown={event => startDrag(event, item)}
+                      onPointerMove={dragPlacement} onPointerUp={() => { drag.current = null; }}
+                      onPointerCancel={() => { drag.current = null; }} onLostPointerCapture={() => { drag.current = null; }}>
+                      <img src={asset.previewUrl} alt="" draggable={false} />
+                    </button>;
+                  })}
+                </div>
+              </div>
+            </> : <button type="button" className="ds-file-empty" disabled={busy} onClick={() => documentUpload.current?.click()}>
+              <DocumentTextIcon aria-hidden="true" />
+              <strong>{t('选择要签署的文件')}</strong>
+              <span>{t(access?.wordReady === false ? 'PDF、PNG、JPG、WebP，每个文件最多12MB' : 'PDF、DOCX、PNG、JPG、WebP，每个文件最多12MB')}</span>
+            </button>}
+          </section>
+        )}
+        <div className="ds-side">
+          {stampTool && <section id="ds-stamp-maker" className="ds-panel" hidden={!stampMakerOpen} aria-labelledby="ds-stamp-maker-title">
+            {stampPanel !== 'unopened' && <>
+              <div className="ds-panel-heading ds-stamp-maker-heading" ref={stampMakerHeading} tabIndex={-1}>
+                <h3 id="ds-stamp-maker-title"><CheckBadgeIcon aria-hidden="true" />{t('印章制作')}</h3>
+                <button className="ds-icon-button" type="button" aria-label={t('收起印章制作')} onClick={() => {
+                  setStampPanel('closed');
+                  stampMenu.current?.focus({ preventScroll: true });
+                }}><XMarkIcon aria-hidden="true" /></button>
+              </div>
+              <StampMaker tool={stampTool} onCreated={loadCreatedStamp} />
+            </>}
+          </section>}
+          {mode === 'create' ? (
+            <aside className="ds-panel">
+              <div className="ds-panel-heading"><h3><RectangleStackIcon aria-hidden="true" />{t('签名库')}</h3><span>{signatures.length} / {signatureLimits.savedSignatures}</span></div>
+              <div className="ds-panel-body"><SigningAssetList items={signatures} busy={busy} onChoose={chooseLibrarySignature} onRemove={removeSignature} /></div>
+            </aside>
+          ) : (
+            <aside className="ds-panel">
+              <div className="ds-panel-heading"><h3><DocumentCheckIcon aria-hidden="true" />{t('选择签名或印章')}</h3></div>
+              <div className="ds-panel-body ds-placement-settings">
+                <div className="ds-asset-tabs" role="group" aria-label={t('选择签名或印章')}>
+                  <button type="button" disabled={busy} aria-pressed={assetType === 'signature'} onClick={() => setAssetType('signature')}>{t('签名')}</button>
+                  <button type="button" disabled={busy} aria-pressed={assetType === 'stamp'} onClick={() => setAssetType('stamp')}>{t('印章')}</button>
+                </div>
+                {assetType === 'stamp' && stampTool && !stampMakerOpen && <button type="button" className="ds-secondary"
+                  aria-controls="ds-stamp-maker" onClick={() => setStampPanel('open')}>
+                    <CheckBadgeIcon aria-hidden="true" />{t('印章制作')}
+                </button>}
+                {assetType === 'stamp' && !stamps.length ? <p className="ds-empty-copy">{t('暂无已保存的印章')}</p>
+                  : <SigningAssetList items={choices} busy={busy} draggable={Boolean(pageSize)} selectedKey={currentAsset && choiceKey(currentAsset)}
+                  onChoose={item => setSelectedAssetKey(choiceKey(item))} />}
+                <p>{t('点击素材后在页面上放置，也可以直接拖入页面。')}</p>
+                <button className="ds-secondary" type="button" disabled={busy || !pageSize || !currentAsset || placements.length >= signatureLimits.placements}
+                  onClick={() => place(.5, .5)}><PlusIcon aria-hidden="true" />{t('在页面中央放置')}</button>
+                {activePlacement && <div className="ds-position">
+                  <label>{t(activePlacement.asset === 'stamp' ? '印章大小' : '签名大小')}<input type="range" min=".1" max="100" step=".1" disabled={busy}
+                    value={activePlacement.width * 100} onChange={event => resizePlacement(activePlacement, Number(event.target.value) / 100)} /></label>
+                  <label>{t('横向位置')}<input type="range" min="0" max={(1 - activePlacement.width) * 100} step=".1" disabled={busy}
+                    value={activePlacement.x * 100} onChange={event => movePlacement(activeKey, Number(event.target.value) / 100, activePlacement.y)} /></label>
+                  <label>{t('纵向位置')}<input type="range" min="0" max={(1 - activePlacement.height) * 100} step=".1" disabled={busy}
+                    value={activePlacement.y * 100} onChange={event => movePlacement(activeKey, activePlacement.x, Number(event.target.value) / 100)} /></label>
+                  <button className="ds-secondary" type="button" disabled={busy} onClick={removePlacement} aria-keyshortcuts="Delete">
+                    <TrashIcon aria-hidden="true" />{t('移除选中项')}<kbd className="ds-key">Delete</kbd>
+                  </button>
+                </div>}
+                <div className="ds-summary">
+                  <span>{t('已放置')} <b>{placements.length}</b></span>{priceNote('sign')}
+                </div>
+                <p>{t(access?.wordReady === false ? 'PDF 输出 PDF，图片输出 PNG。成品保留7天。' : 'PDF 和 DOCX 输出 PDF，图片输出 PNG。成品保留7天。')}</p>
+                {access && !access.storageReady && <p className="ds-error">{t('签署文件云存储暂未配置')}</p>}
+                {result ? <a className="ds-primary" href={result.downloadUrl} download><ArrowDownTrayIcon aria-hidden="true" />{t('下载签署文件')}</a>
+                  : access?.signedIn ? <button type="button" className="ds-primary"
+                    disabled={busy || !source || !placements.length || !access.storageReady || !canRun} onClick={signDocument}>
+                    <DocumentCheckIcon aria-hidden="true" />{t(busy ? '正在处理…' : '生成签署文件')}
+                  </button> : signIn}
+              </div>
+            </aside>
+          )}
+        </div>
+      </div>
 
       {Boolean(access?.documents.length) && <section className="ds-panel ds-history">
         <div className="ds-panel-heading"><h3><ClockIcon aria-hidden="true" />{t('最近签署文件')}</h3><span>{t('重复下载不扣积分')}</span></div>

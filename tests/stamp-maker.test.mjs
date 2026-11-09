@@ -444,6 +444,10 @@ test('印章独立页渲染商城导航、三栏工作台、各会员套餐及�
   assert.ok(html.includes('/product/40?plan=basic-month&amp;cycle=month')); assert.ok(html.includes('application/ld+json'));
   assert.match(html, /href="#stamp-history"/);
   assert.match(html, /id="stamp-history"[^>]*aria-busy="true"/);
+  const embedded = renderToStaticMarkup(React.createElement(workspace.StampMaker, { tool, onCreated() {} }));
+  assert.ok(embedded.includes('<div class="stamp-embedded">'));
+  for (const label of ['效果预览', '设计你的印章', '颜色与排版', '导出下载设置', '选择工具套餐']) assert.ok(embedded.includes(label));
+  assert.doesNotMatch(embedded, /stamp-history|stamp-breadcrumb/);
   const metadata = await page.generateMetadata({ params: Promise.resolve({ slug: 'stamp-maker.html' }) });
   assert.ok(metadata.description.includes('4096'));
 });
