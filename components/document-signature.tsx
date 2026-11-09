@@ -33,6 +33,7 @@ function SignatureEditor({ tool }: { tool: ToolService }) {
   const [mode, setMode] = useState<SignatureAction>('create');
   const [access, setAccess] = useState<SignatureAccess | null>(null);
   const [busy, setBusy] = useState(false);
+  const [fileLoading, setFileLoading] = useState('');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [name, setName] = useState('');
@@ -210,14 +211,20 @@ function SignatureEditor({ tool }: { tool: ToolService }) {
 
   function selectFile(file: File) {
     void run(async signal => {
-      const loaded = await loadSignatureSource(file, Boolean(access?.wordReady), signal);
-      if (signal.aborted) { disposeSignatureSource(loaded); return; }
-      setSource(loaded);
-      setPage(1);
-      setPdfSize(null);
-      setPlacements([]);
-      setActiveKey('');
-      resetResult();
+      const word = /\.docx$/i.test(file.name);
+      setFileLoading(word ? '正在将 Word 转换为 PDF…' : '正在读取文件…');
+      try {
+        const loaded = await loadSignatureSource(file, access?.wordReady, signal);
+        if (signal.aborted) { disposeSignatureSource(loaded); return; }
+        setSource(loaded);
+        setPage(1);
+        setPdfSize(null);
+        setPlacements([]);
+        setActiveKey('');
+        resetResult();
+      } finally {
+        if (!signal.aborted) setFileLoading('');
+      }
     });
   }
 
@@ -395,10 +402,12 @@ function SignatureEditor({ tool }: { tool: ToolService }) {
           <button type="button" className="ds-secondary" disabled={busy} onClick={() => documentUpload.current?.click()}>
             <ArrowUpTrayIcon aria-hidden="true" />{t(source ? '更换文件' : '上传文件')}
           </button>
-          <input ref={documentUpload} hidden type="file" accept=".pdf,.docx,.png,.jpg,.jpeg,.webp" onChange={event => {
+          <input ref={documentUpload} hidden type="file" accept={access?.wordReady === false ? '.pdf,.png,.jpg,.jpeg,.webp' : '.pdf,.docx,.png,.jpg,.jpeg,.webp'} onChange={event => {
             const file = event.target.files?.[0]; event.target.value = ''; if (file) selectFile(file);
           }} />
         </div>
+        {fileLoading && <p className="ds-file-status" role="status"><ArrowPathIcon aria-hidden="true" />{t(fileLoading)}</p>}
+        {access?.wordReady === false && <p className="ds-file-status">{t('当前环境暂未启用 DOCX，请先将 Word 另存为 PDF 后上传')}</p>}
         {source ? <>
           <div className="ds-page-tools"><span title={source.name}>{source.name}</span>
             {source.kind === 'pdf' ? <div>
@@ -435,7 +444,7 @@ function SignatureEditor({ tool }: { tool: ToolService }) {
         </> : <button type="button" className="ds-file-empty" disabled={busy} onClick={() => documentUpload.current?.click()}>
           <DocumentTextIcon aria-hidden="true" />
           <strong>{t('选择要签署的文件')}</strong>
-          <span>{t('PDF、DOCX、PNG、JPG、WebP，每个文件最多12MB')}</span>
+          <span>{t(access?.wordReady === false ? 'PDF、PNG、JPG、WebP，每个文件最多12MB' : 'PDF、DOCX、PNG、JPG、WebP，每个文件最多12MB')}</span>
         </button>}
       </section>
 
@@ -460,9 +469,8 @@ function SignatureEditor({ tool }: { tool: ToolService }) {
           <div className="ds-summary">
             <span>{t('签名位置')} <b>{placements.length}</b></span>{priceNote('sign')}
           </div>
-          <p>{t('PDF 和 DOCX 输出 PDF，图片输出 PNG。成品保留7天。')}</p>
+          <p>{t(access?.wordReady === false ? 'PDF 输出 PDF，图片输出 PNG。成品保留7天。' : 'PDF 和 DOCX 输出 PDF，图片输出 PNG。成品保留7天。')}</p>
           {access && !access.storageReady && <p className="ds-error">{t('签署文件云存储暂未配置')}</p>}
-          {access && !access.wordReady && <p>{t('Word 转换服务暂未配置')}</p>}
           {result ? <a className="ds-primary" href={result.downloadUrl} download><ArrowDownTrayIcon aria-hidden="true" />{t('下载签署文件')}</a>
             : access?.signedIn ? <button type="button" className="ds-primary"
               disabled={busy || !source || !placements.length || !access.storageReady || !canRun} onClick={signDocument}>

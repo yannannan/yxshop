@@ -8,5 +8,5 @@ const { signatureWordReady } = await import("./lib/signature-word.mjs");
 const { signatureStorage } = await import("./lib/signature-oss.mjs");
 console.log("文件签名依赖已就绪，请确认13号增量SQL已执行。");
 console.log(signatureStorage.ready() ? "签名OSS配置已读取。" : "签名OSS尚未配置，生成签署文件前请配置。");
-console.log(signatureWordReady() ? "Word转换程序已检测到，请验收沙箱。" : "启用DOCX需安装Linux转换依赖并设置SIGNATURE_WORD_ENABLED=1。");
+console.log(await signatureWordReady() ? "Word转换程序已检测到，请验收沙箱。" : "启用DOCX需安装Linux转换依赖并设置SIGNATURE_WORD_ENABLED=1。");
 '

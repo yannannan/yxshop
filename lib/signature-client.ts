@@ -34,7 +34,7 @@ export function disposeSignatureSource(source: SignatureSource) {
   else void source.close().catch(() => undefined);
 }
 
-export async function loadSignatureSource(file: File, wordReady: boolean, signal: AbortSignal): Promise<SignatureSource> {
+export async function loadSignatureSource(file: File, wordReady: boolean | undefined, signal: AbortSignal): Promise<SignatureSource> {
   if (!file.size || file.size > signatureLimits.fileBytes) throw Error('上传文件不得超过12MB');
   const extension = file.name.split('.').at(-1)?.toLowerCase();
   if (['png', 'jpg', 'jpeg', 'webp'].includes(extension || '')) {
@@ -42,7 +42,7 @@ export async function loadSignatureSource(file: File, wordReady: boolean, signal
     return { kind: 'image', name: file.name, file: image.pixels, url: image.url, width: image.width, height: image.height };
   }
   if (extension !== 'pdf' && extension !== 'docx') throw Error('请选择 PDF、DOCX 或图片');
-  if (extension === 'docx' && !wordReady) throw Error('Word 转换服务暂未配置');
+  if (extension === 'docx' && wordReady === false) throw Error('当前环境暂未启用 DOCX，请先将 Word 另存为 PDF 后上传');
   const input = extension === 'docx'
     ? await signatureRequest<Blob>('POST', signal, { action: 'word-preview' }, file)
     : file;

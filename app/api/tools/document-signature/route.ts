@@ -18,7 +18,7 @@ export async function GET(request: Request) {
   try {
     const user = await pointsUser(request);
     return Response.json(await getSignatureAccess(await getSignatureTool(), user?.id ?? null, {
-      storageReady: signatureStorage.ready(), wordReady: signatureWordReady(),
+      storageReady: signatureStorage.ready(), wordReady: await signatureWordReady(),
     }), { headers: signatureHeaders });
   } catch (error) {
     return signatureFailure(error);
@@ -48,7 +48,7 @@ export async function POST(request: Request) {
     const bytes = Buffer.from(await file.arrayBuffer());
 
     if (input.action === 'word-preview') {
-      if (!signatureWordReady()) throw new SignatureError('Word 转换服务暂未配置', 503);
+      if (!(await signatureWordReady())) throw new SignatureError('当前环境暂未启用 DOCX，请先将 Word 另存为 PDF 后上传', 503);
       if (tool.tool_charge_type === 'pending') throw new SignatureError('该工具的收费方式尚未确认', 409);
       try {
         const pdf = await convertSignatureWord(bytes, request.signal);
