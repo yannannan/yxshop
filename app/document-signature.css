@@ -32,13 +32,13 @@
 .ds-brand svg { width: 22px; height: 22px; color: var(--ds-warm); stroke-width: 1.6; }
 .ds-brand h1 { min-width: 0; margin: 0; font-size: 17px; line-height: 1.45; font-weight: 650; overflow-wrap: anywhere; }
 .ds-modes { display: grid; gap: 6px; }
-.ds-modes button {
+.ds-modes :is(button, a) {
   position: relative; display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 10px 12px;
   border: 0; border-radius: 8px; background: transparent; color: #c3cfdf; text-align: start;
 }
-.ds-modes button > span { min-width: 0; overflow-wrap: anywhere; }
-.ds-modes button svg { width: 20px; height: 20px; color: #a3b4c7; stroke-width: 1.6; }
-.ds-modes button:hover:not(:disabled):not([aria-pressed=true]) { background: #24354b; color: var(--ds-on-dark); }
+.ds-modes :is(button, a) > span { min-width: 0; overflow-wrap: anywhere; }
+.ds-modes svg { width: 20px; height: 20px; color: #a3b4c7; stroke-width: 1.6; }
+.ds-modes :is(button, a):hover:not(:disabled):not([aria-pressed=true]) { background: #24354b; color: var(--ds-on-dark); }
 .ds-modes button[aria-pressed=true] { background: #2b3b4f; color: var(--ds-warm); font-weight: 650; }
 .ds-modes button[aria-pressed=true] svg { color: currentColor; }
 .ds-modes button[aria-pressed=true]::before {
@@ -115,6 +115,17 @@
 .ds-placement img { display: block; width: 100%; height: 100%; pointer-events: none; }
 .ds-placement-settings { display: grid; gap: 12px; }
 .ds-placement-settings p { margin: 0; font-size: 13px; line-height: 1.65; color: var(--ds-muted); }
+.ds-asset-tabs {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; padding: 4px;
+  border: 1px solid var(--ds-line); border-radius: 9px; background: #f2f5f8;
+}
+.ds-asset-tabs button { padding: 6px 10px; min-height: 34px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: #4c6178; }
+.ds-asset-tabs button[aria-pressed=true] { border-color: #edc6ad; background: #fff4eb; color: #8d3918; font-weight: 650; }
+.ds-stamp-empty {
+  display: grid; justify-items: center; gap: 10px; padding: 14px;
+  border: 1px dashed var(--ds-line); border-radius: 8px; background: #fafcfe;
+}
+.ds-key { margin-inline-start: auto; padding: 1px 5px; border: 1px solid var(--ds-line); border-radius: 4px; color: #4c6178; font-size: 11px; }
 .ds-position { display: grid; gap: 9px; padding: 10px; border: 1px solid var(--ds-line); border-radius: 8px; background: #f7f9fc; }
 .ds-position input { width: 100%; accent-color: var(--ds-orange); }
 .ds-summary { justify-content: space-between; flex-wrap: wrap; padding-top: 12px; border-top: 1px solid var(--ds-line); }
@@ -146,8 +157,8 @@
   }
   .ds-brand { padding: 0 4px; margin: 0; border: 0; }
   .ds-brand h1 { font-size: 15px; }
-  .ds-modes { grid-column: 1 / -1; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .ds-modes button { min-height: 40px; padding: 6px 8px; gap: 7px; font-size: 13px; }
+  .ds-modes { grid-column: 1 / -1; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .ds-modes :is(button, a) { min-height: 40px; padding: 6px 8px; gap: 7px; font-size: 13px; }
   .ds-modes button[aria-pressed=true]::before { display: none; }
   .ds-sidebar .ds-return { grid-column: 2; grid-row: 1; margin: 0; padding: 6px 4px; border: 0; }
   .ds-main { padding: 12px; }

@@ -1,4 +1,5 @@
 import { env } from '@/db/mysql-runtime';
+import { listSigningStamps } from './signature-stamps';
 import { consumePoints, lockPointsUser, pointsBalance, type PointsDatabase } from './points-service';
 import { validPoints } from './points';
 import { modulePrices } from './tool-module-pricing';
@@ -62,12 +63,13 @@ async function costsFor(db: PointsDatabase, tool: Tool, lock = false) {
 export async function getSignatureAccess(tool: Tool, userId: number | null, readiness: {
   storageReady: boolean; wordReady: boolean;
 }): Promise<SignatureAccess> {
-  const [costs, balance, order, signatures, documents] = await Promise.all([
+  const [costs, balance, order, signatures, stamps, documents] = await Promise.all([
     costsFor(env.DB, tool),
     userId ? pointsBalance(userId) : 0,
     userId && ['paid', 'points'].includes(tool.tool_charge_type) ? getToolEntitlement(userId, tool.id) : null,
     userId ? env.DB.prepare(`SELECT ${signatureColumns} FROM document_signatures WHERE user_id=? AND product_id=?
       AND deleted_at IS NULL ORDER BY created_at DESC,id DESC LIMIT 30`).bind(userId, tool.id).all<SignatureRow>() : null,
+    userId ? listSigningStamps(userId) : [],
     userId ? env.DB.prepare(`SELECT ${documentColumns} FROM signed_documents WHERE user_id=? AND product_id=?
       AND expires_at>? ORDER BY created_at DESC,id DESC LIMIT 10`)
       .bind(userId, tool.id, new Date().toISOString()).all<DocumentRow>() : null,
@@ -77,6 +79,7 @@ export async function getSignatureAccess(tool: Tool, userId: number | null, read
     hasMembership: Boolean(order), costs, ...readiness,
     canProcess: Boolean(userId) && tool.tool_charge_type !== 'pending' && (tool.tool_charge_type !== 'paid' || Boolean(order)),
     signatures: signatures?.results.map(publicSignature) ?? [],
+    stamps,
     documents: documents?.results.map(publicDocument) ?? [],
   };
 }

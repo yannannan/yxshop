@@ -1,4 +1,5 @@
 export const stampShapes = ['circle', 'ellipse', 'square', 'name'] as const;
+export const isStampId = (id: unknown): id is string => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 export type StampShape = typeof stampShapes[number];
 export const stampFonts = [
   { value: 'serif', label: '宋体 · 典雅清晰' },

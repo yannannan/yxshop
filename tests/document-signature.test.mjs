@@ -16,6 +16,8 @@ const image = await tsImport('../lib/image-tool.ts', import.meta.url);
 const render = await tsImport('../lib/signature-render.ts', import.meta.url);
 const requestHelpers = await tsImport('../lib/image-request.ts', import.meta.url);
 const pointsConfig = await tsImport('../lib/points.ts', import.meta.url);
+const stampOptions = await tsImport('../lib/stamp-options.ts', import.meta.url);
+const stampRenderer = await tsImport('../lib/stamp-renderer.ts', import.meta.url);
 const require = createRequire(import.meta.url);
 const signatureId = '11111111-1111-4111-8111-111111111111';
 const taskId = '22222222-2222-4222-8222-222222222222';
@@ -35,6 +37,8 @@ test('透明画板裁掉空边，签署图片只改动指定矩形且保留原�
   assert.deepEqual([...result.data.subarray(0, 4)], [0, 0, 0, 0]);
   assert.throws(() => render.trimSignature(blank(3, 3)), /签名/);
   assert.throws(() => spec.parseSignaturePlacements([{ ...position, x: .9 }]), /超出/);
+  assert.deepEqual(spec.parseSignaturePlacements([position]), [position]);
+  assert.throws(() => spec.parseSignaturePlacements([{ ...position, asset: 'unknown' }]), /超出/);
 });
 
 test('多页 PDF 签署保留页面数量、可见裁剪和旋转，签名锚点匹配可见页面', async () => {
@@ -167,7 +171,7 @@ function load(file, mocks) {
   return exports;
 }
 
-function fixture({ failUpload = false, changePrice = false, failSave = false } = {}) {
+function fixture({ failUpload = false, changePrice = false, failSave = false, stamp = null } = {}) {
   let data = { balance: 100, signatures: {}, documents: {}, charges: [], signCost: 20 };
   let tail = Promise.resolve();
   const uploads = [], removed = [];
@@ -187,6 +191,8 @@ function fixture({ failUpload = false, changePrice = false, failSave = false } =
           },
           async all() {
             if (sql.includes('FROM orders')) return { results: [] };
+            if (sql.includes('FROM document_signatures')) return { results: Object.entries(data.signatures).filter(([key]) => key.startsWith(`${user}:`)).map(([, row]) => row) };
+            if (sql.includes('FROM signed_documents')) return { results: [] };
             throw Error(sql);
           },
           async run() {
@@ -236,10 +242,19 @@ function fixture({ failUpload = false, changePrice = false, failSave = false } =
     async discard(object) { removed.push(object.key); },
     async downloadUrl(object) { return 'https://test-bucket.oss-cn-shanghai.aliyuncs.com/' + object.key; },
   };
+  const stampService = {
+    findStampTool: async () => ({ id: 40 }),
+    listStampResults: async (userId, productId) => stamp && userId === stamp.owner && productId === 40 ? [stamp] : [],
+    findStampResult: async (userId, productId, id) => stamp && userId === stamp.owner && productId === 40 && id === stamp.id ? stamp : null,
+  };
+  const signingStamps = load('../lib/signature-stamps.ts', {
+    './stamp-options': stampOptions, './stamp-renderer': stampRenderer, './stamp-service': stampService, './signature-tool': spec,
+  });
   const service = load('../lib/signature-service.ts', {
     '@/db/mysql-runtime': { env: { DB: db } }, './points-service': points, './points': pointsConfig,
     './tool-module-pricing': { modulePrices: async () => ({ create: 10, sign: data.signCost }) },
     './tool-entitlements': { getToolEntitlement: async () => null, usableToolOrder: () => false }, './signature-tool': spec,
+    './signature-stamps': signingStamps,
   });
   const response = load('../lib/signature-response.ts', {
     './image-tool': image, './points-service': points, './signature-tool': spec,
@@ -249,6 +264,7 @@ function fixture({ failUpload = false, changePrice = false, failSave = false } =
     '@/lib/image-request': requestHelpers, '@/lib/points-service': points, '@/lib/signature-render': render,
     '@/lib/signature-oss.mjs': { signatureStorage: storage }, '@/lib/signature-word.mjs': { signatureWordReady: () => false },
     '@/lib/signature-service': service, '@/lib/signature-tool': spec, '@/lib/signature-response': response,
+    '@/lib/signature-stamps': signingStamps, '@/lib/stamp-service': stampService, '@/lib/stamp-options': stampOptions,
   };
   const route = load('../app/api/tools/document-signature/route.ts', mocks);
   const download = load('../app/api/tools/document-signature/[id]/route.ts', mocks);
@@ -263,12 +279,50 @@ function fixture({ failUpload = false, changePrice = false, failSave = false } =
   return {
     get data() { return data; }, uploads, removed,
     create: () => post({ action: 'create', id: signatureId, name: '测试签名', cost: 10, width: 1, height: 1 }, raster().data),
-    sign: (user = 1, id = taskId) => post({ action: 'sign', kind: 'image', id, name: '合同.png', cost: 20,
-      width: 8, height: 8, placements: [position] }, blank(8, 8).data, user),
+    sign: (user = 1, id = taskId, placements = [position]) => post({ action: 'sign', kind: 'image', id, name: '合同.png', cost: 20,
+      width: 8, height: 8, placements }, blank(8, 8).data, user),
+    access: user => route.GET(new Request('https://example.test/api/tools/document-signature', {
+      headers: user ? { 'test-user': String(user) } : {},
+    })),
+    stampPreview: user => download.GET(new Request(`https://example.test/api/tools/document-signature/${signatureId}?kind=stamp`,
+      { headers: user ? { 'test-user': String(user) } : {} }), { params: Promise.resolve({ id: signatureId }) }),
     download: user => download.GET(new Request('https://example.test/api/tools/document-signature/' + taskId,
       { headers: { 'test-user': String(user) } }), { params: Promise.resolve({ id: taskId }) }),
   };
 }
+
+test('签名和本人印章可同时放置，即使编号相同也使用各自素材，重试只结算一次', async () => {
+  const blue = [20, 70, 220, 255];
+  const png = new PNG({ width: 256, height: 256 });
+  png.data.fill(Buffer.from(blue));
+  const stamp = {
+    owner: 1, id: signatureId, size: 256, createdAt: '2026-11-09T00:00:00.000Z',
+    ...stampOptions.stampImageData(PNG.sync.write(png).toString('base64')),
+  };
+  const f = fixture({ stamp });
+  const own = await (await f.access(1)).json();
+  assert.equal(own.stamps.length, 1);
+  assert.match(own.stamps[0].previewUrl, /\?kind=stamp$/);
+  assert.equal(own.stamps[0].image, undefined);
+  assert.deepEqual((await (await f.access(2)).json()).stamps, []);
+  assert.deepEqual((await (await f.access()).json()).stamps, []);
+  assert.equal((await f.stampPreview(2)).status, 404);
+  assert.equal((await f.stampPreview()).status, 401);
+  const preview = await f.stampPreview(1);
+  assert.equal(preview.headers.get('content-type'), 'image/png');
+  assert.equal(PNG.sync.read(Buffer.from(await preview.arrayBuffer())).width, 240);
+
+  const placement = { ...position, x: .75, y: .75, width: .25, height: .25, asset: 'stamp' };
+  assert.equal((await f.sign(2, taskId, [placement])).status, 404);
+  assert.equal(f.data.balance, 100);
+  assert.equal((await f.create()).status, 200);
+  assert.equal((await f.sign(1, taskId, [position, placement])).status, 200);
+  assert.equal((await f.sign(1, taskId, [position, placement])).status, 200);
+  const result = PNG.sync.read(f.uploads[0].bytes);
+  assert.deepEqual([...result.data.subarray(72, 76)], red);
+  assert.deepEqual([...result.data.subarray(216, 220)], blue);
+  assert.deepEqual(f.data.charges.map(charge => charge.cost), [10, 20]);
+});
 
 test('制作与签署分别扣积分，同任务并发和再次下载不会重复扣费', async () => {
   const f = fixture();

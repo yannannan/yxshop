@@ -3,7 +3,7 @@ import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 import { initWasm, Resvg } from '@resvg/resvg-wasm';
 import jpeg from 'jpeg-js';
-import type { StampFont, StampOptions } from './stamp-options';
+import type { StampFont, StampOptions, StampResult } from './stamp-options';
 
 const fonts = {
   serif: { file: 'NotoSerifCJKsc-Regular.otf', family: 'Noto Serif CJK SC' },
@@ -111,6 +111,26 @@ export async function renderStamp(options: StampOptions, preview = false): Promi
       if (!preview && options.format === 'jpeg') return Buffer.from(jpeg.encode({ data: Buffer.from(result.pixels), width: result.width, height: result.height }, 92).data);
       return Buffer.from(result.asPng());
     }
+    finally { result.free(); }
+  } finally { renderer.free(); }
+}
+
+// Reuse only stored stamp-tool output, downscaled for document overlays.
+export async function stampResultPng(stamp: StampResult, maxSize: number) {
+  const size = Number(stamp.size);
+  const base64 = stamp.image.slice(stamp.image.indexOf(',') + 1);
+  if (!Number.isInteger(size) || size < 1 || size > 4096 || !/^[A-Za-z0-9+/]+={0,2}$/.test(base64)) {
+    throw Error('Invalid stored stamp');
+  }
+  if (stamp.format === 'png' && size <= maxSize) return Buffer.from(base64, 'base64');
+  const svg = stamp.format === 'svg'
+    ? Buffer.from(base64, 'base64').toString('utf8')
+    : `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}"><image width="${size}" height="${size}" href="${stamp.image}"/></svg>`;
+  await initializeRenderer();
+  const renderer = new Resvg(svg, { fitTo: { mode: 'width', value: Math.min(size, maxSize) } });
+  try {
+    const result = renderer.render();
+    try { return Buffer.from(result.asPng()); }
     finally { result.free(); }
   } finally { renderer.free(); }
 }

@@ -115,6 +115,7 @@ export const english: Record<string, string> = {
   "全部记录": "All history",
   "视频提取": "Video extraction",
   "印章制作": "Stamp maker",
+  "请从本站发起印章制作": "Start making the stamp from this website.",
   "商城、积分充值与技术服务订单，集中查看。": "View store, points and tech support orders in one place.",
   "查看服务端已保存的任务和成品，重复查看不扣积分。": "View saved tasks and results. Viewing them again costs no points.",
   "记录类型": "Record type",

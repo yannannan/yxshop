@@ -4,25 +4,32 @@ import { signatureFailure, signatureHeaders } from '@/lib/signature-response';
 import { deleteSignature, findSignedDocument, readSignatureImage } from '@/lib/signature-service';
 import { signatureStorage } from '@/lib/signature-oss.mjs';
 import { isSignatureId, SignatureError } from '@/lib/signature-tool';
+import { isStampId } from '@/lib/stamp-options';
+import { findStampTool } from '@/lib/stamp-service';
+import { readSigningStamp } from '@/lib/signature-stamps';
 
 export const runtime = 'nodejs';
 type Context = { params: Promise<{ id: string }> };
 
-async function identity(request: Request, context: Context) {
+async function identity(request: Request, context: Context, stamp = false) {
   const user = await pointsUser(request);
   if (!user) throw new SignatureError('请登录后使用文件签名', 401);
   const { id } = await context.params;
-  if (!isSignatureId(id)) throw new SignatureError('签名记录不存在', 404);
+  if (!(stamp ? isStampId(id) : isSignatureId(id))) throw new SignatureError(stamp ? '印章不存在或不属于当前账号' : '签名记录不存在', 404);
   return { userId: user.id, id };
 }
 
 export async function GET(request: Request, context: Context) {
   try {
-    const { userId, id } = await identity(request, context);
-    if (new URL(request.url).searchParams.get('kind') === 'signature') {
-      const signature = await readSignatureImage(userId, id);
-      if (!signature) throw new SignatureError('签名记录不存在', 404);
-      return new Response(new Uint8Array(signature.png), {
+    const kind = new URL(request.url).searchParams.get('kind');
+    const { userId, id } = await identity(request, context, kind === 'stamp');
+    if (kind === 'signature' || kind === 'stamp') {
+      const tool = kind === 'stamp' ? await findStampTool() : null;
+      const png = kind === 'stamp'
+        ? tool && await readSigningStamp(userId, tool.id, id, true)
+        : (await readSignatureImage(userId, id))?.png;
+      if (!png) throw new SignatureError(kind === 'stamp' ? '印章不存在或不属于当前账号' : '签名记录不存在', 404);
+      return new Response(new Uint8Array(png), {
         headers: { ...signatureHeaders, 'Content-Type': 'image/png', 'Cross-Origin-Resource-Policy': 'same-origin' },
       });
     }

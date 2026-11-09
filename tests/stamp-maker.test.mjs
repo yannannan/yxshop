@@ -7,14 +7,16 @@ import vm from 'node:vm';
 import { inflateSync } from 'node:zlib';
 import test from 'node:test';
 import ts from 'typescript';
+import { tsImport } from 'tsx/esm/api';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import jpeg from 'jpeg-js';
+import { PNG } from 'pngjs';
 import { Resvg } from '@resvg/resvg-wasm';
 import * as options from '../lib/stamp-options.ts';
 import * as tools from '../lib/tool-services.ts';
 import * as points from '../lib/points.ts';
-import { renderStamp, stampSvg } from '../lib/stamp-renderer.ts';
+import { renderStamp, stampResultPng, stampSvg } from '../lib/stamp-renderer.ts';
 
 const require = createRequire(import.meta.url);
 function load(file, mocks = {}, globals = {}) {
@@ -29,6 +31,19 @@ const { StampError } = load('../lib/stamp-service.ts', serviceBase);
 const id = '11111111-1111-4111-8111-111111111111', otherId = '22222222-2222-4222-8222-222222222222';
 const stampTool = { id: 40, tool_charge_type: 'paid' };
 const standard = options.defaultStampOptions();
+const requestHelpers = await tsImport('../lib/image-request.ts', import.meta.url);
+
+test('已有 PNG、JPG 和 SVG 印章统一生成保留外观的签署 PNG', async () => {
+  for (const format of ['png', 'jpeg', 'svg']) {
+    const image = await renderStamp({ ...standard, size: 768, format });
+    const overlay = await stampResultPng({ ...options.stampImageData(image.toString('base64')), size: 768 }, 240);
+    assert.equal(overlay.readUInt32BE(16), 240);
+    assert.equal(overlay.readUInt32BE(20), 240);
+    const { data } = PNG.sync.read(overlay);
+    assert.equal(data[3], format === 'jpeg' ? 255 : 0);
+    assert.ok(data.some((red, index) => index % 4 === 0 && data[index + 3] > 200 && red - data[index + 1] > 50));
+  }
+});
 
 test('四种样式参数可用；严格校验文字、颜色、尺寸、布尔值及危险输入', () => {
   for (const preset of options.stampPresets) assert.equal(options.parseStampOptions(preset.options).shape, preset.shape);
@@ -168,9 +183,9 @@ function api({ charge = 'paid', user = { id: 1 }, entitled = true, previous = nu
     getStampTool: async () => ({ ...stampTool, tool_charge_type: charge }), stampUser: async () => user,
     findStampResult: async (...args) => { calls.push(['find', ...args]); return previous; },
     stampAccess: async () => ({ canGenerate: entitled, chargeType: charge }),
-    savePaidStamp: async (...args) => { calls.push(['save', ...args]); if (saveFails) throw new Error('保存成品失败'); return { id: args[2], charged: true, image: 'data:image/png;base64,cG5n', reused: false }; },
+    saveStamp: async (...args) => { calls.push(['save', ...args]); if (saveFails) throw new Error('保存成品失败'); return { id: args[2], charged: !args[6], image: 'data:image/png;base64,cG5n', reused: false }; },
   };
-  const mocks = { '@/lib/stamp-options': options, '@/lib/stamp-service': service, '@/lib/stamp-renderer': { async renderStamp(...args) { calls.push(['render', ...args]); if (renderFails) throw new Error('渲染失败'); return renderImage; } } };
+  const mocks = { '@/lib/image-request': requestHelpers, '@/lib/stamp-options': options, '@/lib/stamp-service': service, '@/lib/stamp-renderer': { async renderStamp(...args) { calls.push(['render', ...args]); if (renderFails) throw new Error('渲染失败'); return renderImage; } } };
   const route = load('../app/api/tools/stamp-maker/route.ts', mocks);
   const preview = load('../app/api/tools/stamp-maker/preview/route.ts', mocks);
   return { calls, route, preview, generate: body => route.POST(new Request('http://localhost/api/tools/stamp-maker', { method: 'POST', body: JSON.stringify({ id, options: standard, ...body }) })) };
@@ -181,6 +196,24 @@ test('免费匿名制作不写扣次或成品库；成功返回高清图片', as
   assert.equal(response.status, 200); assert.match(response.headers.get('cache-control'), /no-store/);
   assert.equal((await response.json()).result.charged, false);
   assert.deepEqual(setup.calls.map(call => call[0]), ['render']);
+});
+test('登录后的免费印章写入本人记录，拒绝跨站发起保存', async () => {
+  const setup = api({ charge: 'free' });
+  const crossSite = await setup.route.POST(new Request('http://localhost/api/tools/stamp-maker', {
+    method: 'POST', headers: { origin: 'https://other.test' }, body: JSON.stringify({ id, options: standard }),
+  }));
+  assert.equal(crossSite.status, 403);
+  assert.deepEqual(setup.calls, []);
+  const response = await setup.generate();
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).result.charged, false);
+  assert.deepEqual(setup.calls.map(call => call[0]), ['find', 'render', 'save']);
+  assert.equal(setup.calls.at(-1).at(-1), true);
+  const stored = ledger();
+  await stored.service.saveStamp(1, 40, id, 'a'.repeat(64), Buffer.from('png'), 1600, true);
+  assert.equal(stored.state.results[0].charged, 0);
+  assert.equal(stored.state.orders[0].tool_uses_remaining, 1);
+  assert.equal(stored.state.events.length, 0);
 });
 test('待确认、未登录和未购买时拦截制作；拒绝前端伪造价格、身份及剩余次数', async () => {
   for (const [config, expected] of [[{ charge: 'pending' }, 409], [{ user: null }, 401], [{ entitled: false }, 402]]) {
@@ -299,7 +332,7 @@ function ledger({ orders, fail = '', active = true, toolActive = true } = {}) {
     }; return connection;
   } }) } }, { process: { env: { MYSQL_HOST: 'mock', MYSQL_USER: 'mock', MYSQL_PASSWORD: 'mock', MYSQL_DATABASE: 'mock' } } });
   const service = load('../lib/stamp-service.ts', { ...serviceBase, '@/db/mysql-runtime': runtime });
-  return { service, state, log, save: (key = id, hash = 'a'.repeat(64), user = 1) => service.savePaidStamp(user, 40, key, hash, Buffer.from('png'), 1600) };
+  return { service, state, log, save: (key = id, hash = 'a'.repeat(64), user = 1) => service.saveStamp(user, 40, key, hash, Buffer.from('png'), 1600) };
 }
 test('最后一次权益并发制作两个不同任务：只有一个成功，另一个不产生免费成品', async () => {
   const setup = ledger();
@@ -320,9 +353,9 @@ test('并发重试同一任务仅保存一次和扣一次，之后可重复读�
 test('付费多格式成品按真实文件头恢复，重复下载保留原始格式且不再次扣次', async () => {
   for (const format of Object.keys(options.stampFormats)) {
     const image = await renderStamp({ ...standard, size: 256, format }), setup = ledger();
-    const saved = await setup.service.savePaidStamp(1, 40, id, 'a'.repeat(64), image, 256);
+    const saved = await setup.service.saveStamp(1, 40, id, 'a'.repeat(64), image, 256);
     const restored = await setup.service.findStampResult(1, 40, id);
-    const replayed = await setup.service.savePaidStamp(1, 40, id, 'a'.repeat(64), image, 256);
+    const replayed = await setup.service.saveStamp(1, 40, id, 'a'.repeat(64), image, 256);
     assert.equal(saved.format, format); assert.equal(restored.format, format); assert.equal(replayed.format, format);
     assert.equal(restored.image, saved.image); assert.equal(replayed.image, saved.image);
     assert.ok(saved.image.startsWith(`data:${options.stampFormats[format].mime};base64,`));

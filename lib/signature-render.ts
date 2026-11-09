@@ -2,7 +2,7 @@ import { degrees, PDFDocument, type PDFPage } from 'pdf-lib';
 import { PNG } from 'pngjs';
 import { encodePng } from './raster-codec';
 import type { RasterImage } from './image-tool';
-import { SignatureError, signatureLimits, type SignaturePlacement } from './signature-tool';
+import { SignatureError, signatureLimits, signingAssetKey, type SignaturePlacement } from './signature-tool';
 
 export function readSignatureRaster(bytes: Uint8Array, width: unknown, height: unknown, maxPixels: number): RasterImage {
   if (typeof width !== 'number' || typeof height !== 'number' || !Number.isInteger(width) || !Number.isInteger(height) ||
@@ -38,7 +38,7 @@ export function signImage(image: RasterImage, placements: SignaturePlacement[], 
   const decoded = new Map([...signatures].map(([id, png]) => [id, PNG.sync.read(png)]));
   for (const placement of placements) {
     if (placement.page !== 1) throw new SignatureError('签名位置超出页面范围');
-    const signature = decoded.get(placement.signatureId)!;
+    const signature = decoded.get(signingAssetKey(placement))!;
     const left = Math.floor(placement.x * image.width);
     const top = Math.floor(placement.y * image.height);
     const width = Math.min(image.width - left, Math.max(1, Math.round(placement.width * image.width)));
@@ -95,7 +95,7 @@ export async function signPdf(bytes: Uint8Array, placements: SignaturePlacement[
   for (const placement of placements) {
     const page = pages[placement.page - 1];
     if (!page) throw new SignatureError('签名位置超出页面范围');
-    page.drawImage(images.get(placement.signatureId)!, pdfSignaturePosition(page, placement));
+    page.drawImage(images.get(signingAssetKey(placement))!, pdfSignaturePosition(page, placement));
   }
   return Buffer.from(await pdf.save({ updateFieldAppearances: false }));
 }

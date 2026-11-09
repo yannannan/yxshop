@@ -8,7 +8,9 @@ import {
   checkSignatureAccess, findCreatedSignature, findSignedDocument, getSignatureAccess, getSignatureTool,
   readSignatureImage, reconcileSignedDocument, reuseSignedDocument, saveCreatedSignature, saveSignedDocument,
 } from '@/lib/signature-service';
-import { isSignatureId, parseSignaturePlacements, SignatureError, signatureLimits, signatureName } from '@/lib/signature-tool';
+import { isSignatureId, parseSignaturePlacements, SignatureError, signatureLimits, signatureName, signingAssetKey } from '@/lib/signature-tool';
+import { findStampTool } from '@/lib/stamp-service';
+import { readSigningStamp } from '@/lib/signature-stamps';
 import { signatureFailure, signatureHeaders } from '@/lib/signature-response';
 
 export const runtime = 'nodejs';
@@ -92,13 +94,18 @@ export async function POST(request: Request) {
 
     if (!signatureStorage.ready()) throw new SignatureError('签署文件云存储暂未配置', 503);
     await checkSignatureAccess(tool, user.id, 'sign', quote);
-    const signatures = new Map<string, Buffer>();
-    for (const id of new Set(placements.map(placement => placement.signatureId))) {
-      const asset = await readSignatureImage(user.id, id);
-      if (!asset) throw new SignatureError('请选择签名库中的有效签名', 404);
-      signatures.set(id, asset.png);
+    const assets = new Map<string, Buffer>();
+    const stampTool = placements.some(placement => placement.asset === 'stamp') ? await findStampTool() : null;
+    for (const placement of placements) {
+      const key = signingAssetKey(placement);
+      if (assets.has(key)) continue;
+      const png = placement.asset === 'stamp'
+        ? stampTool && await readSigningStamp(user.id, stampTool.id, placement.signatureId)
+        : (await readSignatureImage(user.id, placement.signatureId))?.png;
+      if (!png) throw new SignatureError(placement.asset === 'stamp' ? '印章不存在或不属于当前账号' : '请选择签名库中的有效签名', 404);
+      assets.set(key, png);
     }
-    const result = raster ? signImage(raster, placements, signatures) : await signPdf(bytes, placements, signatures);
+    const result = raster ? signImage(raster, placements, assets) : await signPdf(bytes, placements, assets);
     if (result.length > signatureLimits.resultBytes) throw new SignatureError('签署成品超过20MB，请缩小文件后重试', 413);
     const format = raster ? 'png' : 'pdf';
     const downloadName = `${name.replace(/\.[^.]+$/, '') || 'signed'}-signed.${format}`;

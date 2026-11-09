@@ -1,3 +1,5 @@
+import { isStampId } from './stamp-options';
+
 export const signatureToolSlug = 'document-signature';
 export const signatureApi = '/api/tools/document-signature';
 export const signatureActions = {
@@ -9,6 +11,7 @@ export type SignatureAction = keyof typeof signatureActions;
 export type SignatureQuote = { chargeType: string; cost: number };
 export type SignaturePlacement = {
   signatureId: string;
+  asset?: 'stamp';
   page: number;
   x: number;
   y: number;
@@ -24,6 +27,8 @@ export type SavedSignature = {
   pointsSpent: number;
   previewUrl: string;
 };
+
+export type SavedStamp = Pick<SavedSignature, 'id' | 'width' | 'height' | 'previewUrl'> & { createdAt: string };
 
 export type SignedDocument = {
   id: string;
@@ -44,6 +49,7 @@ export type SignatureAccess = {
   storageReady: boolean;
   wordReady: boolean;
   signatures: SavedSignature[];
+  stamps: SavedStamp[];
   documents: SignedDocument[];
 };
 
@@ -68,6 +74,10 @@ export function isSignatureId(value: unknown): value is string {
   return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(value);
 }
 
+export function signingAssetKey(placement: Pick<SignaturePlacement, 'signatureId' | 'asset'>) {
+  return placement.asset === 'stamp' ? `stamp:${placement.signatureId}` : placement.signatureId;
+}
+
 export function signatureName(value: unknown, limit = 100) {
   return typeof value === 'string'
     ? value.toWellFormed().replace(/[\u0000-\u001f\u007f\\/:*?"<>|]/g, '-').trim().slice(0, limit).toWellFormed()
@@ -79,12 +89,15 @@ export function parseSignaturePlacements(value: unknown): SignaturePlacement[] {
     throw new SignatureError('请添加至少一个签名位置，最多30处');
   }
   return value.map(placement => {
-    const { signatureId, page, x, y, width, height } = placement || {};
-    if (!isSignatureId(signatureId) || !Number.isInteger(page) || page < 1 || page > signatureLimits.pages ||
+    const { signatureId, page, x, y, width, height, asset } = placement || {};
+    if ((asset !== undefined && asset !== 'stamp') || !(asset === 'stamp' ? isStampId(signatureId) : isSignatureId(signatureId)) ||
+      !Number.isInteger(page) || page < 1 || page > signatureLimits.pages ||
       ![x, y, width, height].every(Number.isFinite) || x < 0 || x >= 1 || y < 0 || y >= 1 || width <= 0 || height <= 0 ||
       x + width > 1.000001 || y + height > 1.000001) {
       throw new SignatureError('签名位置超出页面范围');
     }
-    return { signatureId, page, x, y, width, height };
+    return asset === 'stamp'
+      ? { signatureId: signatureId.toLowerCase(), page, x, y, width, height, asset }
+      : { signatureId, page, x, y, width, height };
   });
 }

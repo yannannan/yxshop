@@ -18,7 +18,7 @@ function load(file, mocks = {}, globals = {}) {
     require(name) { if (name in mocks) return mocks[name]; if (i18nMock(name)) return i18nMock(name); if (['node:crypto','react','react/jsx-runtime','@heroicons/react/24/outline'].includes(name)) return require(name); throw Error(`Unexpected import ${name}`); } });
   return exports;
 }
-const signatureTool = load('../lib/signature-tool.ts');
+const signatureTool = load('../lib/signature-tool.ts', { './stamp-options': load('../lib/stamp-options.ts') });
 const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=';
 function fixture({ missingProfile = false, missingModules = false, walletFailure = false, dbFailure = '', failSave = false } = {}) {
   let state = {

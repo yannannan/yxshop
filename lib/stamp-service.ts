@@ -13,8 +13,11 @@ type ResultRow = { id: string; user_id: number; product_id: number; request_hash
 const resultColumns = 'id,user_id,product_id,request_hash,image_base64,image_size,created_at,charged';
 const publicResult = (row: ResultRow, reused: boolean): StampResult => ({ id: row.id, ...stampImageData(row.image_base64), size: Number(row.image_size), createdAt: row.created_at, charged: !reused && Boolean(row.charged), reused });
 
+export function findStampTool() {
+  return env.DB.prepare("SELECT id,tool_charge_type,tool_points_cost FROM products WHERE tool_slug='stamp-maker' AND product_type='tool' AND status='active'").first<StampTool>();
+}
 export async function getStampTool(): Promise<StampTool> {
-  const tool = await env.DB.prepare("SELECT id,tool_charge_type,tool_points_cost FROM products WHERE tool_slug='stamp-maker' AND product_type='tool' AND status='active'").first<StampTool>();
+  const tool = await findStampTool();
   if (!tool) throw new StampError('印章工具不存在或已停用', 404);
   if (!['free', 'paid', 'pending', 'points'].includes(tool.tool_charge_type)) throw new StampError('工具收费配置异常', 409);
   return tool;
@@ -31,10 +34,15 @@ function balance(orders: ToolOrderAccess[]) {
   const usable = usableOrders(orders), first = usable[0];
   return { remaining: usable.filter(order => order.tool_billing_cycle === 'times').reduce((sum, order) => sum + Number(order.tool_uses_remaining), 0), cycle: first ? first.tool_billing_cycle || 'once' : null, membershipName: first?.tool_plan_name || null, expiresAt: first ? toolAccessExpiresAt(first.tool_billing_cycle, first.tool_paid_at || '') : null };
 }
+export async function listStampResults(userId: number, productId: number, limit = 5) {
+  const { results } = await env.DB.prepare('SELECT id,image_size AS size,created_at AS createdAt FROM tool_generation_results WHERE user_id=? AND product_id=? ORDER BY created_at DESC,id DESC LIMIT ?')
+    .bind(userId, productId, limit).all<StampAccess['recent'][number]>();
+  return results;
+}
 export async function stampAccess(tool: StampTool, user: { id: number } | null): Promise<StampAccess> {
   const orders = user && ['paid', 'points'].includes(tool.tool_charge_type) ? (await env.DB.prepare("SELECT id,tool_billing_cycle,tool_paid_at,tool_uses_remaining,tool_plan_name FROM orders WHERE user_id=? AND product_id=? AND status IN ('paid','pending_delivery','delivered') ORDER BY created_at,id").bind(user.id, tool.id).all<ToolOrderAccess>()).results : [];
   const rights = balance(orders);
-  const recent = user ? (await env.DB.prepare('SELECT id,image_size AS size,created_at AS createdAt FROM tool_generation_results WHERE user_id=? AND product_id=? ORDER BY created_at DESC,id DESC LIMIT 5').bind(user.id, tool.id).all<StampAccess['recent'][number]>()).results : [];
+  const recent = user ? await listStampResults(user.id, tool.id) : [];
   const wallet = user && tool.tool_charge_type === 'points' ? await pointsBalance(user.id) : 0;
   const cost = Number(tool.tool_points_cost || 0);
   return { chargeType: tool.tool_charge_type, signedIn: Boolean(user), canGenerate: tool.tool_charge_type === 'free' || (['paid', 'points'].includes(tool.tool_charge_type) && Boolean(rights.cycle)) || (tool.tool_charge_type === 'points' && Boolean(user) && cost > 0 && wallet >= cost), ...rights, pointsBalance: wallet, pointsCost: cost, purchaseUrl: tool.tool_charge_type === 'points' ? '/points' : `/product/${tool.id}`, recent };
@@ -47,7 +55,7 @@ export async function findStampResult(userId: number, productId: number, id: str
 
 // 图片先成功渲染；权益复核、扣次、成功日志和成品保存随后在同一事务内完成。
 // 锁住当前用户使同用户并发请求串行，最后一次权益不能被两个不同任务同时消费。
-export async function savePaidStamp(userId: number, productId: number, id: string, hash: string, image: Buffer, size: number): Promise<StampResult> {
+export async function saveStamp(userId: number, productId: number, id: string, hash: string, image: Buffer, size: number, free = false): Promise<StampResult> {
   return env.DB.transaction(async db => {
     const user = await db.prepare("SELECT id FROM users WHERE id=? AND status='active' FOR UPDATE").bind(userId).first();
     if (!user) throw new StampError('请重新登录后制作', 401);
@@ -56,12 +64,12 @@ export async function savePaidStamp(userId: number, productId: number, id: strin
       if (Number(previous.user_id) !== userId || Number(previous.product_id) !== productId || previous.request_hash !== hash) throw new StampError('制作任务与当前请求不匹配，请重新制作', 409);
       return publicResult(previous, true);
     }
-    const tool = await db.prepare("SELECT id,tool_charge_type,tool_points_cost FROM products WHERE id=? AND product_type='tool' AND tool_slug='stamp-maker' AND status='active' AND tool_charge_type IN ('paid','points') FOR UPDATE").bind(productId).first<StampTool>();
+    const tool = await db.prepare(`SELECT id,tool_charge_type,tool_points_cost FROM products WHERE id=? AND product_type='tool' AND tool_slug='stamp-maker' AND status='active' AND tool_charge_type ${free ? "='free'" : "IN ('paid','points')"} FOR UPDATE`).bind(productId).first<StampTool>();
     if (!tool) throw new StampError('工具配置已变化，请刷新页面后重试', 409);
-    const { results: orders } = await db.prepare("SELECT id,tool_billing_cycle,tool_paid_at,tool_uses_remaining FROM orders WHERE user_id=? AND product_id=? AND status IN ('paid','pending_delivery','delivered') ORDER BY created_at,id FOR UPDATE").bind(userId, productId).all<ToolOrderAccess>();
+    const orders = free ? [] : (await db.prepare("SELECT id,tool_billing_cycle,tool_paid_at,tool_uses_remaining FROM orders WHERE user_id=? AND product_id=? AND status IN ('paid','pending_delivery','delivered') ORDER BY created_at,id FOR UPDATE").bind(userId, productId).all<ToolOrderAccess>()).results;
     const order = usableOrders(orders)[0];
-    if (!order && tool.tool_charge_type !== 'points') throw new StampError('套餐已到期或可用次数不足，请购买或续费', 402);
-    const points = !order ? await consumePoints(db, userId, productId, Number(tool.tool_points_cost || 0), `stamp:${id}`) : null;
+    if (!free && !order && tool.tool_charge_type !== 'points') throw new StampError('套餐已到期或可用次数不足，请购买或续费', 402);
+    const points = !free && !order ? await consumePoints(db, userId, productId, Number(tool.tool_points_cost || 0), `stamp:${id}`) : null;
     const charged = points ? points.charged : order?.tool_billing_cycle === 'times';
     if (charged && order) await db.prepare('UPDATE orders SET tool_uses_remaining=tool_uses_remaining-1 WHERE id=? AND user_id=? AND tool_uses_remaining>0').bind(order.id, userId).expectChanges(1).run();
     const now = new Date().toISOString();

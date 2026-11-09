@@ -79,7 +79,7 @@ for (const spec of ${JSON.stringify(paths)}) {
   if (path === '/tools/document-signature.html') {
     const sidebar = html.match(/<aside class="ds-sidebar">.*?<\\/aside>/s)?.[0] || '';
     const menu = [...sidebar.matchAll(/<button[^>]*aria-pressed="(true|false)"[^>]*>.*?<span>([^<]+)<\\/span><\\/button>/gs)];
-    pages.push({ status: response.status, menu: menu.map(match => match.slice(1)), sidebarBeforeMain: !!sidebar && html.indexOf(sidebar) < html.indexOf('<main class="ds-main"'), hasCanvas: html.includes('id="ds-draw-heading"') });
+    pages.push({ status: response.status, menu: menu.map(match => match.slice(1)), sidebarBeforeMain: !!sidebar && html.indexOf(sidebar) < html.indexOf('<main class="ds-main"'), hasCanvas: html.includes('id="ds-draw-heading"'), stampLink: sidebar.includes('href="/tools/stamp-maker.html" target="_blank"') });
     continue;
   }
   const trackerSource = 'https://www.yxstar.shop/s/RDYfVdtkRd-iXLHGxvrdEA';
@@ -174,13 +174,15 @@ test('文件签名生产页面及本地 PDF 资源可访问，匿名提交与成
     '/api/tools/document-signature/assets/wasm/quickjs-eval.js',
     '/api/tools/document-signature/assets/build/pdf.worker.min.mjs?v=' + version,
     '/api/tools/document-signature/assets/build/pdf.mjs',
+    '/api/tools/document-signature/11111111-1111-4111-8111-111111111111?kind=stamp',
   ]);
-  assert.deepEqual(result.pages.map(page => page.status), [200, 200, 200, 401, 401, 200, 404, 200, 404]);
+  assert.deepEqual(result.pages.map(page => page.status), [200, 200, 200, 401, 401, 200, 404, 200, 404, 401]);
   assert.deepEqual(result.pages[0].menu, [['true', '制作签名'], ['false', '签署文件']]);
   assert.deepEqual(result.pages[1].menu, [['true', 'Create signature'], ['false', 'Sign document']]);
   for (const page of result.pages.slice(0, 2)) {
     assert.ok(page.sidebarBeforeMain);
     assert.ok(page.hasCanvas);
+    assert.ok(page.stampLink);
   }
   assert.ok(result.pages[2].wordReady);
   assert.equal(result.pages[7].type, 'text/javascript');

@@ -80,7 +80,7 @@ function fixture({ balance, cost = 10, fail = '', mode = 'points', rights = [], 
   const usage = load('../lib/tool-points-usage.ts', { '@/db/mysql-runtime': runtime, './points-service': service, './tool-entitlements': entitlements }, { process: { env: environment } });
   const api = load('../app/api/points/route.ts', { '@/db/mysql-runtime': runtime, '@/lib/points-service': service, '@/lib/points': points, '@/lib/order-notifications': { sendOrderNotification: async () => {} } });
   return { state, log, service, stamp, runtime, setup, entitlements, usage, environment, api,
-    save: (key = id, hash = 'a'.repeat(64), user = 1) => stamp.savePaidStamp(user, 40, key, hash, Buffer.from('png'), 1600),
+    save: (key = id, hash = 'a'.repeat(64), user = 1) => stamp.saveStamp(user, 40, key, hash, Buffer.from('png'), 1600),
     consume: (operation = 'use-1', count = 10, product = 40, user = 1) => runtime.env.DB.transaction(async db => { await service.lockPointsUser(db, user); return service.consumePoints(db, user, product, count, operation); }) };
 }
 test('四档套餐严格对应用户确认的金额和积分，数量必须为正整数', () => {
