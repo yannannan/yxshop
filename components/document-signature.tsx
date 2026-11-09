@@ -1,0 +1,483 @@
+'use client';
+/* eslint-disable @next/next/no-img-element -- Private signature previews and local image URLs use native images. */
+/* eslint-disable @next/next/no-html-link-for-pages -- Cross-page tool navigation uses native links. */
+import { useEffect, useRef, useState, type PointerEvent } from 'react';
+import {
+  ArrowDownTrayIcon, ArrowLeftIcon, ArrowPathIcon, ArrowUpTrayIcon, ChevronLeftIcon, ChevronRightIcon,
+  DocumentCheckIcon, DocumentTextIcon, PencilSquareIcon, PlusIcon, TrashIcon,
+} from '@heroicons/react/24/outline';
+import type { RenderTask } from 'pdfjs-dist';
+import { useI18n } from './language-provider';
+import { notifyAccountChanged, useAccount } from '../lib/account-client';
+import { accountLoginHref } from '../lib/account';
+import {
+  disposeSignatureSource, loadSignatureSource, signatureAccess, signaturePage, signatureRequest, type SignatureSource,
+} from '../lib/signature-client';
+import {
+  signatureActions, signatureLimits, type SavedSignature, type SignatureAccess, type SignatureAction,
+  type SignaturePlacement, type SignedDocument,
+} from '../lib/signature-tool';
+import type { ToolService } from '../lib/tool-services';
+
+type Placement = SignaturePlacement & { key: string };
+type PageSize = { page: number; width: number; height: number };
+const clamp = (value: number, max: number) => Math.max(0, Math.min(max, value));
+
+export function DocumentSignature({ tool }: { tool: ToolService }) {
+  const { account } = useAccount();
+  return <SignatureEditor key={account?.user?.id ?? 'guest'} tool={tool} />;
+}
+
+function SignatureEditor({ tool }: { tool: ToolService }) {
+  const { t, locale } = useI18n();
+  const [mode, setMode] = useState<SignatureAction>('create');
+  const [access, setAccess] = useState<SignatureAccess | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [name, setName] = useState('');
+  const [ink, setInk] = useState('#192b42');
+  const [hasInk, setHasInk] = useState(false);
+  const [source, setSource] = useState<SignatureSource | null>(null);
+  const [page, setPage] = useState(1);
+  const [pdfSize, setPdfSize] = useState<PageSize | null>(null);
+  const [selectedSignature, setSelectedSignature] = useState('');
+  const [placements, setPlacements] = useState<Placement[]>([]);
+  const [activeKey, setActiveKey] = useState('');
+  const [result, setResult] = useState<SignedDocument | null>(null);
+  const penCanvas = useRef<HTMLCanvasElement>(null);
+  const draft = useRef<ImageData | null>(null);
+  const preview = useRef<HTMLCanvasElement>(null);
+  const stage = useRef<HTMLDivElement>(null);
+  const signatureUpload = useRef<HTMLInputElement>(null);
+  const documentUpload = useRef<HTMLInputElement>(null);
+  const pen = useRef<{ id: number; x: number; y: number } | null>(null);
+  const drag = useRef<{ key: string; id: number; x: number; y: number } | null>(null);
+  const operation = useRef<AbortController | null>(null);
+  const taskIds = useRef({ create: '', sign: '' });
+
+  async function refresh(signal: AbortSignal) {
+    const data = await signatureAccess(signal);
+    if (!signal.aborted) setAccess(data);
+  }
+
+  useEffect(() => {
+    const request = new AbortController();
+    void signatureAccess(request.signal).then(data => {
+      if (!request.signal.aborted) setAccess(data);
+    }).catch(reason => { if (!request.signal.aborted) setError(reason.message); });
+    return () => { request.abort(); operation.current?.abort(); };
+  }, []);
+
+  useEffect(() => () => { if (source) disposeSignatureSource(source); }, [source]);
+
+  useEffect(() => {
+    if (mode !== 'create' || !draft.current) return;
+    penCanvas.current?.getContext('2d')?.putImageData(draft.current, 0, 0);
+  }, [mode]);
+
+  useEffect(() => {
+    if (source?.kind !== 'pdf' || mode !== 'sign') return;
+    let active = true;
+    let rendering: RenderTask | undefined;
+    void (async () => {
+      try {
+        const pdfPage = await source.pdf.getPage(page);
+        const canvas = preview.current;
+        if (!active || !canvas) return;
+        const original = pdfPage.getViewport({ scale: 1 });
+        const viewport = pdfPage.getViewport({ scale: Math.min(2, 1400 / original.width, 1600 / original.height) });
+        canvas.width = Math.max(1, Math.ceil(viewport.width));
+        canvas.height = Math.max(1, Math.ceil(viewport.height));
+        rendering = pdfPage.render({ canvas, viewport, background: '#ffffff' });
+        await rendering.promise;
+        if (active) setPdfSize({ page, width: viewport.width, height: viewport.height });
+      } catch {
+        if (active) setError('PDF 页面预览失败，请切换页面或重新上传');
+      }
+    })();
+    return () => { active = false; rendering?.cancel(); };
+  }, [mode, page, source]);
+
+  const signatures = access?.signatures ?? [];
+  const currentSignature = signatures.find(item => item.id === selectedSignature) ?? signatures[0];
+  const pageCount = source?.kind === 'pdf' ? source.pdf.numPages : 1;
+  const pageSize = source?.kind === 'image' ? source : pdfSize?.page === page ? pdfSize : null;
+  const activePlacement = placements.find(item => item.key === activeKey && item.page === page);
+  const visiblePlacements = placements.filter(item => item.page === page);
+  const estimate = (action: SignatureAction) => access?.hasMembership ? 0 : access?.costs[action] ?? tool.pointsCost ?? 0;
+  const canRun = Boolean(access?.canProcess);
+
+  async function run(work: (signal: AbortSignal) => Promise<void>) {
+    if (operation.current) return;
+    const request = new AbortController();
+    operation.current = request;
+    setBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      await work(request.signal);
+    } catch (reason) {
+      if (!request.signal.aborted) setError((reason as Error).message);
+    } finally {
+      if (operation.current === request) operation.current = null;
+      if (!request.signal.aborted) setBusy(false);
+    }
+  }
+
+  function switchMode(next: SignatureAction) {
+    if (mode === 'create' && hasInk) {
+      const canvas = penCanvas.current;
+      draft.current = canvas?.getContext('2d')?.getImageData(0, 0, canvas.width, canvas.height) ?? null;
+    }
+    setError('');
+    setNotice('');
+    setMode(next);
+  }
+
+  function draw(event: PointerEvent<HTMLCanvasElement>, start: boolean) {
+    if (busy || (start ? event.button !== 0 : pen.current?.id !== event.pointerId)) return;
+    const canvas = event.currentTarget;
+    const context = canvas.getContext('2d');
+    if (!context) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = (event.clientX - rect.left) * canvas.width / rect.width;
+    const y = (event.clientY - rect.top) * canvas.height / rect.height;
+    context.strokeStyle = ink;
+    context.lineWidth = 4.5;
+    context.lineCap = 'round';
+    context.lineJoin = 'round';
+    context.beginPath();
+    context.moveTo(start ? x - .1 : pen.current!.x, start ? y : pen.current!.y);
+    context.lineTo(x, y);
+    context.stroke();
+    if (start) canvas.setPointerCapture(event.pointerId);
+    pen.current = { id: event.pointerId, x, y };
+    taskIds.current.create = '';
+    setHasInk(true);
+  }
+
+  function clearDraft() {
+    const canvas = penCanvas.current;
+    canvas?.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height);
+    draft.current = null;
+    taskIds.current.create = '';
+    setHasInk(false);
+  }
+
+  function importDraft(file: File) {
+    void run(async signal => {
+      if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size > signatureLimits.fileBytes) {
+        throw Error('请上传12MB以内的 PNG、JPG 或 WebP');
+      }
+      const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
+      try {
+        signal.throwIfAborted();
+        const canvas = penCanvas.current;
+        const context = canvas?.getContext('2d');
+        if (!canvas || !context) throw Error('浏览器暂不支持图片处理');
+        clearDraft();
+        const ratio = Math.min((canvas.width - 32) / bitmap.width, (canvas.height - 32) / bitmap.height);
+        const width = bitmap.width * ratio, height = bitmap.height * ratio;
+        context.drawImage(bitmap, (canvas.width - width) / 2, (canvas.height - height) / 2, width, height);
+        setHasInk(true);
+      } finally { bitmap.close(); }
+    });
+  }
+
+  function saveSignature() {
+    void run(async signal => {
+      const canvas = penCanvas.current;
+      const context = canvas?.getContext('2d');
+      if (!access || !canvas || !context) return;
+      const { data, width, height } = context.getImageData(0, 0, canvas.width, canvas.height);
+      const id = taskIds.current.create ||= crypto.randomUUID();
+      const response = await signatureRequest<{ signature: SavedSignature }>('POST', signal, {
+        id, name, action: 'create', width, height, chargeType: access.chargeType, cost: access.costs.create,
+      }, new Blob([new Uint8Array(data)]));
+      signal.throwIfAborted();
+      setAccess(old => old && ({
+        ...old, signatures: [response.signature, ...old.signatures.filter(item => item.id !== response.signature.id)],
+      }));
+      setSelectedSignature(response.signature.id);
+      clearDraft();
+      setName('');
+      setNotice('签名已保存到签名库');
+      notifyAccountChanged();
+      await refresh(signal);
+    });
+  }
+
+  function selectFile(file: File) {
+    void run(async signal => {
+      const loaded = await loadSignatureSource(file, Boolean(access?.wordReady), signal);
+      if (signal.aborted) { disposeSignatureSource(loaded); return; }
+      setSource(loaded);
+      setPage(1);
+      setPdfSize(null);
+      setPlacements([]);
+      setActiveKey('');
+      resetResult();
+    });
+  }
+
+  function resetResult() {
+    taskIds.current.sign = '';
+    setResult(null);
+  }
+
+  function place(x: number, y: number) {
+    if (!pageSize || !currentSignature || busy || placements.length >= signatureLimits.placements) return;
+    const ratio = pageSize.width / pageSize.height * currentSignature.height / currentSignature.width;
+    const width = Math.min(.25, .8 / ratio), height = width * ratio;
+    const entry = {
+      key: crypto.randomUUID(), signatureId: currentSignature.id, page,
+      x: clamp(x - width / 2, 1 - width), y: clamp(y - height / 2, 1 - height), width, height,
+    };
+    setPlacements(previous => [...previous, entry]);
+    setActiveKey(entry.key);
+    resetResult();
+  }
+
+  function movePlacement(key: string, x: number, y: number) {
+    setPlacements(previous => previous.map(item => item.key === key
+      ? { ...item, x: clamp(x, 1 - item.width), y: clamp(y, 1 - item.height) } : item));
+    resetResult();
+  }
+
+  function startDrag(event: PointerEvent<HTMLButtonElement>, item: Placement) {
+    event.stopPropagation();
+    if (busy || event.button !== 0) return;
+    setActiveKey(item.key);
+    const bounds = stage.current?.getBoundingClientRect();
+    if (!bounds) return;
+    drag.current = { key: item.key, id: event.pointerId, x: (event.clientX - bounds.left) / bounds.width - item.x,
+      y: (event.clientY - bounds.top) / bounds.height - item.y };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
+  function dragPlacement(event: PointerEvent<HTMLButtonElement>) {
+    const bounds = stage.current?.getBoundingClientRect();
+    const current = drag.current;
+    if (!bounds || current?.id !== event.pointerId) return;
+    movePlacement(current.key, (event.clientX - bounds.left) / bounds.width - current.x,
+      (event.clientY - bounds.top) / bounds.height - current.y);
+  }
+
+  function resizePlacement(item: Placement, width: number) {
+    const ratio = item.height / item.width;
+    const nextWidth = Math.min(width, 1, 1 / ratio), nextHeight = nextWidth * ratio;
+    setPlacements(previous => previous.map(entry => entry.key === item.key ? {
+      ...entry, width: nextWidth, height: nextHeight, x: clamp(entry.x, 1 - nextWidth), y: clamp(entry.y, 1 - nextHeight),
+    } : entry));
+    resetResult();
+  }
+
+  function removePlacement() {
+    setPlacements(previous => previous.filter(item => item.key !== activeKey));
+    setActiveKey('');
+    resetResult();
+  }
+
+  function removeSignature(item: SavedSignature) {
+    if (!window.confirm(t('确认删除此签名？'))) return;
+    void run(async signal => {
+      await signatureRequest('DELETE', signal, undefined, undefined, `/${item.id}`);
+      signal.throwIfAborted();
+      setAccess(old => old && ({ ...old, signatures: old.signatures.filter(signature => signature.id !== item.id) }));
+      setPlacements(previous => previous.filter(entry => entry.signatureId !== item.id));
+      resetResult();
+      await refresh(signal);
+    });
+  }
+
+  function signDocument() {
+    void run(async signal => {
+      if (!source || !access) return;
+      const id = taskIds.current.sign ||= crypto.randomUUID();
+      const response = await signatureRequest<{ document: SignedDocument }>('POST', signal, {
+        id, action: 'sign', name: source.name, kind: source.kind, placements,
+        ...(source.kind === 'image' ? { width: source.width, height: source.height } : {}),
+        chargeType: access.chargeType, cost: access.costs.sign,
+      }, source.file);
+      signal.throwIfAborted();
+      setResult(response.document);
+      setAccess(old => old && ({
+        ...old, documents: [response.document, ...old.documents.filter(item => item.id !== response.document.id)],
+      }));
+      setNotice('签署文件已生成，可下载');
+      notifyAccountChanged();
+      await refresh(signal);
+    });
+  }
+
+  function signatureList(useForFile: boolean) {
+    if (!signatures.length) return <p className="ds-empty-copy">{t('签名库暂时为空')}</p>;
+    return <ul className="ds-library-list">
+      {signatures.map(item => <li key={item.id}>
+        <button type="button" className="ds-signature-choice" disabled={busy}
+          aria-pressed={useForFile ? currentSignature?.id === item.id : undefined}
+          onClick={() => { setSelectedSignature(item.id); if (!useForFile) switchMode('sign'); }}>
+          <img src={item.previewUrl} alt="" /><span>{item.name}</span>
+        </button>
+        {!useForFile && <button type="button" className="ds-icon-button" aria-label={t('删除签名')}
+          disabled={busy} onClick={() => removeSignature(item)}><TrashIcon /></button>}
+      </li>)}
+    </ul>;
+  }
+
+  const priceNote = (action: SignatureAction) => <span className="ds-cost">
+    {access?.hasMembership ? t('有效套餐优先使用') : <><b>{estimate(action)}</b> {t('积分 / 次')}</>}
+  </span>;
+  const signIn = <a className="ds-primary" href={accountLoginHref(signaturePage)}>{t('登录后使用')}</a>;
+  const aspect = pageSize ? pageSize.width / pageSize.height : .78;
+
+  return <main className="ds-workspace">
+    <header className="ds-heading">
+      <div className="ds-title"><span><DocumentCheckIcon aria-hidden="true" /></span>
+        <div><h1>{t('文件在线签名')}</h1><p>{t('制作可重复使用的签名，在文件上定位后下载成品。')}</p></div>
+      </div>
+      <div className="ds-heading-actions">
+        {access?.signedIn && <a className="ds-balance" href="/points">{t('剩余积分')} <b>{access.pointsBalance}</b></a>}
+        <a className="ds-return" href="/tools"><ArrowLeftIcon aria-hidden="true" />{t('工具服务')}</a>
+      </div>
+    </header>
+
+    <nav className="ds-modes" aria-label={t('文件签名功能')}>
+      {(['create', 'sign'] as const).map(action => <button type="button" key={action} aria-pressed={mode === action}
+        disabled={busy} onClick={() => switchMode(action)}>
+        {action === 'create' ? <PencilSquareIcon aria-hidden="true" /> : <DocumentTextIcon aria-hidden="true" />}
+        {t(signatureActions[action])}
+      </button>)}
+    </nav>
+    {error && <p className="ds-feedback ds-error" role="alert">{t(error)}</p>}
+    {notice && <p className="ds-feedback ds-success" role="status">{t(notice)}</p>}
+
+    {mode === 'create' ? <div className="ds-layout">
+      <section className="ds-panel" aria-labelledby="ds-draw-heading">
+        <div className="ds-panel-heading"><h2 id="ds-draw-heading">{t('签名画板')}</h2>
+          <button className="ds-secondary" type="button" disabled={busy} onClick={() => signatureUpload.current?.click()}>
+            <ArrowUpTrayIcon aria-hidden="true" />{t('上传签名图片')}
+          </button>
+          <input ref={signatureUpload} hidden type="file" accept="image/png,image/jpeg,image/webp" onChange={event => {
+            const file = event.target.files?.[0]; event.target.value = ''; if (file) importDraft(file);
+          }} />
+        </div>
+        <div className="ds-panel-body">
+          <div className="ds-form-row">
+            <label>{t('签名名称')}<input value={name} maxLength={48} disabled={busy} placeholder={t('例如：我的签名')}
+              onChange={event => { setName(event.target.value); taskIds.current.create = ''; }} /></label>
+            <label>{t('笔迹颜色')}<input type="color" value={ink} disabled={busy} onChange={event => setInk(event.target.value)} /></label>
+          </div>
+          <div className="ds-draw-surface">
+            <canvas ref={penCanvas} width={840} height={300} aria-label={t('手写签名画板')}
+              onPointerDown={event => draw(event, true)} onPointerMove={event => draw(event, false)}
+              onPointerUp={() => { pen.current = null; }} onPointerCancel={() => { pen.current = null; }}
+              onLostPointerCapture={() => { pen.current = null; }} />
+            {!hasInk && <span>{t('在这里手写签名')}</span>}
+          </div>
+          <div className="ds-panel-actions">
+            <button type="button" className="ds-secondary" disabled={busy || !hasInk} onClick={clearDraft}>
+              <TrashIcon aria-hidden="true" />{t('清空画板')}
+            </button>
+            <div>{priceNote('create')}{access?.signedIn ? <button type="button" className="ds-primary"
+              disabled={busy || !hasInk || !name.trim() || !canRun} onClick={saveSignature}>{t(busy ? '正在处理…' : '保存签名')}</button> : signIn}</div>
+          </div>
+        </div>
+      </section>
+      <aside className="ds-panel">
+        <div className="ds-panel-heading"><h2>{t('签名库')}</h2><span>{signatures.length} / {signatureLimits.savedSignatures}</span></div>
+        <div className="ds-panel-body">{signatureList(false)}</div>
+      </aside>
+    </div> : <div className="ds-layout">
+      <section className="ds-panel" aria-labelledby="ds-file-heading">
+        <div className="ds-panel-heading"><h2 id="ds-file-heading">{t('文件预览')}</h2>
+          <button type="button" className="ds-secondary" disabled={busy} onClick={() => documentUpload.current?.click()}>
+            <ArrowUpTrayIcon aria-hidden="true" />{t(source ? '更换文件' : '上传文件')}
+          </button>
+          <input ref={documentUpload} hidden type="file" accept=".pdf,.docx,.png,.jpg,.jpeg,.webp" onChange={event => {
+            const file = event.target.files?.[0]; event.target.value = ''; if (file) selectFile(file);
+          }} />
+        </div>
+        {source ? <>
+          <div className="ds-page-tools"><span title={source.name}>{source.name}</span>
+            {source.kind === 'pdf' ? <div>
+              <button className="ds-icon-button" type="button" aria-label={t('上一页')} disabled={busy || page <= 1}
+                onClick={() => { setPage(page - 1); setActiveKey(''); }}><ChevronLeftIcon /></button>
+              <span>{page} / {pageCount}</span>
+              <button className="ds-icon-button" type="button" aria-label={t('下一页')} disabled={busy || page >= pageCount}
+                onClick={() => { setPage(page + 1); setActiveKey(''); }}><ChevronRightIcon /></button>
+            </div> : <div>{source.width} × {source.height}</div>}
+          </div>
+          <div className="ds-preview-surface">
+            <div ref={stage} className="ds-page" style={{ aspectRatio: aspect, width: `min(100%, calc(var(--ds-preview-height) * ${aspect}))` }}
+              onPointerDown={event => {
+                if (event.button !== 0) return;
+                const bounds = event.currentTarget.getBoundingClientRect();
+                place((event.clientX - bounds.left) / bounds.width, (event.clientY - bounds.top) / bounds.height);
+              }}>
+              {source.kind === 'image' ? <img src={source.url} alt={t('文件预览')} draggable={false} />
+                : <canvas ref={preview} aria-label={t('文件预览')} style={{ visibility: pageSize ? 'visible' : 'hidden' }} />}
+              {!pageSize && <span className="ds-rendering"><ArrowPathIcon />{t('正在加载预览…')}</span>}
+              {pageSize && visiblePlacements.map(item => {
+                const signature = signatures.find(saved => saved.id === item.signatureId);
+                return signature && <button type="button" key={item.key} className="ds-placement"
+                  aria-label={signature.name} aria-pressed={item.key === activeKey} disabled={busy}
+                  style={{ left: `${item.x * 100}%`, top: `${item.y * 100}%`, width: `${item.width * 100}%`, height: `${item.height * 100}%` }}
+                  onClick={() => setActiveKey(item.key)} onPointerDown={event => startDrag(event, item)}
+                  onPointerMove={dragPlacement} onPointerUp={() => { drag.current = null; }}
+                  onPointerCancel={() => { drag.current = null; }} onLostPointerCapture={() => { drag.current = null; }}>
+                  <img src={signature.previewUrl} alt="" draggable={false} />
+                </button>;
+              })}
+            </div>
+          </div>
+        </> : <button type="button" className="ds-file-empty" disabled={busy} onClick={() => documentUpload.current?.click()}>
+          <DocumentTextIcon aria-hidden="true" />
+          <strong>{t('选择要签署的文件')}</strong>
+          <span>{t('PDF、DOCX、PNG、JPG、WebP，每个文件最多12MB')}</span>
+        </button>}
+      </section>
+
+      <aside className="ds-panel">
+        <div className="ds-panel-heading"><h2>{t('选择签名')}</h2>
+          <button type="button" className="ds-text-button" disabled={busy} onClick={() => switchMode('create')}>{t('制作签名')}</button>
+        </div>
+        <div className="ds-panel-body ds-placement-settings">
+          {signatureList(true)}
+          <p>{t('选择签名后点击页面放置，拖动可调整位置。')}</p>
+          <button className="ds-secondary" type="button" disabled={busy || !pageSize || !currentSignature || placements.length >= signatureLimits.placements}
+            onClick={() => place(.5, .5)}><PlusIcon aria-hidden="true" />{t('在页面中央放置')}</button>
+          {activePlacement && <div className="ds-position">
+            <label>{t('签名大小')}<input type="range" min=".1" max="100" step=".1" disabled={busy}
+              value={activePlacement.width * 100} onChange={event => resizePlacement(activePlacement, Number(event.target.value) / 100)} /></label>
+            <label>{t('横向位置')}<input type="range" min="0" max={(1 - activePlacement.width) * 100} step=".1" disabled={busy}
+              value={activePlacement.x * 100} onChange={event => movePlacement(activeKey, Number(event.target.value) / 100, activePlacement.y)} /></label>
+            <label>{t('纵向位置')}<input type="range" min="0" max={(1 - activePlacement.height) * 100} step=".1" disabled={busy}
+              value={activePlacement.y * 100} onChange={event => movePlacement(activeKey, activePlacement.x, Number(event.target.value) / 100)} /></label>
+            <button className="ds-secondary" type="button" disabled={busy} onClick={removePlacement}><TrashIcon aria-hidden="true" />{t('移除此处签名')}</button>
+          </div>}
+          <div className="ds-summary">
+            <span>{t('签名位置')} <b>{placements.length}</b></span>{priceNote('sign')}
+          </div>
+          <p>{t('PDF 和 DOCX 输出 PDF，图片输出 PNG。成品保留7天。')}</p>
+          {access && !access.storageReady && <p className="ds-error">{t('签署文件云存储暂未配置')}</p>}
+          {access && !access.wordReady && <p>{t('Word 转换服务暂未配置')}</p>}
+          {result ? <a className="ds-primary" href={result.downloadUrl} download><ArrowDownTrayIcon aria-hidden="true" />{t('下载签署文件')}</a>
+            : access?.signedIn ? <button type="button" className="ds-primary"
+              disabled={busy || !source || !placements.length || !access.storageReady || !canRun} onClick={signDocument}>
+              <DocumentCheckIcon aria-hidden="true" />{t(busy ? '正在处理…' : '生成签署文件')}
+            </button> : signIn}
+        </div>
+      </aside>
+    </div>}
+
+    {Boolean(access?.documents.length) && <section className="ds-panel ds-history">
+      <div className="ds-panel-heading"><h2>{t('最近签署文件')}</h2><span>{t('重复下载不扣积分')}</span></div>
+      <ul>{access?.documents.map(file => <li key={file.id}>
+        <div><strong>{file.name}</strong><small>{(file.bytes / 1024).toFixed(0)} KB · {t('有效期至')} {new Date(file.expiresAt).toLocaleString(locale)}</small></div>
+        <a className="ds-secondary" href={file.downloadUrl} download><ArrowDownTrayIcon aria-hidden="true" />{t('下载签署文件')}</a>
+      </li>)}</ul>
+    </section>}
+  </main>;
+}
