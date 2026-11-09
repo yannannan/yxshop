@@ -4,13 +4,23 @@ import { useI18n } from '@/components/language-provider';
 
 import Image from 'next/image';
 import Link from 'next/link';
+import { accountLoginHref } from '../lib/account';
 import { notifyAccountChanged } from '../lib/account-client';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { defaultStampOptions, parseStampOptions, stampFonts, stampFormats, stampPresets, stampSizes, type StampAccess, type StampOptions, type StampResult } from '../lib/stamp-options';
 import { toolBillingLabels, toolPlanPrice, toolPlanKey, toolPlanQuery, toolPlanLabel, type ToolService } from '../lib/tool-services';
 
-function time(value: string) {
-  return new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(value));
+function time(value: string, locale: string = 'zh-CN', withYear = false) {
+  const date = new Date(value);
+  return Number.isFinite(date.getTime())
+    ? new Intl.DateTimeFormat(locale, { timeZone: 'Asia/Shanghai', year: withYear ? 'numeric' : undefined, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).format(date)
+    : '—';
+}
+async function savedStamp(id: string, signal?: AbortSignal) {
+  const response = await fetch(`/api/tools/stamp-maker?result=${encodeURIComponent(id)}`, { cache: 'no-store', signal });
+  const data = await response.json() as { result?: StampResult; message?: string };
+  if (!response.ok || !data.result) throw new Error(data.message || '成品读取失败');
+  return data.result;
 }
 function entitlementText(access: StampAccess | null) {
   if (!access) return '正在读取使用权益';
@@ -23,7 +33,7 @@ function entitlementText(access: StampAccess | null) {
 }
 
 export function StampMaker({ tool }: { tool: ToolService }) {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const [options, setOptions] = useState(defaultStampOptions);
   const [preview, setPreview] = useState('/stamp-previews/circle.png');
   const [previewBusy, setPreviewBusy] = useState(false);
@@ -31,6 +41,7 @@ export function StampMaker({ tool }: { tool: ToolService }) {
   const [previewVersion, setPreviewVersion] = useState(0);
   const [access, setAccess] = useState<StampAccess | null>(null);
   const [accessError, setAccessError] = useState('');
+  const [historyError, setHistoryError] = useState('');
   const [checking, setChecking] = useState(true);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
@@ -41,6 +52,7 @@ export function StampMaker({ tool }: { tool: ToolService }) {
   const request = useRef<{ id: string; signature: string } | null>(null);
   const previewObjectUrl = useRef('');
   const working = useRef(false);
+  const resultPanel = useRef<HTMLDivElement>(null);
   let normalized: StampOptions | null = null, validationError = '';
   try { normalized = parseStampOptions(options); }
   catch (error) { validationError = (error as Error).message; }
@@ -63,10 +75,8 @@ export function StampMaker({ tool }: { tool: ToolService }) {
   useEffect(() => {
     const id = new URLSearchParams(window.location.search).get('result');
     const controller = new AbortController();
-    if (id) void fetch(`/api/tools/stamp-maker?result=${encodeURIComponent(id)}`, { cache: 'no-store', signal: controller.signal }).then(async response => {
-      const data = await response.json() as { result?: StampResult; message?: string };
-      if (!response.ok || !data.result) throw new Error(data.message || '成品读取失败');
-      if (!controller.signal.aborted) { setResult(data.result); setMessageSuccess(true); setMessage('已打开已制作的成品，重复下载不扣次。'); }
+    if (id) void savedStamp(id, controller.signal).then(stamp => {
+      if (!controller.signal.aborted) { setResult(stamp); setMessageSuccess(true); setMessage('已打开已制作的成品，重复下载不扣次。'); }
     }).catch(error => { if (!controller.signal.aborted) setMessage((error as Error).message || '成品读取失败'); });
     return () => controller.abort();
   }, []);
@@ -89,6 +99,11 @@ export function StampMaker({ tool }: { tool: ToolService }) {
     return () => { window.clearTimeout(timer); controller.abort(); };
   }, [signature, previewVersion]);
   useEffect(() => () => { if (previewObjectUrl.current) URL.revokeObjectURL(previewObjectUrl.current); }, []);
+  useEffect(() => {
+    if (!result || result.signature) return;
+    resultPanel.current?.focus({ preventScroll: true });
+    resultPanel.current?.scrollIntoView({ block: 'start' });
+  }, [result]);
 
   function update(patch: Partial<StampOptions>) { setOptions(previous => { const next = { ...previous, ...patch }; return next.format === 'jpeg' ? { ...next, background: 'white' } : next; }); setMessage(''); setRetryPending(false); }
   async function generate() {
@@ -109,19 +124,17 @@ export function StampMaker({ tool }: { tool: ToolService }) {
   }
   async function restore(id: string) {
     if (working.current) return;
-    working.current = true; setBusy(true); setMessage(''); setMessageSuccess(false);
+    working.current = true; setBusy(true); setHistoryError(''); setMessage(''); setMessageSuccess(false);
     try {
-      const response = await fetch(`/api/tools/stamp-maker?result=${encodeURIComponent(id)}`, { cache: 'no-store' });
-      const data = await response.json() as { result?: StampResult; message?: string };
-      if (!response.ok || !data.result) { setMessage(data.message || '成品读取失败'); return; }
-      setResult(data.result); setRetryPending(false); setMessageSuccess(true); setMessage('已打开已制作的成品，重复下载不扣次。');
-    } catch { setMessage('成品读取失败，请稍后重试。读取成品不会扣次。'); }
+      setResult(await savedStamp(id)); setRetryPending(false); setMessageSuccess(true); setMessage('已打开已制作的成品，重复下载不扣次。');
+    } catch (error) { setHistoryError(error instanceof Error ? error.message : '成品读取失败'); }
     finally { working.current = false; setBusy(false); }
   }
   const maxText = options.shape === 'name' ? 4 : options.shape === 'square' ? 12 : 32;
   const chosenPlan = tool.plans.find(plan => toolPlanKey(plan) === selectedPlan) || tool.plans[0];
   const buyHref = tool.chargeType === 'points' ? access?.signedIn ? '/points' : '/?returnTo=/points' : `/product/${tool.id}${chosenPlan ? `?${toolPlanQuery(chosenPlan)}` : ''}`;
   const resultFormat = stampFormats[result?.format || 'png'];
+  const recent = access?.recent ?? [];
 
   const layoutPanel = <section className="stamp-panel stamp-layout-panel" aria-labelledby="stamp-layout-title">
           <div className="stamp-panel-heading"><h2 id="stamp-layout-title">{t("颜色与排版")}</h2></div>
@@ -154,7 +167,7 @@ export function StampMaker({ tool }: { tool: ToolService }) {
   return <main className="stamp-page">
     {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- 工具跨页入口使用原生导航，避免客户端路由异常时点击无反应。 */}
     <nav className="stamp-breadcrumb" aria-label={t("面包屑")}><a href="/">{t("商城首页")}</a><span>／</span><a href="/tools">{t("工具服务")}</a><span>／</span><span>{t(tool.name)}</span></nav>
-    <header className="stamp-heading"><div><span className="stamp-kicker">YXSTAR CREATIVE TOOLS</span><h1>{t(tool.name)}</h1><p>{t("选一个样式，写下你的文字。让每一枚印章，都有自己的表达。")}</p></div><div className="stamp-help"><span>{t("简单三步，完成制作")}</span><ol><li><b>{t("选择样式")}</b><p>{t("从经典圆章、椭圆、方章或姓名章开始。")}</p></li><li><b>{t("调整文字")}</b><p>{t("编辑文字、配色与排版，查看实时效果。")}</p></li><li><b>{t("制作并下载")}</b><p>{t("生成高清 PNG，透明背景便于使用。")}</p></li></ol></div><div className="stamp-feature-pills"><span>PNG · JPG · SVG</span><span>{t("最高 4096 像素")}</span><span>{t("预览不扣次")}</span></div></header>
+    <header className="stamp-heading"><div><span className="stamp-kicker">YXSTAR CREATIVE TOOLS</span><h1>{t(tool.name)}</h1><p>{t("选一个样式，写下你的文字。让每一枚印章，都有自己的表达。")}</p></div><div className="stamp-help"><span>{t("简单三步，完成制作")}</span><ol><li><b>{t("选择样式")}</b><p>{t("从经典圆章、椭圆、方章或姓名章开始。")}</p></li><li><b>{t("调整文字")}</b><p>{t("编辑文字、配色与排版，查看实时效果。")}</p></li><li><b>{t("制作并下载")}</b><p>{t("生成高清 PNG，透明背景便于使用。")}</p></li></ol></div><div className="stamp-feature-pills"><span>PNG · JPG · SVG</span><span>{t("最高 4096 像素")}</span><span>{t("预览不扣次")}</span><a className="stamp-history-jump" href="#stamp-history">{t("印章制作记录")}</a></div></header>
 
     <div className="stamp-workspace">
       <section className="stamp-panel stamp-settings" aria-labelledby="stamp-settings-title">
@@ -171,18 +184,43 @@ export function StampMaker({ tool }: { tool: ToolService }) {
       <section className="stamp-center" aria-labelledby="stamp-preview-title">
         <div className="stamp-panel stamp-preview-panel"><div className="stamp-panel-heading"><div><span className="stamp-step">02</span><h2 id="stamp-preview-title">{t("效果预览")}</h2></div><span className="stamp-preview-indicator">{t(updatingPreview ? '正在更新' : '实时预览')}</span></div><div className={`stamp-preview-stage ${options.background === 'white' ? 'white' : ''}`} aria-busy={updatingPreview}><span className="stamp-corner top-left" /><span className="stamp-corner bottom-right" /><Image className={updatingPreview ? 'is-updating' : ''} unoptimized src={preview} width={420} height={420} alt={t("当前印章的带水印效果预览")} /><div className="stamp-preview-caption">{t(options.background === 'transparent' ? '棋盘格表示透明背景' : '白色背景')}<span>{t("成品将移除预览水印")}</span></div></div>{(validationError || previewError) && <div className="stamp-inline-error stamp-preview-error" role="alert"><span>{t(validationError || previewError)}</span>{previewError && !validationError && <button type="button" className="stamp-preview-retry" disabled={updatingPreview} onClick={() => setPreviewVersion(previous => previous + 1)}>{t("重新预览")}</button>}</div>}<div className="stamp-preview-footer"><span>{t("修改参数后自动更新")}</span><b>{t("预览免费 · 制作成功才使用权益")}</b></div></div>
         {t(exportPanel)}
-        {result && <div className="stamp-panel stamp-result"><div><span className="stamp-success-icon">✓</span><div><h2>{t("你的印章已制作完成")}</h2><p>{t(result.size)} × {t(result.size)} px · {t(resultFormat.label)}{t(result.signature && !sameResult ? ' · 这是修改参数前的成品' : '')}</p></div></div><Image unoptimized src={result.image} alt={t("已制作的高清印章成品")} width={160} height={160} /><a className="stamp-download-button" href={result.image} download={`yxstar-stamp-${result.id}.${resultFormat.extension}`}>{t("下载 ")}{t(resultFormat.label)} <span>↓</span></a><small>{t("重复下载此成品不会扣次。修改参数并重新制作属于一次新的处理。")}</small></div>}
+        {result && <div className="stamp-panel stamp-result" ref={resultPanel} tabIndex={-1} aria-labelledby="stamp-result-title"><div><span className="stamp-success-icon">✓</span><div><h2 id="stamp-result-title">{t(result.signature ? '你的印章已制作完成' : '已打开的印章成品')}</h2><p>{t(result.size)} × {t(result.size)} px · {t(resultFormat.label)}{t(result.signature && !sameResult ? ' · 这是修改参数前的成品' : '')}</p></div></div><Image unoptimized src={result.image} alt={t("已制作的高清印章成品")} width={160} height={160} /><a className="stamp-download-button" href={result.image} download={`yxstar-stamp-${result.id}.${resultFormat.extension}`}>{t("下载 ")}{t(resultFormat.label)} <span>↓</span></a><small>{t("重复下载此成品不会扣次。修改参数并重新制作属于一次新的处理。")}</small></div>}
+
+        <section id="stamp-history" className="stamp-panel stamp-history" aria-labelledby="stamp-history-title" aria-busy={checking}>
+          <div className="stamp-panel-heading">
+            <h2 id="stamp-history-title">{t('印章制作记录')}</h2>
+            <div className="stamp-history-actions">
+              <button className="stamp-text-button" type="button" disabled={checking || busy} onClick={() => { setHistoryError(''); void refresh(); }}>{t('刷新')}</button>
+              {access?.signedIn && <Link href="/account/activity?filter=stamp">{t('查看全部记录')}</Link>}
+            </div>
+          </div>
+          <div className="stamp-history-body">
+            {(historyError || accessError) && <p className="stamp-inline-error" role="alert">{t(historyError || accessError)}</p>}
+            {recent.length > 0 ? <ul className="stamp-history-list">
+              {recent.map(item => <li key={item.id}>
+                <div>
+                  <b>{t('印章成品')}</b><span>{item.size} × {item.size} px</span>
+                  <time dateTime={item.createdAt}>{time(item.createdAt, locale, true)}</time>
+                </div>
+                <button type="button" className="stamp-history-open" disabled={busy} onClick={() => void restore(item.id)}>{t('查看成品')}</button>
+              </li>)}
+            </ul> : checking ? <p className="stamp-history-empty" role="status">{t('正在读取记录…')}</p>
+              : access?.signedIn ? <p className="stamp-history-empty">{t('暂无印章制作记录。')}</p>
+                : access && <div className="stamp-history-empty"><p>{t('登录后查看已保存的印章。')}</p>
+                  <Link href={accountLoginHref('/tools/stamp-maker.html#stamp-history')}>{t('登录 / 注册')}</Link>
+                </div>}
+          </div>
+        </section>
       </section>
 
       <aside className="stamp-sidebar" aria-labelledby="stamp-layout-title">
         {t(layoutPanel)}
         {tool.chargeType === 'points' && <section className="stamp-panel stamp-plan-panel"><h2>{t("全工具通用积分")}</h2><p>{t("本工具每次成功制作消耗 ")}{t(access?.pointsCost ?? tool.pointsCost)}{t(" 积分；预览和重复下载免费。")}</p><p>{t("当前余额：")}{t(access?.signedIn ? `${access.pointsBalance} 积分` : '登录后领取 100 积分')}</p>{access?.cycle && <p>{t("优先使用已有本工具会员 / 次数权益。")}</p>}<Link href={buyHref}>{t("我的积分与充值 →")}</Link></section>}
         {tool.chargeType === 'paid' && <section className="stamp-panel stamp-plan-panel"><h2>{t("选择工具套餐")}</h2><p>{t("支付核验后，回到本页刷新权益。")}</p><div className="stamp-plan-options">{tool.plans.map(plan => <label key={toolPlanKey(plan)} className={selectedPlan === toolPlanKey(plan) ? 'selected' : ''}><input type="radio" name="stamp-plan" checked={selectedPlan === toolPlanKey(plan)} onChange={() => setSelectedPlan(toolPlanKey(plan))} /><span>{t(toolPlanLabel(plan))}</span><b>{t(toolPlanPrice(plan))}</b></label>)}</div><Link href={buyHref}>{t("查看套餐与支付方式 →")}</Link></section>}
-        {Boolean(access?.recent.length) && <section className="stamp-panel stamp-recent"><h2>{t("最近制作")}</h2><p>{t("已生成的成品可以再次下载。")}</p>{access?.recent.map(item => <button type="button" disabled={busy} key={item.id} onClick={() => void restore(item.id)}><span><b>{t(item.size)}{t(" px 印章")}</b><small>{t(time(item.createdAt))}</small></span><span>{t("打开 ↗")}</span></button>)}</section>}
         {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- 工具跨页入口使用原生导航，避免客户端路由异常时点击无反应。 */}
         <a className="stamp-back-tools" href="/tools">{t("← 发现更多实用工具")}</a>
       </aside>
     </div>
-    <section className="stamp-about"><h2>{t("关于印章在线制作")}</h2><p>{t("在浏览器中设计印章图片，支持圆形、椭圆形、方形和个人姓名章。调整名称、辅助文字、边框与颜色，导出 PNG、JPG 图片或文字已转为轮廓的 SVG 矢量文件。")}</p>{tool.detail && !tool.detail.includes('实际工具入口') && <p>{tool.detail}</p>}<div><article><h3>{t("预览会消耗积分吗？")}</h3><p>{t("不会。修改文字、颜色和样式可以免费预览；成功生成成品后才消耗积分或按次权益。")}</p></article><article><h3>{t("包月、包年如何使用？")}</h3><p>{t("沿用本工具后台配置的套餐及价格，在有效期内使用；有效时长权益优先于按次权益。")}</p></article><article><h3>{t("下载失败怎么办？")}</h3><p>{t("付费制作的成品会保留在最近制作中，同一成品可以重新打开和下载，不会重复扣次。")}</p></article></div></section>
+    <section className="stamp-about"><h2>{t("关于印章在线制作")}</h2><p>{t("在浏览器中设计印章图片，支持圆形、椭圆形、方形和个人姓名章。调整名称、辅助文字、边框与颜色，导出 PNG、JPG 图片或文字已转为轮廓的 SVG 矢量文件。")}</p>{tool.detail && !tool.detail.includes('实际工具入口') && <p>{tool.detail}</p>}<div><article><h3>{t("预览会消耗积分吗？")}</h3><p>{t("不会。修改文字、颜色和样式可以免费预览；成功生成成品后才消耗积分或按次权益。")}</p></article><article><h3>{t("包月、包年如何使用？")}</h3><p>{t("沿用本工具后台配置的套餐及价格，在有效期内使用；有效时长权益优先于按次权益。")}</p></article><article><h3>{t("下载失败怎么办？")}</h3><p>{t("登录后制作的成品保存在印章制作记录中，重新打开和下载均免费。")}</p></article></div></section>
   </main>;
 }

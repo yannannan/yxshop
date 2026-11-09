@@ -154,6 +154,19 @@ test('站长分析记录并入个人中心，按本人筛选且保留实际工�
   const result = await (await f.routes['/records'].GET(f.request('/records?kind=activity&filter=site'))).json();
   assert.equal(result.total, 1); assert.equal(result.items[0].kind, 'site'); assert.equal(result.items[0].href, '/tools/custom-seo.html?run=analysis-one'); assert.equal(helpers.recordStatusLabel(result.items[0]), '部分完成');
 });
+test('工具记录深链选中指定类型，非法或多值筛选回到全部记录', async () => {
+  const { AccountRecordList } = load('../components/account-center.tsx', {
+    'next/image': () => null, '../lib/account': helpers, '../lib/account-client': { useAccount: () => ({ account: null }) },
+  });
+  const page = load('../app/account/activity/page.tsx', {
+    '@/components/account-shell': { AccountShell: ({ children }) => children },
+    '@/components/account-center': { AccountRecordList },
+  });
+  for (const [filter, label] of [['stamp', '印章制作'], ['bad-filter', '全部记录'], [['stamp', 'video'], '全部记录']]) {
+    const tree = await page.default({ searchParams: Promise.resolve({ filter }) });
+    assert.match(renderToStaticMarkup(tree), new RegExp(`<button aria-pressed="true"[^>]*>${label}</button>`));
+  }
+});
 test('未安装模块独立提示；数据库真正失败返回错误，不能伪装成无记录', async () => {
   const f = fixture({ missingModules: true }), result = await (await f.routes['/records'].GET(f.request('/records'))).json(); assert.equal(result.items.length, 2); assert.ok(result.warnings.length);
   const signatures = await (await f.routes['/records'].GET(f.request('/records?kind=activity&filter=signature'))).json();

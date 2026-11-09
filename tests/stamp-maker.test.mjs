@@ -16,13 +16,14 @@ import { Resvg } from '@resvg/resvg-wasm';
 import * as options from '../lib/stamp-options.ts';
 import * as tools from '../lib/tool-services.ts';
 import * as points from '../lib/points.ts';
+import * as account from '../lib/account.ts';
 import { renderStamp, stampResultPng, stampSvg } from '../lib/stamp-renderer.ts';
 
 const require = createRequire(import.meta.url);
 function load(file, mocks = {}, globals = {}) {
   const exports = {};
   const code = ts.transpileModule(readFileSync(new URL(file, import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText;
-  vm.runInNewContext(code, { exports, Response, Request, URL, URLSearchParams, AbortController, Buffer, crypto: webcrypto, console: { error() {} }, ...globals, require(name) { if (name in mocks) return mocks[name]; if (i18nMock(name)) return i18nMock(name); if (name === '../lib/account-client') return { notifyAccountChanged() {} }; if (name === './account-menu') return { AccountMenu: () => null }; if (name === '../../../components/storefront-header') return { StorefrontHeader: () => null }; if (name === '@/components/video-extractor') return { VideoExtractor: () => null }; if (name === '@/lib/points') return points; if (['@/lib/points-service', './points-service'].includes(name)) return { PointsError: class extends Error {} }; if (name === '@/lib/tool-points-usage') return {};  if (['react', 'react/jsx-runtime', 'node:crypto'].includes(name)) return require(name); throw new Error(`Unexpected module: ${name}`); } });
+  vm.runInNewContext(code, { exports, Response, Request, URL, URLSearchParams, AbortController, Buffer, crypto: webcrypto, console: { error() {} }, ...globals, require(name) { if (name in mocks) return mocks[name]; if (i18nMock(name)) return i18nMock(name); if (name === '../lib/account') return account; if (name === '../lib/account-client') return { notifyAccountChanged() {} }; if (name === './account-menu') return { AccountMenu: () => null }; if (name === '../../../components/storefront-header') return { StorefrontHeader: () => null }; if (name === '@/components/video-extractor') return { VideoExtractor: () => null }; if (name === '@/lib/points') return points; if (['@/lib/points-service', './points-service'].includes(name)) return { PointsError: class extends Error {} }; if (name === '@/lib/tool-points-usage') return {};  if (['react', 'react/jsx-runtime', 'node:crypto'].includes(name)) return require(name); throw new Error(`Unexpected module: ${name}`); } });
   return exports;
 }
 const pureEntitlements = load('../lib/tool-entitlements.ts', { '@/db/mysql-runtime': { env: {} }, './tool-services': tools });
@@ -441,6 +442,8 @@ test('印章独立页渲染商城导航、三栏工作台、各会员套餐及�
   const html = renderToStaticMarkup(await page.default({ params: Promise.resolve({ slug: 'stamp-maker.html' }) }));
   for (const text of ['主导航', '印章在线制作', '效果预览', '导出下载设置', '导出格式', '基础会员', '专业会员', '单次制作', '制作高清印章', '文字距边框', '印章字体', '宋体', '黑体', '霞鹜文楷']) assert.ok(html.includes(text));
   assert.ok(html.includes('/product/40?plan=basic-month&amp;cycle=month')); assert.ok(html.includes('application/ld+json'));
+  assert.match(html, /href="#stamp-history"/);
+  assert.match(html, /id="stamp-history"[^>]*aria-busy="true"/);
   const metadata = await page.generateMetadata({ params: Promise.resolve({ slug: 'stamp-maker.html' }) });
   assert.ok(metadata.description.includes('4096'));
 });
@@ -501,21 +504,27 @@ test('预览失败后可单独重试相同参数，成功后清除错误，始�
   effects[3]()();
 });
 
-test('客户端网络重试保留同一任务编号，即使刷新权益后剩余为零也能恢复成品', async () => {
+test('客户端同一任务可重试；制作后显示记录，打开旧记录可下载原格式', async () => {
   const slots = [], effects = [], requests = [];
-  let cursor = 0, interrupted = false;
+  let cursor = 0, interrupted = false, completed = false;
+  const saved = { id: otherId, format: 'jpeg', image: 'data:image/jpeg;base64,cG5n', size: 512, createdAt: '2026-11-08T07:20:00.000Z' };
   const react = { ...React, useState(initial) { const i = cursor++; if (!(i in slots)) slots[i] = typeof initial === 'function' ? initial() : initial; return [slots[i], value => { slots[i] = typeof value === 'function' ? value(slots[i]) : value; }]; }, useRef(initial) { const i = cursor++; return slots[i] ??= { current: initial }; }, useCallback: fn => fn, useEffect: fn => effects.push(fn) };
   const Link = ({ href, children, ...props }) => React.createElement('a', { href, ...props }, children);
   const Image = ({ src, alt }) => React.createElement('img', { src, alt });
   const workspace = load('../components/stamp-maker.tsx', { react, 'next/link': Link, 'next/image': Image, '../lib/stamp-options': options, '../lib/tool-services': tools }, {
     window: { location: { search: '' }, setTimeout(fn, delay) { if (!delay) queueMicrotask(fn); return 1; }, clearTimeout() {} }, AbortController,
-    async fetch(_, config) {
+    async fetch(url, config) {
       if (config?.method === 'POST') {
         const body = JSON.parse(config.body); requests.push(body.id);
         if (!interrupted) { interrupted = true; throw new Error('网络中断'); }
+        completed = true;
         return Response.json({ result: { id: body.id, image: 'data:image/png;base64,cG5n', size: 1600, charged: true, reused: true, createdAt: new Date().toISOString() } });
       }
-      return Response.json({ chargeType: 'paid', signedIn: true, canGenerate: !interrupted, remaining: interrupted ? 0 : 1, cycle: interrupted ? null : 'times', expiresAt: null, membershipName: '单次制作', recent: [] });
+      if (url.includes('?result=')) {
+        assert.equal(url, `/api/tools/stamp-maker?result=${otherId}`);
+        return Response.json({ result: saved });
+      }
+      return Response.json({ chargeType: 'paid', signedIn: true, canGenerate: !interrupted, remaining: interrupted ? 0 : 1, cycle: interrupted ? null : 'times', expiresAt: null, membershipName: '单次制作', recent: completed ? [{ id: saved.id, size: saved.size, createdAt: saved.createdAt }] : [] });
     },
   });
   const tool = { id: 40, name: '印章在线制作', chargeType: 'paid', plans: memberPlans, detail: '' };
@@ -523,6 +532,7 @@ test('客户端网络重试保留同一任务编号，即使刷新权益后剩�
   const all = node => Array.isArray(node) ? node.flatMap(all) : React.isValidElement(node) ? [node, ...all(node.props.children)] : [];
   const text = node => Array.isArray(node) ? node.map(text).join('') : React.isValidElement(node) ? text(node.props.children) : typeof node === 'string' ? node : '';
   render(); effects.forEach(fn => fn()); await new Promise(resolve => setImmediate(resolve));
+  assert.match(renderToStaticMarkup(render()), /暂无印章制作记录/);
   all(render()).find(node => node.type === 'button' && text(node).includes('制作高清印章')).props.onClick();
   await new Promise(resolve => setImmediate(resolve));
   const retry = all(render()).find(node => node.type === 'button' && text(node).includes('重试本次制作'));
@@ -530,4 +540,12 @@ test('客户端网络重试保留同一任务编号，即使刷新权益后剩�
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(requests.length, 2); assert.equal(requests[0], requests[1]);
   assert.ok(renderToStaticMarkup(render()).includes('没有重复扣次'));
+  const history = all(render()).find(node => node.props.id === 'stamp-history');
+  assert.ok(all(history).some(node => node.props.href === '/account/activity?filter=stamp'));
+  assert.ok(all(history).some(node => node.type === 'time' && node.props.dateTime === saved.createdAt));
+  all(history).find(node => node.type === 'button' && text(node) === '查看成品').props.onClick();
+  await new Promise(resolve => setImmediate(resolve));
+  const result = all(render()).find(node => node.props.className === 'stamp-panel stamp-result');
+  assert.ok(all(result).some(node => node.props.download === `yxstar-stamp-${otherId}.jpg`));
+  assert.equal(requests.length, 2);
 });
