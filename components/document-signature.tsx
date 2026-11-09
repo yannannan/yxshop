@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState, type PointerEvent } from 'react';
 import {
   ArrowDownTrayIcon, ArrowLeftIcon, ArrowPathIcon, ArrowUpTrayIcon, ChevronLeftIcon, ChevronRightIcon,
-  DocumentCheckIcon, DocumentTextIcon, PencilSquareIcon, PlusIcon, TrashIcon,
+  ClockIcon, DocumentCheckIcon, DocumentTextIcon, PencilSquareIcon, PlusIcon, TrashIcon,
 } from '@heroicons/react/24/outline';
 import type { RenderTask } from 'pdfjs-dist';
 import { useI18n } from './language-provider';
@@ -341,22 +341,25 @@ function SignatureEditor({ tool }: { tool: ToolService }) {
 
   return <main className="ds-workspace">
     <header className="ds-heading">
-      <div className="ds-title"><span><DocumentCheckIcon aria-hidden="true" /></span>
-        <div><h1>{t('文件在线签名')}</h1><p>{t('制作可重复使用的签名，在文件上定位后下载成品。')}</p></div>
+      <div className="ds-heading-main">
+        <div className="ds-title"><span><DocumentCheckIcon aria-hidden="true" /></span>
+          <div><h1>{t('文件在线签名')}</h1><p>{t('制作可重复使用的签名，在文件上定位后下载成品。')}</p></div>
+        </div>
+        <div className="ds-heading-actions">
+          {access?.signedIn && <a href="/account/activity"><ClockIcon aria-hidden="true" />{t('工具记录')}</a>}
+          <a href="/tools"><ArrowLeftIcon aria-hidden="true" />{t('工具服务')}</a>
+        </div>
       </div>
-      <div className="ds-heading-actions">
-        {access?.signedIn && <a className="ds-balance" href="/points">{t('剩余积分')} <b>{access.pointsBalance}</b></a>}
-        <a className="ds-return" href="/tools"><ArrowLeftIcon aria-hidden="true" />{t('工具服务')}</a>
-      </div>
+      <nav className="ds-modes" aria-label={t('文件签名功能')}>
+        {(['create', 'sign'] as const).map(action => <button type="button" key={action} aria-pressed={mode === action}
+          disabled={busy} onClick={() => switchMode(action)}>
+          <span className="ds-mode-icon">
+            {action === 'create' ? <PencilSquareIcon aria-hidden="true" /> : <DocumentTextIcon aria-hidden="true" />}
+          </span>
+          {t(signatureActions[action])}
+        </button>)}
+      </nav>
     </header>
-
-    <nav className="ds-modes" aria-label={t('文件签名功能')}>
-      {(['create', 'sign'] as const).map(action => <button type="button" key={action} aria-pressed={mode === action}
-        disabled={busy} onClick={() => switchMode(action)}>
-        {action === 'create' ? <PencilSquareIcon aria-hidden="true" /> : <DocumentTextIcon aria-hidden="true" />}
-        {t(signatureActions[action])}
-      </button>)}
-    </nav>
     {error && <p className="ds-feedback ds-error" role="alert">{t(error)}</p>}
     {notice && <p className="ds-feedback ds-success" role="status">{t(notice)}</p>}
 

@@ -1,9 +1,7 @@
-/// <reference types="vite/client" />
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import { readUploadedImage } from './image-tool-client';
-import { signatureLimits, type SignatureAccess } from './signature-tool';
+import { signatureApi, signatureLimits, type SignatureAccess } from './signature-tool';
 
-export const signatureApi = '/api/tools/document-signature';
 export const signaturePage = '/tools/document-signature.html';
 
 type SourceImage = { kind: 'image'; name: string; file: Blob; url: string; width: number; height: number };
@@ -46,11 +44,12 @@ export async function loadSignatureSource(file: File, wordReady: boolean | undef
   const input = extension === 'docx'
     ? await signatureRequest<Blob>('POST', signal, { action: 'word-preview' }, file)
     : file;
-  const [pdfjs, worker] = await Promise.all([import('pdfjs-dist'), import('pdfjs-dist/build/pdf.worker.min.mjs?url')]);
+  const pdfjs = await import('pdfjs-dist');
   const data = new Uint8Array(await input.arrayBuffer());
   signal.throwIfAborted();
-  pdfjs.GlobalWorkerOptions.workerSrc = worker.default;
   const assets = `${location.origin}${signatureApi}/assets/`;
+  // Load the untransformed module in the worker, outside the development client pipeline.
+  pdfjs.GlobalWorkerOptions.workerSrc = assets + `build/pdf.worker.min.mjs?v=${pdfjs.version}`;
   const loading = pdfjs.getDocument({
     data,
     cMapUrl: assets + 'cmaps/', cMapPacked: true,

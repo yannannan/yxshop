@@ -9,7 +9,7 @@ import { tsImport } from 'tsx/esm/api';
 import { degrees, PDFDocument } from 'pdf-lib';
 import { PNG } from 'pngjs';
 import { createSignatureStorage, SignatureStorageError } from '../lib/signature-oss.mjs';
-import { validateWordArchive } from '../lib/signature-word.mjs';
+import { convertSignatureWord, signatureWordReadiness, validateWordArchive } from '../lib/signature-word.mjs';
 
 const spec = await tsImport('../lib/signature-tool.ts', import.meta.url);
 const image = await tsImport('../lib/image-tool.ts', import.meta.url);
@@ -104,6 +104,27 @@ test('Word 预处理只接受正常 DOCX 容器，拒绝伪装文件、遍历与
   await assert.rejects(validateWordArchive(Buffer.from('fake Word')), /DOCX/);
   await assert.rejects(validateWordArchive(storedZip({ ...files, '../outside': 'bad' })), /DOCX/);
   await assert.rejects(validateWordArchive(storedZip({ ...files, 'word/vbaProject.bin': 'bad' })), /DOCX/);
+});
+
+test('内置 Word 转换将中文与英文保留在 PDF 中', { timeout: 80000 }, async t => {
+  if ((await signatureWordReadiness()).engine !== 'wasm') return t.skip('当前环境未使用内置转换器');
+  const text = '中文签名验证 Signature probe';
+  const source = storedZip({
+    '[Content_Types].xml': '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>',
+    '_rels/.rels': '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>',
+    'word/document.xml': `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:rPr><w:rFonts w:ascii="Calibri" w:eastAsia="宋体"/><w:lang w:eastAsia="zh-CN"/></w:rPr><w:t>${text}</w:t></w:r></w:p><w:sectPr><w:pgSz w:w="11906" w:h="16838"/></w:sectPr></w:body></w:document>`,
+  });
+  const output = await convertSignatureWord(source);
+  const { getDocument } = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  const loading = getDocument({ data: Uint8Array.from(output) });
+  try {
+    const pdf = await loading.promise;
+    assert.equal(pdf.numPages, 1);
+    const { items } = await (await pdf.getPage(1)).getTextContent();
+    assert.equal(items.map(item => item.str).join(''), text);
+  } finally {
+    await loading.destroy();
+  }
 });
 
 test('OSS 成品为私有对象，短时下载凭据校验归属且不覆盖 Content-Type', async () => {

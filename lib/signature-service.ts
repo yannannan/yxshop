@@ -4,7 +4,7 @@ import { validPoints } from './points';
 import { modulePrices } from './tool-module-pricing';
 import { getToolEntitlement, usableToolOrder, type ToolOrderAccess } from './tool-entitlements';
 import {
-  SignatureError, signatureLimits, signatureToolSlug,
+  SignatureError, signatureApi, signatureLimits, signatureToolSlug,
   type SavedSignature, type SignatureAccess, type SignatureAction, type SignatureQuote, type SignedDocument,
 } from './signature-tool';
 import type { SignatureObject } from './signature-oss.mjs';
@@ -19,21 +19,20 @@ type DocumentRow = Task & {
 };
 type Operation = { userId: number; toolId: number; id: string; hash: string; quote: SignatureQuote };
 
-const api = '/api/tools/document-signature';
 const signatureColumns = 'id,product_id,request_hash,name,image_width,image_height,points_spent,deleted_at';
 const documentColumns = 'id,product_id,request_hash,file_name,file_bytes,points_spent,expires_at,storage_json';
 
 export function publicSignature(row: SignatureRow): SavedSignature {
   return {
     id: row.id, name: row.name, width: Number(row.image_width), height: Number(row.image_height),
-    pointsSpent: Number(row.points_spent), previewUrl: `${api}/${row.id}?kind=signature`,
+    pointsSpent: Number(row.points_spent), previewUrl: `${signatureApi}/${row.id}?kind=signature`,
   };
 }
 
 export function publicDocument(row: DocumentRow): SignedDocument {
   return {
     id: row.id, name: row.file_name, bytes: Number(row.file_bytes), pointsSpent: Number(row.points_spent),
-    expiresAt: row.expires_at, downloadUrl: `${api}/${row.id}`,
+    expiresAt: row.expires_at, downloadUrl: `${signatureApi}/${row.id}`,
   };
 }
 

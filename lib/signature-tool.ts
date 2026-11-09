@@ -1,4 +1,5 @@
 export const signatureToolSlug = 'document-signature';
+export const signatureApi = '/api/tools/document-signature';
 export const signatureActions = {
   create: '制作签名',
   sign: '签署文件',

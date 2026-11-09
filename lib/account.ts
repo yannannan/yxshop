@@ -3,7 +3,7 @@ export type AccountUser = {
   avatarUrl: string; isAdmin: boolean; isTechnician: boolean; createdAt: string;
 };
 export type Account = { authenticated: boolean; user: AccountUser | null; pointsBalance: number | null; pointsMessage?: string; profileReady?: boolean };
-export type AccountRecord = { id: string; title: string; kind: string; status: string; createdAt: string; href: string; amount?: number | null };
+export type AccountRecord = { id: string; title: string; kind: string; status: string; createdAt: string; href: string | null; amount?: number | null };
 export type AccountRecords = { items: AccountRecord[]; total: number; page: number; pageSize: number; warnings: string[] };
 export const defaultAvatar = '/account/default-avatar.png';
 export const accountSections = [
@@ -25,10 +25,12 @@ export function accountReturnPath(value: string | null | undefined) {
   } catch { return ''; }
 }
 export function accountLoginHref(path: string) { return `/?returnTo=${encodeURIComponent(accountReturnPath(path) || '/account')}`; }
-export const recordKindLabels: Record<string, string> = { mall: '商城订单', points: '积分充值', technical: '技术服务', video: '视频提取', stamp: '印章制作', site: '站长分析' };
+export const recordKindLabels: Record<string, string> = { mall: '商城订单', points: '积分充值', technical: '技术服务', video: '视频提取', stamp: '印章制作', site: '站长分析', signature: '制作签名', 'signed-document': '签署文件' };
 export function recordStatusLabel(row: Pick<AccountRecord, 'kind' | 'status'>) {
   if (row.kind === 'points' && ['paid', 'pending_delivery', 'delivered'].includes(row.status)) return '已到账';
   if (row.kind === 'stamp') return '已完成';
+  if (row.kind === 'signature' && row.status === 'deleted') return '已删除';
+  if (row.kind === 'signed-document' && row.status === 'expired') return '已过期';
   if (row.kind === 'site') return ({ completed: '已完成', partial: '部分完成', queued: '排队中', running: '采集中', failed: '分析失败' } as Record<string,string>)[row.status] || '状态待确认';
   return ({ pending: '待支付', verification: '待核验', paid: '已支付', pending_delivery: '待发货', delivered: '已发货', pending_quote: '待报价', pending_payment: '待支付', payment_review: '支付核验中', in_service: '服务中', awaiting_acceptance: '待验收', completed: '已完成', closed: '已关闭', cancelled: '已取消', queued: '排队中', processing: '处理中', ready: '已完成', failed: '处理失败' } as Record<string, string>)[row.status] || '状态待确认';
 }

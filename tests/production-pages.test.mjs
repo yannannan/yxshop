@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import test from 'node:test';
 import { existsSync, readFileSync } from 'node:fs';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { createRequire } from 'node:module';
 import vm from 'node:vm';
 
 const execute = promisify(execFile);
@@ -29,6 +31,7 @@ export async function resolve(specifier, context, nextResolve) {
 
 async function renderPages(paths, denied = '') {
   const code = `
+import { createHash } from 'node:crypto';
 import { register, createRequire } from 'node:module';
 process.env.NODE_ENV = 'production';
 register(${JSON.stringify(`data:text/javascript,${encodeURIComponent(loader)}`)}, {
@@ -67,6 +70,11 @@ const pages = [];
 for (const spec of ${JSON.stringify(paths)}) {
   const path = typeof spec === 'string' ? spec : spec.path;
   const response = await handler(new Request('http://localhost:3000' + path, { method: typeof spec === 'object' ? spec.method || 'GET' : 'GET', headers: typeof spec === 'object' ? { cookie: 'yxshop_locale=' + (spec.locale || 'zh-CN') } : {} }));
+  if (path.includes('/assets/build/')) {
+    const bytes = Buffer.from(await response.arrayBuffer());
+    pages.push({ status: response.status, type: response.headers.get('content-type'), hash: createHash('sha256').update(bytes).digest('hex') });
+    continue;
+  }
   const html = await response.text();
   const trackerSource = 'https://www.yxstar.shop/s/RDYfVdtkRd-iXLHGxvrdEA';
   const trackerTags = [...html.matchAll(/<script[^>]*>/g)].filter(match => match[0].includes('src="' + trackerSource + '"'));
@@ -148,6 +156,9 @@ test('图片工作区生产页面可中英文加载，匿名处理与成品下�
 });
 
 test('文件签名生产页面及本地 PDF 资源可访问，匿名提交与成品下载被拒绝', { skip: needsBuild }, async () => {
+  const require = createRequire(import.meta.url);
+  const { version } = require('pdfjs-dist/package.json');
+  const worker = readFileSync(require.resolve('pdfjs-dist/build/pdf.worker.min.mjs'));
   const result = await renderPages([
     '/tools/document-signature.html', { path: '/tools/document-signature.html', locale: 'en' },
     '/api/tools/document-signature',
@@ -155,10 +166,14 @@ test('文件签名生产页面及本地 PDF 资源可访问，匿名提交与成
     '/api/tools/document-signature/11111111-1111-4111-8111-111111111111',
     '/api/tools/document-signature/assets/cmaps/Adobe-GB1-UCS2.bcmap',
     '/api/tools/document-signature/assets/wasm/quickjs-eval.js',
+    '/api/tools/document-signature/assets/build/pdf.worker.min.mjs?v=' + version,
+    '/api/tools/document-signature/assets/build/pdf.mjs',
   ]);
-  assert.deepEqual(result.pages.map(page => page.status), [200, 200, 200, 401, 401, 200, 404]);
+  assert.deepEqual(result.pages.map(page => page.status), [200, 200, 200, 401, 401, 200, 404, 200, 404]);
   assert.ok(result.pages[0].hasSignature);
   assert.ok(result.pages[1].englishSignature);
   assert.ok(result.pages[2].wordReady);
+  assert.equal(result.pages[7].type, 'text/javascript');
+  assert.equal(result.pages[7].hash, createHash('sha256').update(worker).digest('hex'));
   assert.deepEqual(result.errors, []);
 });

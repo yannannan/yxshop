@@ -18,12 +18,13 @@ function load(file, mocks = {}, globals = {}) {
     require(name) { if (name in mocks) return mocks[name]; if (i18nMock(name)) return i18nMock(name); if (['node:crypto','react','react/jsx-runtime','@heroicons/react/24/outline'].includes(name)) return require(name); throw Error(`Unexpected import ${name}`); } });
   return exports;
 }
+const signatureTool = load('../lib/signature-tool.ts');
 const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=';
 function fixture({ missingProfile = false, missingModules = false, walletFailure = false, dbFailure = '', failSave = false } = {}) {
   let state = {
     users: [{ id: 1, phone: '13800000000', email: 'one@example.com', status: 'active', permission_type: '10001', created_at: '2026-10-24T00:00:00Z' }, { id: 2, phone: '13900000000', email: 'two@example.com', status: 'active', permission_type: '10002', created_at: '2026-10-24T00:00:00Z' }],
     profiles: [{ user_id: 1, nickname: '小宇', avatar_data: '', avatar_mime: '', avatar_version: '' }, { user_id: 2, nickname: '其他用户', avatar_data: png, avatar_mime: 'image/png', avatar_version: 'other-secret' }],
-    points: { 1: 680, 2: 900 }, analyses: [],
+    points: { 1: 680, 2: 900 }, analyses: [], signatures: [], documents: [],
     orders: [{ id: 'order-1', user_id: 1, title: '普通商品', kind: 'mall', status: 'pending', created_at: '2026-10-25T00:00:00Z', amount: 20 }, { id: 'order-2', user_id: 1, title: '600积分', kind: 'points', status: 'delivered', created_at: '2026-10-24T00:00:00Z', amount: 50 }, { id: 'private-order', user_id: 2, title: 'private', kind: 'mall' }],
     technical: [{ id: 'service-1', user_id: 1, title: '电脑维护', kind: 'technical', status: 'in_service', created_at: '2026-10-25T01:00:00Z', amount: null }],
     videos: [{ id: 'video-1', user_id: 1, title: '我的视频', kind: 'video', status: 'ready', created_at: '2026-10-25T00:00:00Z' }, { id: 'private-video', user_id: 2, title: 'private-video', kind: 'video', status: 'ready' }],
@@ -31,14 +32,17 @@ function fixture({ missingProfile = false, missingModules = false, walletFailure
   };
   const queries = [], writes = [];
   const error = code => Object.assign(Error('private database details'), { code });
-  function sourceRows(sql, userId) {
+  function sourceRows(sql, args) {
+    const userId = args.at(-1);
     if (dbFailure && sql.includes(dbFailure)) throw error('ER_ACCESS_DENIED_ERROR');
-    if (missingModules && /technical_service_orders|video_extraction_tasks|tool_generation_results|site_analysis_runs/.test(sql)) throw error('ER_NO_SUCH_TABLE');
+    if (missingModules && /technical_service_orders|video_extraction_tasks|tool_generation_results|site_analysis_runs|document_signatures|signed_documents/.test(sql)) throw error('ER_NO_SUCH_TABLE');
     let rows;
     if (sql.includes('site_analysis_runs')) rows = state.analyses;
     else if (sql.includes('technical_service_orders')) rows = state.technical;
     else if (sql.includes('video_extraction_tasks')) rows = state.videos;
     else if (sql.includes('tool_generation_results')) rows = state.stamps;
+    else if (sql.includes('document_signatures')) rows = state.signatures.map(row => ({ ...row, kind: 'signature', status: row.deleted_at ? 'deleted' : 'ready' }));
+    else if (sql.includes('signed_documents')) rows = state.documents.map(row => ({ ...row, kind: 'signed-document', status: row.expires_at <= args[0] ? 'expired' : 'ready' }));
     else rows = state.orders.filter(row => !sql.includes("AND p.product_type='points'") || row.kind === 'points').filter(row => !sql.includes("p.product_type<>'points'") || row.kind !== 'points');
     return rows.filter(row => row.user_id === userId);
   }
@@ -51,10 +55,15 @@ function fixture({ missingProfile = false, missingModules = false, walletFailure
       if (sql.includes('FROM yxshop_user_profiles')) { if (missingProfile) throw error('ER_NO_SUCH_TABLE'); if (dbFailure === 'profile') throw error('ER_ACCESS_DENIED_ERROR'); return state.profiles.filter(row => row.user_id === args[0]); }
       if (sql.startsWith('INSERT INTO yxshop_user_profiles')) { if (missingProfile) throw error('ER_NO_SUCH_TABLE'); writes.push(sql); const old = state.profiles.find(row => row.user_id === args[0]); const row = { user_id: args[0], nickname: args[1], avatar_data: args[2], avatar_mime: args[3], avatar_version: args[4] }; if (old) Object.assign(old, row); else state.profiles.push(row); return { affectedRows: 1 }; }
       if (sql.startsWith('UPDATE users')) { if (failSave) throw error('ER_LOCK_DEADLOCK'); writes.push(sql); state.users.find(user => user.id === args[1]).email = args[0]; return { affectedRows: 1 }; }
-      if (sql.startsWith('SELECT COUNT')) return [{ total: sourceRows(sql, args[0]).length }];
+      if (sql.startsWith('SELECT COUNT')) return [{ total: sourceRows(sql, args).length }];
       if (sql.startsWith('SELECT * FROM (')) {
         const body = sql.slice(sql.indexOf('(') + 1, sql.lastIndexOf(') account_records'));
-        const rows = body.split(' UNION ALL ').flatMap((part, index) => sourceRows(part, args[index]));
+        let offset = 0;
+        const rows = body.split(' UNION ALL ').flatMap(part => {
+          const start = offset;
+          offset += (part.match(/\?/g) || []).length;
+          return sourceRows(part, args.slice(start, offset));
+        });
         return rows.sort((a,b) => b.created_at.localeCompare(a.created_at) || a.kind.localeCompare(b.kind) || b.id.localeCompare(a.id)).slice(args.at(-1), args.at(-1) + 10);
       }
       throw Error(`Unexpected SQL ${sql}`);
@@ -62,7 +71,7 @@ function fixture({ missingProfile = false, missingModules = false, walletFailure
     return { bind(...values) { args = values; return this; }, async first() { return (await execute())[0] || null; }, async all() { return { results: await execute() }; }, async run() { return { meta: await execute() }; } };
   }, async transaction(work) { const old = structuredClone(state); try { return await work(DB); } catch (failure) { state = old; throw failure; } } };
   const setup = load('../db/setup.ts', { './mysql-runtime': { env: { DB } } }, { process: { env: { AUTH_SESSION_SECRET: 'test-session-key' } } });
-  const service = load('../lib/account-service.ts', { '@/db/mysql-runtime': { env: { DB } }, '@/db/setup': setup, './account': helpers, './points-service': { async pointsBalance(id) { if (walletFailure) throw error('ER_NO_SUCH_TABLE'); return state.points[id]; } } });
+  const service = load('../lib/account-service.ts', { '@/db/mysql-runtime': { env: { DB } }, '@/db/setup': setup, './account': helpers, './signature-tool': signatureTool, './points-service': { async pointsBalance(id) { if (walletFailure) throw error('ER_NO_SUCH_TABLE'); return state.points[id]; } } });
   const routes = Object.fromEntries(['','/avatar','/records'].map(part => [part || 'account', load(`../app/api/account${part}/route.ts`, { '@/lib/account-service': service, '@/db/mysql-runtime': { env: { DB } } })]));
   function request(path = '', { user = 1, method = 'GET', body, cookie, headers = {} } = {}) {
     return new Request(`https://shop.example/api/account${path}`, { method, headers: { ...(method === 'POST' ? { 'content-type': 'application/json' } : {}), ...(user ? { cookie: `mall_session=${encodeURIComponent(setup.createMallSession(user === 1 ? '13800000000' : '13900000000'))}` } : {}), ...(cookie ? { cookie } : {}), ...headers }, ...(body !== undefined ? { body: typeof body === 'string' ? body : JSON.stringify(body) } : {}) });
@@ -147,7 +156,29 @@ test('站长分析记录并入个人中心，按本人筛选且保留实际工�
 });
 test('未安装模块独立提示；数据库真正失败返回错误，不能伪装成无记录', async () => {
   const f = fixture({ missingModules: true }), result = await (await f.routes['/records'].GET(f.request('/records'))).json(); assert.equal(result.items.length, 2); assert.ok(result.warnings.length);
+  const signatures = await (await f.routes['/records'].GET(f.request('/records?kind=activity&filter=signature'))).json();
+  assert.deepEqual(signatures.warnings, ['文件签名记录尚未初始化']);
   const failure = fixture({ dbFailure: 'orders o' }); assert.equal((await failure.routes['/records'].GET(failure.request('/records'))).status, 503);
+});
+test('工具记录展示本人历史签名和签署文件，删除或过期后保留记录并关闭操作', async () => {
+  const f = fixture();
+  const saved = { user_id: 1, id: 'signature-1', title: '我的签名', created_at: '2026-10-24T12:00:00.000Z' };
+  const signed = { user_id: 1, id: 'document-1', title: '合同-signed.pdf', created_at: '2026-10-25T13:00:00.000Z', expires_at: '9999-01-01T00:00:00.000Z' };
+  f.state().signatures.push(saved, { ...saved, user_id: 2, id: 'private-signature' }, { ...saved, id: 'deleted-signature', deleted_at: '2026-10-25T12:00:00.000Z' });
+  f.state().documents.push(signed, { ...signed, user_id: 2, id: 'private-document' }, { ...signed, id: 'expired-document', expires_at: '2000-01-01T00:00:00.000Z' });
+  const result = await (await f.routes['/records'].GET(f.request('/records?kind=activity&filter=signature&userId=2'))).json();
+  assert.equal(result.total, 4);
+  assert.deepEqual(result.items.map(row => [row.id, row.href, helpers.recordStatusLabel(row)]), [
+    ['expired-document', null, '已过期'],
+    ['document-1', '/api/tools/document-signature/document-1', '已完成'],
+    ['signature-1', '/api/tools/document-signature/signature-1?kind=signature', '已完成'],
+    ['deleted-signature', null, '已删除'],
+  ]);
+  const all = await (await f.routes['/records'].GET(f.request('/records?kind=activity'))).json();
+  assert.equal(all.total, 6);
+  assert.ok(all.items.some(row => row.id === 'video-1'));
+  assert.ok(all.items.some(row => row.id === 'document-1'));
+  assert.equal(f.writes.length, 0);
 });
 test('登录返回地址限制站内地址；状态区分积分到账、无记录和处理失败', () => {
   for (const value of ['https://evil.example','//evil.example','/\\evil.example','/\t/evil.example','/api/account','/admin']) assert.equal(helpers.accountReturnPath(value), '');
