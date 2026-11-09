@@ -47,11 +47,15 @@ let queries = 0;
 // 只允许页面读取模拟的公开工具数据；没有真实连接或写业务数据库。
 mysql.createPool = () => ({ async execute(sql, values = []) {
   if (sql.startsWith('SELECT ') && sql.includes('FROM site_analysis_integrations i')) { queries++; return [[{ site_id: '22222222-2222-4222-8222-222222222222', script_token: 'a'.repeat(64), user_id: 1, verified_at: '2026-10-26', host: 'example.org' }]]; }
-  if (!sql.startsWith('SELECT ') || !sql.includes("FROM products WHERE product_type='tool' AND status='active'")) throw new Error('Unexpected database operation in page test');
+  const publicTool = sql.includes("FROM products WHERE product_type='tool' AND status='active'") ||
+    sql.includes("WHERE tool_slug=? AND product_type='tool' AND status='active'");
+  if (!sql.startsWith('SELECT ') || !publicTool) throw new Error('Unexpected database operation in page test');
   queries++;
   return [values.length ? rows.filter(row => row.tool_slug === values[0]) : rows];
 } });
 Object.assign(process.env, { MYSQL_HOST: 'test.invalid', MYSQL_USER: 'test', MYSQL_PASSWORD: 'test', MYSQL_DATABASE: 'test' });
+delete process.env.SIGNATURE_WORD_ENABLED;
+delete process.env.SIGNATURE_WORD_WSL_DISTRO;
 const errors = [], ssr = require('react-dom/server.edge'), render = ssr.renderToReadableStream;
 ssr.renderToReadableStream = (tree, options = {}) => render(tree, {
   ...options,
@@ -66,7 +70,7 @@ for (const spec of ${JSON.stringify(paths)}) {
   const html = await response.text();
   const trackerSource = 'https://www.yxstar.shop/s/RDYfVdtkRd-iXLHGxvrdEA';
   const trackerTags = [...html.matchAll(/<script[^>]*>/g)].filter(match => match[0].includes('src="' + trackerSource + '"'));
-  pages.push({ path, script: (path.startsWith('/api/site-tracker/') || path.startsWith('/s/')) && response.status === 200 ? html : undefined, siteTrackerCount: trackerTags.length, siteTrackerInHead: trackerTags.every(match => match.index < html.indexOf('</head>')), siteTrackerSkipsAdmin: trackerTags.every(match => match[0].includes('data-exclude-path="/admin"')), status: response.status, failed: html.includes('This page couldn'), hasBrand: html.includes('宇星脉通'), hasVideoForm: html.includes('粘贴视频链接'), hasStampPreview: html.includes('效果预览'), language: /<html[^>]*lang="([^"]+)"/.exec(html)?.[1], hasImageWorkspace: html.includes('ip-workspace'), englishImage: html.includes('Online Image Editor'), englishNav: html.includes('AI Digital Services'), englishPoints: html.includes('One balance. Many possibilities.'), englishStamp: html.includes('Design Your Stamp'), englishVideo: html.includes('Paste a Video Link'), chineseAdmin: html.includes('正在验证管理权限'), hasSignature: html.includes('ds-workspace'), englishSignature: html.includes('Signature pad') });
+  pages.push({ path, script: (path.startsWith('/api/site-tracker/') || path.startsWith('/s/')) && response.status === 200 ? html : undefined, siteTrackerCount: trackerTags.length, siteTrackerInHead: trackerTags.every(match => match.index < html.indexOf('</head>')), siteTrackerSkipsAdmin: trackerTags.every(match => match[0].includes('data-exclude-path="/admin"')), status: response.status, failed: html.includes('This page couldn'), hasBrand: html.includes('宇星脉通'), hasVideoForm: html.includes('粘贴视频链接'), hasStampPreview: html.includes('效果预览'), language: /<html[^>]*lang="([^"]+)"/.exec(html)?.[1], hasImageWorkspace: html.includes('ip-workspace'), englishImage: html.includes('Online Image Editor'), englishNav: html.includes('AI Digital Services'), englishPoints: html.includes('One balance. Many possibilities.'), englishStamp: html.includes('Design Your Stamp'), englishVideo: html.includes('Paste a Video Link'), chineseAdmin: html.includes('正在验证管理权限'), hasSignature: html.includes('ds-workspace'), englishSignature: html.includes('Signature pad'), wordReady: html.includes('"wordReady":true') });
 }
 console.log(JSON.stringify({ pages, errors, queries }));
 `;
@@ -146,13 +150,15 @@ test('图片工作区生产页面可中英文加载，匿名处理与成品下�
 test('文件签名生产页面及本地 PDF 资源可访问，匿名提交与成品下载被拒绝', { skip: needsBuild }, async () => {
   const result = await renderPages([
     '/tools/document-signature.html', { path: '/tools/document-signature.html', locale: 'en' },
+    '/api/tools/document-signature',
     { path: '/api/tools/document-signature', method: 'POST' },
     '/api/tools/document-signature/11111111-1111-4111-8111-111111111111',
     '/api/tools/document-signature/assets/cmaps/Adobe-GB1-UCS2.bcmap',
     '/api/tools/document-signature/assets/wasm/quickjs-eval.js',
   ]);
-  assert.deepEqual(result.pages.map(page => page.status), [200, 200, 401, 401, 200, 404]);
+  assert.deepEqual(result.pages.map(page => page.status), [200, 200, 200, 401, 401, 200, 404]);
   assert.ok(result.pages[0].hasSignature);
   assert.ok(result.pages[1].englishSignature);
+  assert.ok(result.pages[2].wordReady);
   assert.deepEqual(result.errors, []);
 });

@@ -8,7 +8,7 @@ if (extra.length || (file && !/\.docx$/i.test(file))) {
   process.exitCode = 2;
 } else {
   const readiness = await signatureWordReadiness();
-  if (!readiness.supported) console.error('DOCX 转换支持 Windows 的 WSL 2 和 Linux。');
+  if (!readiness.supported) console.error('DOCX 转换支持 Windows 和 Linux。');
   if (!readiness.enabled) console.error('尚未启用转换，请设置 SIGNATURE_WORD_ENABLED=1。');
   if (readiness.issue) console.error(readiness.issue);
   if (readiness.missing.length) console.error('缺少可执行依赖：' + readiness.missing.join('、'));
@@ -26,6 +26,7 @@ if (extra.length || (file && !/\.docx$/i.test(file))) {
       process.exitCode = 1;
     }
   } else {
-    console.log('转换开关与程序路径检查通过。传入测试 DOCX 可核对实际沙箱转换。');
+    console.log(readiness.engine === 'wasm' ? '内置 DOCX 转换程序已就绪。' : '系统 DOCX 转换程序已就绪。');
+    console.log('传入测试 DOCX 可核对实际转换和 PDF 页数。');
   }
 }
