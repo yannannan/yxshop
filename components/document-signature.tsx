@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState, type PointerEvent } from 'react';
 import {
   ArrowDownTrayIcon, ArrowLeftIcon, ArrowPathIcon, ArrowUpTrayIcon, ChevronLeftIcon, ChevronRightIcon,
-  ClockIcon, DocumentCheckIcon, DocumentTextIcon, PencilSquareIcon, PlusIcon, TrashIcon,
+  ClockIcon, DocumentCheckIcon, DocumentTextIcon, PencilSquareIcon, PlusIcon, RectangleStackIcon, TrashIcon,
 } from '@heroicons/react/24/outline';
 import type { RenderTask } from 'pdfjs-dist';
 import { useI18n } from './language-provider';
@@ -339,156 +339,154 @@ function SignatureEditor({ tool }: { tool: ToolService }) {
   const signIn = <a className="ds-primary" href={accountLoginHref(signaturePage)}>{t('登录后使用')}</a>;
   const aspect = pageSize ? pageSize.width / pageSize.height : .78;
 
-  return <main className="ds-workspace">
-    <header className="ds-heading">
-      <div className="ds-heading-main">
-        <div className="ds-title"><span><DocumentCheckIcon aria-hidden="true" /></span>
-          <div><h1>{t('文件在线签名')}</h1><p>{t('制作可重复使用的签名，在文件上定位后下载成品。')}</p></div>
-        </div>
-        <div className="ds-heading-actions">
-          {access?.signedIn && <a href="/account/activity"><ClockIcon aria-hidden="true" />{t('工具记录')}</a>}
-          <a href="/tools"><ArrowLeftIcon aria-hidden="true" />{t('工具服务')}</a>
-        </div>
+  return <div className="ds-workspace">
+    <aside className="ds-sidebar">
+      <div className="ds-brand">
+        <DocumentCheckIcon aria-hidden="true" />
+        <h1>{t('文件在线签名')}</h1>
       </div>
       <nav className="ds-modes" aria-label={t('文件签名功能')}>
         {(['create', 'sign'] as const).map(action => <button type="button" key={action} aria-pressed={mode === action}
           disabled={busy} onClick={() => switchMode(action)}>
-          <span className="ds-mode-icon">
-            {action === 'create' ? <PencilSquareIcon aria-hidden="true" /> : <DocumentTextIcon aria-hidden="true" />}
-          </span>
-          {t(signatureActions[action])}
+          {action === 'create' ? <PencilSquareIcon aria-hidden="true" /> : <DocumentTextIcon aria-hidden="true" />}
+          <span>{t(signatureActions[action])}</span>
         </button>)}
       </nav>
-    </header>
-    {error && <p className="ds-feedback ds-error" role="alert">{t(error)}</p>}
-    {notice && <p className="ds-feedback ds-success" role="status">{t(notice)}</p>}
+      <a className="ds-return" href="/tools"><ArrowLeftIcon aria-hidden="true" />{t('工具服务')}</a>
+    </aside>
+    <main className="ds-main" aria-labelledby="ds-mode-title">
+      <header className="ds-toolbar">
+        <h2 id="ds-mode-title">{t(signatureActions[mode])}</h2>
+        {access?.signedIn && <a className="ds-secondary" href="/account/activity"><ClockIcon aria-hidden="true" />{t('工具记录')}</a>}
+      </header>
+      {error && <p className="ds-feedback ds-error" role="alert">{t(error)}</p>}
+      {notice && <p className="ds-feedback ds-success" role="status">{t(notice)}</p>}
 
-    {mode === 'create' ? <div className="ds-layout">
-      <section className="ds-panel" aria-labelledby="ds-draw-heading">
-        <div className="ds-panel-heading"><h2 id="ds-draw-heading">{t('签名画板')}</h2>
-          <button className="ds-secondary" type="button" disabled={busy} onClick={() => signatureUpload.current?.click()}>
-            <ArrowUpTrayIcon aria-hidden="true" />{t('上传签名图片')}
-          </button>
-          <input ref={signatureUpload} hidden type="file" accept="image/png,image/jpeg,image/webp" onChange={event => {
-            const file = event.target.files?.[0]; event.target.value = ''; if (file) importDraft(file);
-          }} />
-        </div>
-        <div className="ds-panel-body">
-          <div className="ds-form-row">
-            <label>{t('签名名称')}<input value={name} maxLength={48} disabled={busy} placeholder={t('例如：我的签名')}
-              onChange={event => { setName(event.target.value); taskIds.current.create = ''; }} /></label>
-            <label>{t('笔迹颜色')}<input type="color" value={ink} disabled={busy} onChange={event => setInk(event.target.value)} /></label>
-          </div>
-          <div className="ds-draw-surface">
-            <canvas ref={penCanvas} width={840} height={300} aria-label={t('手写签名画板')}
-              onPointerDown={event => draw(event, true)} onPointerMove={event => draw(event, false)}
-              onPointerUp={() => { pen.current = null; }} onPointerCancel={() => { pen.current = null; }}
-              onLostPointerCapture={() => { pen.current = null; }} />
-            {!hasInk && <span>{t('在这里手写签名')}</span>}
-          </div>
-          <div className="ds-panel-actions">
-            <button type="button" className="ds-secondary" disabled={busy || !hasInk} onClick={clearDraft}>
-              <TrashIcon aria-hidden="true" />{t('清空画板')}
+      {mode === 'create' ? <div className="ds-layout">
+        <section className="ds-panel" aria-labelledby="ds-draw-heading">
+          <div className="ds-panel-heading"><h3 id="ds-draw-heading"><PencilSquareIcon aria-hidden="true" />{t('签名画板')}</h3>
+            <button className="ds-secondary" type="button" disabled={busy} onClick={() => signatureUpload.current?.click()}>
+              <ArrowUpTrayIcon aria-hidden="true" />{t('上传签名图片')}
             </button>
-            <div>{priceNote('create')}{access?.signedIn ? <button type="button" className="ds-primary"
-              disabled={busy || !hasInk || !name.trim() || !canRun} onClick={saveSignature}>{t(busy ? '正在处理…' : '保存签名')}</button> : signIn}</div>
+            <input ref={signatureUpload} hidden type="file" accept="image/png,image/jpeg,image/webp" onChange={event => {
+              const file = event.target.files?.[0]; event.target.value = ''; if (file) importDraft(file);
+            }} />
           </div>
-        </div>
-      </section>
-      <aside className="ds-panel">
-        <div className="ds-panel-heading"><h2>{t('签名库')}</h2><span>{signatures.length} / {signatureLimits.savedSignatures}</span></div>
-        <div className="ds-panel-body">{signatureList(false)}</div>
-      </aside>
-    </div> : <div className="ds-layout">
-      <section className="ds-panel" aria-labelledby="ds-file-heading">
-        <div className="ds-panel-heading"><h2 id="ds-file-heading">{t('文件预览')}</h2>
-          <button type="button" className="ds-secondary" disabled={busy} onClick={() => documentUpload.current?.click()}>
-            <ArrowUpTrayIcon aria-hidden="true" />{t(source ? '更换文件' : '上传文件')}
-          </button>
-          <input ref={documentUpload} hidden type="file" accept={access?.wordReady === false ? '.pdf,.png,.jpg,.jpeg,.webp' : '.pdf,.docx,.png,.jpg,.jpeg,.webp'} onChange={event => {
-            const file = event.target.files?.[0]; event.target.value = ''; if (file) selectFile(file);
-          }} />
-        </div>
-        {fileLoading && <p className="ds-file-status" role="status"><ArrowPathIcon aria-hidden="true" />{t(fileLoading)}</p>}
-        {access?.wordReady === false && <p className="ds-file-status">{t('当前环境暂未启用 DOCX，请先将 Word 另存为 PDF 后上传')}</p>}
-        {source ? <>
-          <div className="ds-page-tools"><span title={source.name}>{source.name}</span>
-            {source.kind === 'pdf' ? <div>
-              <button className="ds-icon-button" type="button" aria-label={t('上一页')} disabled={busy || page <= 1}
-                onClick={() => { setPage(page - 1); setActiveKey(''); }}><ChevronLeftIcon /></button>
-              <span>{page} / {pageCount}</span>
-              <button className="ds-icon-button" type="button" aria-label={t('下一页')} disabled={busy || page >= pageCount}
-                onClick={() => { setPage(page + 1); setActiveKey(''); }}><ChevronRightIcon /></button>
-            </div> : <div>{source.width} × {source.height}</div>}
-          </div>
-          <div className="ds-preview-surface">
-            <div ref={stage} className="ds-page" style={{ aspectRatio: aspect, width: `min(100%, calc(var(--ds-preview-height) * ${aspect}))` }}
-              onPointerDown={event => {
-                if (event.button !== 0) return;
-                const bounds = event.currentTarget.getBoundingClientRect();
-                place((event.clientX - bounds.left) / bounds.width, (event.clientY - bounds.top) / bounds.height);
-              }}>
-              {source.kind === 'image' ? <img src={source.url} alt={t('文件预览')} draggable={false} />
-                : <canvas ref={preview} aria-label={t('文件预览')} style={{ visibility: pageSize ? 'visible' : 'hidden' }} />}
-              {!pageSize && <span className="ds-rendering"><ArrowPathIcon />{t('正在加载预览…')}</span>}
-              {pageSize && visiblePlacements.map(item => {
-                const signature = signatures.find(saved => saved.id === item.signatureId);
-                return signature && <button type="button" key={item.key} className="ds-placement"
-                  aria-label={signature.name} aria-pressed={item.key === activeKey} disabled={busy}
-                  style={{ left: `${item.x * 100}%`, top: `${item.y * 100}%`, width: `${item.width * 100}%`, height: `${item.height * 100}%` }}
-                  onClick={() => setActiveKey(item.key)} onPointerDown={event => startDrag(event, item)}
-                  onPointerMove={dragPlacement} onPointerUp={() => { drag.current = null; }}
-                  onPointerCancel={() => { drag.current = null; }} onLostPointerCapture={() => { drag.current = null; }}>
-                  <img src={signature.previewUrl} alt="" draggable={false} />
-                </button>;
-              })}
+          <div className="ds-panel-body">
+            <div className="ds-form-row">
+              <label>{t('签名名称')}<input value={name} maxLength={48} disabled={busy} placeholder={t('例如：我的签名')}
+                onChange={event => { setName(event.target.value); taskIds.current.create = ''; }} /></label>
+              <label>{t('笔迹颜色')}<input type="color" value={ink} disabled={busy} onChange={event => setInk(event.target.value)} /></label>
+            </div>
+            <div className="ds-draw-surface">
+              <canvas ref={penCanvas} width={840} height={300} aria-label={t('手写签名画板')}
+                onPointerDown={event => draw(event, true)} onPointerMove={event => draw(event, false)}
+                onPointerUp={() => { pen.current = null; }} onPointerCancel={() => { pen.current = null; }}
+                onLostPointerCapture={() => { pen.current = null; }} />
+              {!hasInk && <span>{t('在这里手写签名')}</span>}
+            </div>
+            <div className="ds-panel-actions">
+              <button type="button" className="ds-secondary" disabled={busy || !hasInk} onClick={clearDraft}>
+                <TrashIcon aria-hidden="true" />{t('清空画板')}
+              </button>
+              <div>{priceNote('create')}{access?.signedIn ? <button type="button" className="ds-primary"
+                disabled={busy || !hasInk || !name.trim() || !canRun} onClick={saveSignature}>{t(busy ? '正在处理…' : '保存签名')}</button> : signIn}</div>
             </div>
           </div>
-        </> : <button type="button" className="ds-file-empty" disabled={busy} onClick={() => documentUpload.current?.click()}>
-          <DocumentTextIcon aria-hidden="true" />
-          <strong>{t('选择要签署的文件')}</strong>
-          <span>{t(access?.wordReady === false ? 'PDF、PNG、JPG、WebP，每个文件最多12MB' : 'PDF、DOCX、PNG、JPG、WebP，每个文件最多12MB')}</span>
-        </button>}
-      </section>
-
-      <aside className="ds-panel">
-        <div className="ds-panel-heading"><h2>{t('选择签名')}</h2>
-          <button type="button" className="ds-text-button" disabled={busy} onClick={() => switchMode('create')}>{t('制作签名')}</button>
-        </div>
-        <div className="ds-panel-body ds-placement-settings">
-          {signatureList(true)}
-          <p>{t('选择签名后点击页面放置，拖动可调整位置。')}</p>
-          <button className="ds-secondary" type="button" disabled={busy || !pageSize || !currentSignature || placements.length >= signatureLimits.placements}
-            onClick={() => place(.5, .5)}><PlusIcon aria-hidden="true" />{t('在页面中央放置')}</button>
-          {activePlacement && <div className="ds-position">
-            <label>{t('签名大小')}<input type="range" min=".1" max="100" step=".1" disabled={busy}
-              value={activePlacement.width * 100} onChange={event => resizePlacement(activePlacement, Number(event.target.value) / 100)} /></label>
-            <label>{t('横向位置')}<input type="range" min="0" max={(1 - activePlacement.width) * 100} step=".1" disabled={busy}
-              value={activePlacement.x * 100} onChange={event => movePlacement(activeKey, Number(event.target.value) / 100, activePlacement.y)} /></label>
-            <label>{t('纵向位置')}<input type="range" min="0" max={(1 - activePlacement.height) * 100} step=".1" disabled={busy}
-              value={activePlacement.y * 100} onChange={event => movePlacement(activeKey, activePlacement.x, Number(event.target.value) / 100)} /></label>
-            <button className="ds-secondary" type="button" disabled={busy} onClick={removePlacement}><TrashIcon aria-hidden="true" />{t('移除此处签名')}</button>
-          </div>}
-          <div className="ds-summary">
-            <span>{t('签名位置')} <b>{placements.length}</b></span>{priceNote('sign')}
+        </section>
+        <aside className="ds-panel">
+          <div className="ds-panel-heading"><h3><RectangleStackIcon aria-hidden="true" />{t('签名库')}</h3><span>{signatures.length} / {signatureLimits.savedSignatures}</span></div>
+          <div className="ds-panel-body">{signatureList(false)}</div>
+        </aside>
+      </div> : <div className="ds-layout">
+        <section className="ds-panel" aria-labelledby="ds-file-heading">
+          <div className="ds-panel-heading"><h3 id="ds-file-heading"><DocumentTextIcon aria-hidden="true" />{t('文件预览')}</h3>
+            <button type="button" className="ds-secondary" disabled={busy} onClick={() => documentUpload.current?.click()}>
+              <ArrowUpTrayIcon aria-hidden="true" />{t(source ? '更换文件' : '上传文件')}
+            </button>
+            <input ref={documentUpload} hidden type="file" accept={access?.wordReady === false ? '.pdf,.png,.jpg,.jpeg,.webp' : '.pdf,.docx,.png,.jpg,.jpeg,.webp'} onChange={event => {
+              const file = event.target.files?.[0]; event.target.value = ''; if (file) selectFile(file);
+            }} />
           </div>
-          <p>{t(access?.wordReady === false ? 'PDF 输出 PDF，图片输出 PNG。成品保留7天。' : 'PDF 和 DOCX 输出 PDF，图片输出 PNG。成品保留7天。')}</p>
-          {access && !access.storageReady && <p className="ds-error">{t('签署文件云存储暂未配置')}</p>}
-          {result ? <a className="ds-primary" href={result.downloadUrl} download><ArrowDownTrayIcon aria-hidden="true" />{t('下载签署文件')}</a>
-            : access?.signedIn ? <button type="button" className="ds-primary"
-              disabled={busy || !source || !placements.length || !access.storageReady || !canRun} onClick={signDocument}>
-              <DocumentCheckIcon aria-hidden="true" />{t(busy ? '正在处理…' : '生成签署文件')}
-            </button> : signIn}
-        </div>
-      </aside>
-    </div>}
+          {fileLoading && <p className="ds-file-status" role="status"><ArrowPathIcon aria-hidden="true" />{t(fileLoading)}</p>}
+          {access?.wordReady === false && <p className="ds-file-status">{t('当前环境暂未启用 DOCX，请先将 Word 另存为 PDF 后上传')}</p>}
+          {source ? <>
+            <div className="ds-page-tools"><span title={source.name}>{source.name}</span>
+              {source.kind === 'pdf' ? <div>
+                <button className="ds-icon-button" type="button" aria-label={t('上一页')} disabled={busy || page <= 1}
+                  onClick={() => { setPage(page - 1); setActiveKey(''); }}><ChevronLeftIcon /></button>
+                <span>{page} / {pageCount}</span>
+                <button className="ds-icon-button" type="button" aria-label={t('下一页')} disabled={busy || page >= pageCount}
+                  onClick={() => { setPage(page + 1); setActiveKey(''); }}><ChevronRightIcon /></button>
+              </div> : <div>{source.width} × {source.height}</div>}
+            </div>
+            <div className="ds-preview-surface">
+              <div ref={stage} className="ds-page" style={{ aspectRatio: aspect, width: `min(100%, calc(var(--ds-preview-height) * ${aspect}))` }}
+                onPointerDown={event => {
+                  if (event.button !== 0) return;
+                  const bounds = event.currentTarget.getBoundingClientRect();
+                  place((event.clientX - bounds.left) / bounds.width, (event.clientY - bounds.top) / bounds.height);
+                }}>
+                {source.kind === 'image' ? <img src={source.url} alt={t('文件预览')} draggable={false} />
+                  : <canvas ref={preview} aria-label={t('文件预览')} style={{ visibility: pageSize ? 'visible' : 'hidden' }} />}
+                {!pageSize && <span className="ds-rendering"><ArrowPathIcon />{t('正在加载预览…')}</span>}
+                {pageSize && visiblePlacements.map(item => {
+                  const signature = signatures.find(saved => saved.id === item.signatureId);
+                  return signature && <button type="button" key={item.key} className="ds-placement"
+                    aria-label={signature.name} aria-pressed={item.key === activeKey} disabled={busy}
+                    style={{ left: `${item.x * 100}%`, top: `${item.y * 100}%`, width: `${item.width * 100}%`, height: `${item.height * 100}%` }}
+                    onClick={() => setActiveKey(item.key)} onPointerDown={event => startDrag(event, item)}
+                    onPointerMove={dragPlacement} onPointerUp={() => { drag.current = null; }}
+                    onPointerCancel={() => { drag.current = null; }} onLostPointerCapture={() => { drag.current = null; }}>
+                    <img src={signature.previewUrl} alt="" draggable={false} />
+                  </button>;
+                })}
+              </div>
+            </div>
+          </> : <button type="button" className="ds-file-empty" disabled={busy} onClick={() => documentUpload.current?.click()}>
+            <DocumentTextIcon aria-hidden="true" />
+            <strong>{t('选择要签署的文件')}</strong>
+            <span>{t(access?.wordReady === false ? 'PDF、PNG、JPG、WebP，每个文件最多12MB' : 'PDF、DOCX、PNG、JPG、WebP，每个文件最多12MB')}</span>
+          </button>}
+        </section>
 
-    {Boolean(access?.documents.length) && <section className="ds-panel ds-history">
-      <div className="ds-panel-heading"><h2>{t('最近签署文件')}</h2><span>{t('重复下载不扣积分')}</span></div>
-      <ul>{access?.documents.map(file => <li key={file.id}>
-        <div><strong>{file.name}</strong><small>{(file.bytes / 1024).toFixed(0)} KB · {t('有效期至')} {new Date(file.expiresAt).toLocaleString(locale)}</small></div>
-        <a className="ds-secondary" href={file.downloadUrl} download><ArrowDownTrayIcon aria-hidden="true" />{t('下载签署文件')}</a>
-      </li>)}</ul>
-    </section>}
-  </main>;
+        <aside className="ds-panel">
+          <div className="ds-panel-heading"><h3><DocumentCheckIcon aria-hidden="true" />{t('选择签名')}</h3></div>
+          <div className="ds-panel-body ds-placement-settings">
+            {signatureList(true)}
+            <p>{t('选择签名后点击页面放置，拖动可调整位置。')}</p>
+            <button className="ds-secondary" type="button" disabled={busy || !pageSize || !currentSignature || placements.length >= signatureLimits.placements}
+              onClick={() => place(.5, .5)}><PlusIcon aria-hidden="true" />{t('在页面中央放置')}</button>
+            {activePlacement && <div className="ds-position">
+              <label>{t('签名大小')}<input type="range" min=".1" max="100" step=".1" disabled={busy}
+                value={activePlacement.width * 100} onChange={event => resizePlacement(activePlacement, Number(event.target.value) / 100)} /></label>
+              <label>{t('横向位置')}<input type="range" min="0" max={(1 - activePlacement.width) * 100} step=".1" disabled={busy}
+                value={activePlacement.x * 100} onChange={event => movePlacement(activeKey, Number(event.target.value) / 100, activePlacement.y)} /></label>
+              <label>{t('纵向位置')}<input type="range" min="0" max={(1 - activePlacement.height) * 100} step=".1" disabled={busy}
+                value={activePlacement.y * 100} onChange={event => movePlacement(activeKey, activePlacement.x, Number(event.target.value) / 100)} /></label>
+              <button className="ds-secondary" type="button" disabled={busy} onClick={removePlacement}><TrashIcon aria-hidden="true" />{t('移除此处签名')}</button>
+            </div>}
+            <div className="ds-summary">
+              <span>{t('签名位置')} <b>{placements.length}</b></span>{priceNote('sign')}
+            </div>
+            <p>{t(access?.wordReady === false ? 'PDF 输出 PDF，图片输出 PNG。成品保留7天。' : 'PDF 和 DOCX 输出 PDF，图片输出 PNG。成品保留7天。')}</p>
+            {access && !access.storageReady && <p className="ds-error">{t('签署文件云存储暂未配置')}</p>}
+            {result ? <a className="ds-primary" href={result.downloadUrl} download><ArrowDownTrayIcon aria-hidden="true" />{t('下载签署文件')}</a>
+              : access?.signedIn ? <button type="button" className="ds-primary"
+                disabled={busy || !source || !placements.length || !access.storageReady || !canRun} onClick={signDocument}>
+                <DocumentCheckIcon aria-hidden="true" />{t(busy ? '正在处理…' : '生成签署文件')}
+              </button> : signIn}
+          </div>
+        </aside>
+      </div>}
+
+      {Boolean(access?.documents.length) && <section className="ds-panel ds-history">
+        <div className="ds-panel-heading"><h3><ClockIcon aria-hidden="true" />{t('最近签署文件')}</h3><span>{t('重复下载不扣积分')}</span></div>
+        <ul>{access?.documents.map(file => <li key={file.id}>
+          <div><strong>{file.name}</strong><small>{(file.bytes / 1024).toFixed(0)} KB · {t('有效期至')} {new Date(file.expiresAt).toLocaleString(locale)}</small></div>
+          <a className="ds-secondary" href={file.downloadUrl} download><ArrowDownTrayIcon aria-hidden="true" />{t('下载签署文件')}</a>
+        </li>)}</ul>
+      </section>}
+    </main>
+  </div>;
 }

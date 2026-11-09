@@ -76,9 +76,15 @@ for (const spec of ${JSON.stringify(paths)}) {
     continue;
   }
   const html = await response.text();
+  if (path === '/tools/document-signature.html') {
+    const sidebar = html.match(/<aside class="ds-sidebar">.*?<\\/aside>/s)?.[0] || '';
+    const menu = [...sidebar.matchAll(/<button[^>]*aria-pressed="(true|false)"[^>]*>.*?<span>([^<]+)<\\/span><\\/button>/gs)];
+    pages.push({ status: response.status, menu: menu.map(match => match.slice(1)), sidebarBeforeMain: !!sidebar && html.indexOf(sidebar) < html.indexOf('<main class="ds-main"'), hasCanvas: html.includes('id="ds-draw-heading"') });
+    continue;
+  }
   const trackerSource = 'https://www.yxstar.shop/s/RDYfVdtkRd-iXLHGxvrdEA';
   const trackerTags = [...html.matchAll(/<script[^>]*>/g)].filter(match => match[0].includes('src="' + trackerSource + '"'));
-  pages.push({ path, script: (path.startsWith('/api/site-tracker/') || path.startsWith('/s/')) && response.status === 200 ? html : undefined, siteTrackerCount: trackerTags.length, siteTrackerInHead: trackerTags.every(match => match.index < html.indexOf('</head>')), siteTrackerSkipsAdmin: trackerTags.every(match => match[0].includes('data-exclude-path="/admin"')), status: response.status, failed: html.includes('This page couldn'), hasBrand: html.includes('宇星脉通'), hasVideoForm: html.includes('粘贴视频链接'), hasStampPreview: html.includes('效果预览'), language: /<html[^>]*lang="([^"]+)"/.exec(html)?.[1], hasImageWorkspace: html.includes('ip-workspace'), englishImage: html.includes('Online Image Editor'), englishNav: html.includes('AI Digital Services'), englishPoints: html.includes('One balance. Many possibilities.'), englishStamp: html.includes('Design Your Stamp'), englishVideo: html.includes('Paste a Video Link'), chineseAdmin: html.includes('正在验证管理权限'), hasSignature: html.includes('ds-workspace'), englishSignature: html.includes('Signature pad'), wordReady: html.includes('"wordReady":true') });
+  pages.push({ path, script: (path.startsWith('/api/site-tracker/') || path.startsWith('/s/')) && response.status === 200 ? html : undefined, siteTrackerCount: trackerTags.length, siteTrackerInHead: trackerTags.every(match => match.index < html.indexOf('</head>')), siteTrackerSkipsAdmin: trackerTags.every(match => match[0].includes('data-exclude-path="/admin"')), status: response.status, failed: html.includes('This page couldn'), hasBrand: html.includes('宇星脉通'), hasVideoForm: html.includes('粘贴视频链接'), hasStampPreview: html.includes('效果预览'), language: /<html[^>]*lang="([^"]+)"/.exec(html)?.[1], hasImageWorkspace: html.includes('ip-workspace'), englishImage: html.includes('Online Image Editor'), englishNav: html.includes('AI Digital Services'), englishPoints: html.includes('One balance. Many possibilities.'), englishStamp: html.includes('Design Your Stamp'), englishVideo: html.includes('Paste a Video Link'), chineseAdmin: html.includes('正在验证管理权限'), wordReady: html.includes('"wordReady":true') });
 }
 console.log(JSON.stringify({ pages, errors, queries }));
 `;
@@ -170,8 +176,12 @@ test('文件签名生产页面及本地 PDF 资源可访问，匿名提交与成
     '/api/tools/document-signature/assets/build/pdf.mjs',
   ]);
   assert.deepEqual(result.pages.map(page => page.status), [200, 200, 200, 401, 401, 200, 404, 200, 404]);
-  assert.ok(result.pages[0].hasSignature);
-  assert.ok(result.pages[1].englishSignature);
+  assert.deepEqual(result.pages[0].menu, [['true', '制作签名'], ['false', '签署文件']]);
+  assert.deepEqual(result.pages[1].menu, [['true', 'Create signature'], ['false', 'Sign document']]);
+  for (const page of result.pages.slice(0, 2)) {
+    assert.ok(page.sidebarBeforeMain);
+    assert.ok(page.hasCanvas);
+  }
   assert.ok(result.pages[2].wordReady);
   assert.equal(result.pages[7].type, 'text/javascript');
   assert.equal(result.pages[7].hash, createHash('sha256').update(worker).digest('hex'));
