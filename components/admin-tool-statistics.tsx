@@ -20,12 +20,12 @@ export function ToolStatistics() {
   }, [period, version]);
   function reload() { setLoading(true); setError(''); setVersion(value => value + 1); }
   const cards = data ? [['入口点击', data.totals.clicks], ['使用人数', data.totals.users], ['完成次数', data.totals.uses], ['消耗积分', data.totals.points]] as const : [];
-  return <section className="tool-statistics" aria-labelledby="tool-stat-title">
-    <div className="tool-stat-heading"><div><h3 id="tool-stat-title">工具使用统计</h3><p>按工具和功能查看点击、使用与真实积分消耗。</p></div><div className="tool-stat-filters">
+  return <section className="tool-statistics" aria-label="工具使用统计">
+    <div className="product-filter tool-stat-filters"><b>筛选条件</b>
       <label>统计周期<select value={period} onChange={event => { setPeriod(event.target.value); setLoading(true); setError(''); }}><option value="all">全部时间</option><option value="today">今天</option><option value="7">近7天</option><option value="30">近30天</option></select></label>
       <label>工具<select value={filter} onChange={event => setFilter(event.target.value)}><option value="">全部工具</option>{data?.tools.map(tool => <option key={tool.slug} value={tool.slug}>{tool.name}</option>)}</select></label>
       <button type="button" disabled={loading} onClick={reload}>刷新统计</button>
-    </div></div>
+    </div>
     {error && <p className="product-editor-error" role="alert">{error}</p>}
     {loading ? <p className="tool-stat-empty" role="status">正在读取工具统计…</p> : data && !error && <>
       <div className="tool-stat-cards">{cards.map(([label, value]) => <article key={label}><span>{label}</span><strong>{label === '入口点击' && !data.clicksReady ? '未启用' : number(value)}</strong><small>全部工具 · {period === 'all' ? '累计数据' : '所选期间'}</small></article>)}</div>

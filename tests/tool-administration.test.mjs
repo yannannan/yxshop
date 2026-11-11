@@ -191,6 +191,12 @@ test('管理界面显示手印、上下移动与全量排序保存，手印价�
   render(); slots[0] = tools; slots[1] = false; render();
   let all = nodes(tree); assert.ok(all.some(node => node.props.id === 'tools-stats-tab'));
   all.find(node => node.props['aria-label'] === '上移手印制作').props.onClick(); render();
+  nodes(tree).find(node => node.props.id === 'tools-stats-tab').props.onClick(); render();
+  assert.equal(nodes(tree).find(node => node.props.id === 'tools-list-panel').props.hidden, true);
+  assert.equal(nodes(tree).find(node => node.props.id === 'tools-stats-tab').props.className, 'active');
+  assert.ok(nodes(tree).some(node => node.props.id === 'tools-stats-panel'));
+  nodes(tree).find(node => node.props.id === 'tools-list-tab').props.onClick(); render();
+  assert.equal(nodes(tree).find(node => node.props.id === 'tools-list-panel').props.hidden, false);
   all = nodes(tree); const table = all.find(node => node.type === 'tbody');
   assert.equal(nodes(table).filter(node => node.type === 'tr')[1].key, 'handprint-maker');
   const hp = nodes(table).find(node => node.type === 'tr' && node.key === 'handprint-maker');
