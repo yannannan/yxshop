@@ -17,6 +17,7 @@ function load(file, mocks = {}, globals = {}) {
   return compiled.exports;
 }
 const geometry = load('../lib/signature-zoom.ts');
+const signingGeometry = load('../lib/signature-geometry.ts');
 const near = (actual, expected) => assert.ok(Math.abs(actual - expected) < .001, `${actual} != ${expected}`);
 const nodes = root => Array.isArray(root) ? root.flatMap(nodes) : !root || typeof root !== 'object' ? [] : [root, ...nodes(root.props?.children)];
 
@@ -249,7 +250,7 @@ test('反复放大缩小只改变内部滚动范围，不累计顶部空白；�
   h.close();
 });
 
-test('PDF缩放提高预览分辨率，保留签署坐标、已生成结果和原有结算', async () => {
+test('PDF缩放及三类素材旋转保留导出坐标，修改角度才重新生成，预览操作不结算', async () => {
   let cursor = 0, tree, effectQueue = [], timerId = 0, holdRender = false;
   const slots = [], timers = new Map(), rendered = [], draws = [], submitted = [];
   const react = {
@@ -266,7 +267,8 @@ test('PDF缩放提高预览分辨率，保留签署坐标、已生成结果和�
   const canvas = { width: 0, height: 0, getContext: () => ({ drawImage: buffer => draws.push([buffer.width, buffer.height]) }) };
   const signature = { id: 'signature', name: '手写签名', width: 100, height: 40, previewUrl: '/private/signature' };
   const handprint = { ...signature, id: 'own-handprint', name: '我的手印', height: 140 };
-  const access = { signedIn: true, canProcess: true, signatures: [signature], stamps: [], handprints: [handprint], documents: [], costs: { create: 10, sign: 20, handprint: 7 }, chargeType: 'points', wordReady: true };
+  const stamp = { ...signature, id: 'own-stamp', height: 100, previewUrl: '/private/stamp', createdAt: '2026-11-11' };
+  const access = { signedIn: true, canProcess: true, signatures: [signature], stamps: [stamp], handprints: [handprint], documents: [], costs: { create: 10, sign: 20, handprint: 7 }, chargeType: 'points', wordReady: true };
   const source = { name: '合同.docx', kind: 'pdf', file: {}, pdf: {
     numPages: 2,
     async getPage(page) { return {
@@ -291,6 +293,7 @@ test('PDF缩放提高预览分辨率，保留签署坐标、已生成结果和�
     './handprint-maker': { HandprintMaker },
     '../lib/account-client': { useAccount: () => ({ account: { user: { id: 1 } } }), notifyAccountChanged() {} },
     '../lib/account': { accountLoginHref: () => '/login' }, '../lib/signature-tool': spec,
+    '../lib/signature-geometry': signingGeometry,
     '../lib/signature-client': { signaturePage: '/tools/document-signature.html', signatureAccess: async () => access,
       disposeSignatureSource() {}, loadSignatureSource: async () => source,
       signatureRequest: async (method, signal, metadata) => { submitted.push(metadata); return { document: { id: 'signed', name: source.name, downloadUrl: '/private/signed' } }; },
@@ -319,12 +322,25 @@ test('PDF缩放提高预览分辨率，保留签署坐标、已生成结果和�
   assert.equal(draws.length, 1); assert.deepEqual(draws[0], [1200, 1680]);
   view().props.onPlace(.3, .4); render();
   const placementBefore = view().props.children.flat().find(node => node?.props?.className === 'ds-placement');
-  const style = { ...placementBefore.props.style };
   namedButton('手印制作').props.onClick(); render();
   assert.equal(find(node => node.type === 'section' && node.props.id === 'ds-handprint-maker').props.hidden, false);
   find(node => node.type === HandprintMaker).props.onUse(handprint); render(); await settle();
   assert.ok(view(), 'returning from handprint creation preserves the uploaded document');
   view().props.onPlace(.7, .7); render();
+  find(node => node.props?.id === 'ds-rotation').props.onChange({ target: { value: '-37' } }); render();
+  assert.equal(view().props.children.flat().filter(node => node?.props?.className === 'ds-placement')[1].props.style.transform, 'rotate(-37deg)');
+  namedButton('印章').props.onClick(); render(); view().props.onPlace(.5, .2); render();
+  find(node => node.props?.['aria-label'] === '向右旋转90度').props.onClick(); render();
+  assert.equal(find(node => node.props?.id === 'ds-rotation').props.value, 90);
+  namedButton('角度复位').props.onClick(); render(); assert.equal(find(node => node.props?.id === 'ds-rotation').props.value, 0);
+  find(node => node.props?.['aria-label'] === '向左旋转90度').props.onClick(); render();
+  assert.equal(find(node => node.props?.id === 'ds-rotation').props.value, -90);
+  find(node => node.props?.['aria-label'] === '旋转角度数值').props.onChange({ target: { valueAsNumber: 90 } }); render();
+  placementBefore.props.onClick({ stopPropagation() {} }); render();
+  find(node => node.props?.['aria-label'] === '旋转角度数值').props.onChange({ target: { valueAsNumber: 20 } }); render();
+  find(node => node.props?.['aria-label'] === '旋转角度数值').props.onChange({ target: { valueAsNumber: NaN } }); render();
+  assert.equal(find(node => node.props?.id === 'ds-rotation').props.value, 20, 'partial numeric input must not change the angle');
+  const style = { ...view().props.children.flat().find(node => node?.props?.className === 'ds-placement').props.style };
   await zoom(3);
   assert.ok(draws.at(-1)[0] > 1200, 'zoom should sharpen the PDF raster');
   assert.ok(draws.at(-1)[0] * draws.at(-1)[1] < 6_010_000, 'raster must stay bounded');
@@ -336,12 +352,18 @@ test('PDF缩放提高预览分辨率，保留签署坐标、已生成结果和�
   placement.props.onPointerUp(); render();
   namedButton('生成签署文件').props.onClick(); await settle();
   assert.equal(submitted.length, 1); assert.equal(submitted[0].cost, 20);
-  assert.equal(submitted[0].placements.length, 2);
+  assert.equal(submitted[0].placements.length, 3);
   assert.equal(submitted[0].placements[1].asset, 'handprint');
+  assert.deepEqual([...submitted[0].placements.map(item => item.rotation)], [20, -37, 90]);
   near(submitted[0].placements[0].x, .275); near(submitted[0].placements[0].y, .45 - .25 * (600 / 840) * .4 / 2);
   await zoom(4);
   assert.ok(find(node => node.type === 'a' && node.props.href === '/private/signed'), 'zoom must preserve the existing result');
   assert.equal(submitted.length, 1, 'zoom never submits or settles a signing task');
+  find(node => node.props?.id === 'ds-rotation').props.onChange({ target: { value: '21' } }); render();
+  assert.equal(find(node => node.type === 'a' && node.props.href === '/private/signed'), undefined);
+  assert.equal(submitted.length, 1, 'angle adjustment is a free preview operation');
+  namedButton('生成签署文件').props.onClick(); await settle();
+  assert.notEqual(submitted[0].id, submitted[1].id, 'changed angle uses a new signing task');
   const visibleSize = [canvas.width, canvas.height], drawCount = draws.length;
   holdRender = true; await zoom(2);
   assert.deepEqual([canvas.width, canvas.height], visibleSize, 'keep the prior preview while rerendering');

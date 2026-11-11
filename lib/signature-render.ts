@@ -3,6 +3,7 @@ import { PNG } from 'pngjs';
 import { encodePng } from './raster-codec';
 import type { RasterImage } from './image-tool';
 import { SignatureError, signatureLimits, signingAssetKey, type SignaturePlacement } from './signature-tool';
+import { rotationComponents, signingBounds } from './signature-geometry';
 
 export function readSignatureRaster(bytes: Uint8Array, width: unknown, height: unknown, maxPixels: number): RasterImage {
   if (typeof width !== 'number' || typeof height !== 'number' || !Number.isInteger(width) || !Number.isInteger(height) ||
@@ -34,11 +35,55 @@ export function trimSignature(image: RasterImage) {
   return { width, height, png: encodePng({ data, width, height }) };
 }
 
+function assertRotatedBounds(placement: SignaturePlacement, aspect: number) {
+  const bounds = signingBounds(placement, aspect);
+  if (bounds.x < -1e-6 || bounds.y < -1e-6 || bounds.x + bounds.width > 1.000001 || bounds.y + bounds.height > 1.000001) {
+    throw new SignatureError('旋转后的素材超出页面范围');
+  }
+  return bounds;
+}
+
+function paintRotatedImage(image: RasterImage, placement: SignaturePlacement, signature: RasterImage) {
+  const bounds = assertRotatedBounds(placement, image.width / image.height);
+  const { cosine, sine } = rotationComponents(placement.rotation!);
+  const centerX = (placement.x + placement.width / 2) * image.width;
+  const centerY = (placement.y + placement.height / 2) * image.height;
+  const width = placement.width * image.width, height = placement.height * image.height;
+  const left = Math.max(0, Math.floor(bounds.x * image.width)), top = Math.max(0, Math.floor(bounds.y * image.height));
+  const right = Math.min(image.width, Math.ceil((bounds.x + bounds.width) * image.width));
+  const bottom = Math.min(image.height, Math.ceil((bounds.y + bounds.height) * image.height));
+  for (let y = top; y < bottom; y++) for (let x = left; x < right; x++) {
+    const dx = x + .5 - centerX, dy = y + .5 - centerY;
+    const localX = cosine * dx + sine * dy + width / 2, localY = -sine * dx + cosine * dy + height / 2;
+    if (localX < 0 || localY < 0 || localX >= width || localY >= height) continue;
+    const sampleX = localX / width * signature.width - .5, sampleY = localY / height * signature.height - .5;
+    const x0 = Math.floor(sampleX), y0 = Math.floor(sampleY), fx = sampleX - x0, fy = sampleY - y0;
+    // Interpolate premultiplied alpha so transparent PNG edges do not leave dark fringes.
+    let red = 0, green = 0, blue = 0, alpha = 0;
+    for (let sy = 0; sy < 2; sy++) for (let sx = 0; sx < 2; sx++) {
+      const px = Math.max(0, Math.min(signature.width - 1, x0 + sx));
+      const py = Math.max(0, Math.min(signature.height - 1, y0 + sy));
+      const source = (py * signature.width + px) * 4;
+      const weight = (sx ? fx : 1 - fx) * (sy ? fy : 1 - fy) * signature.data[source + 3] / 255;
+      red += signature.data[source] * weight; green += signature.data[source + 1] * weight;
+      blue += signature.data[source + 2] * weight; alpha += weight;
+    }
+    if (!alpha) continue;
+    const target = (y * image.width + x) * 4;
+    const background = image.data[target + 3] / 255 * (1 - alpha), resultAlpha = alpha + background;
+    image.data[target] = Math.round((red + image.data[target] * background) / resultAlpha);
+    image.data[target + 1] = Math.round((green + image.data[target + 1] * background) / resultAlpha);
+    image.data[target + 2] = Math.round((blue + image.data[target + 2] * background) / resultAlpha);
+    image.data[target + 3] = Math.round(resultAlpha * 255);
+  }
+}
+
 export function signImage(image: RasterImage, placements: SignaturePlacement[], signatures: Map<string, Buffer>) {
   const decoded = new Map([...signatures].map(([id, png]) => [id, PNG.sync.read(png)]));
   for (const placement of placements) {
     if (placement.page !== 1) throw new SignatureError('签名位置超出页面范围');
     const signature = decoded.get(signingAssetKey(placement))!;
+    if (placement.rotation) { paintRotatedImage(image, placement, signature); continue; }
     const left = Math.floor(placement.x * image.width);
     const top = Math.floor(placement.y * image.height);
     const width = Math.min(image.width - left, Math.max(1, Math.round(placement.width * image.width)));
@@ -72,14 +117,23 @@ export function pdfSignaturePosition(page: PDFPage, placement: SignaturePlacemen
   }
   const { x, y, width, height } = placement;
   const rotation = ((page.getRotation().angle % 360) + 360) % 360;
+  let bounds;
   // PDF.js 按旋转后的可见区域以左上为原点，PDF 绘图使用未旋转的左下坐标。
   switch (rotation) {
-    case 0: return { x: cropX + x * cropWidth, y: cropY + (1 - y - height) * cropHeight, width: width * cropWidth, height: height * cropHeight, rotate: degrees(0) };
-    case 90: return { x: cropX + (y + height) * cropWidth, y: cropY + x * cropHeight, width: width * cropHeight, height: height * cropWidth, rotate: degrees(90) };
-    case 180: return { x: cropX + (1 - x) * cropWidth, y: cropY + (y + height) * cropHeight, width: width * cropWidth, height: height * cropHeight, rotate: degrees(180) };
-    case 270: return { x: cropX + (1 - y - height) * cropWidth, y: cropY + (1 - x) * cropHeight, width: width * cropHeight, height: height * cropWidth, rotate: degrees(270) };
+    case 0: bounds = { x: cropX + x * cropWidth, y: cropY + (1 - y - height) * cropHeight, width: width * cropWidth, height: height * cropHeight, rotate: degrees(0) }; break;
+    case 90: bounds = { x: cropX + (y + height) * cropWidth, y: cropY + x * cropHeight, width: width * cropHeight, height: height * cropWidth, rotate: degrees(90) }; break;
+    case 180: bounds = { x: cropX + (1 - x) * cropWidth, y: cropY + (y + height) * cropHeight, width: width * cropWidth, height: height * cropHeight, rotate: degrees(180) }; break;
+    case 270: bounds = { x: cropX + (1 - y - height) * cropWidth, y: cropY + (1 - x) * cropHeight, width: width * cropHeight, height: height * cropWidth, rotate: degrees(270) }; break;
     default: throw new SignatureError('PDF 页面旋转角度不受支持');
   }
+  if (!placement.rotation) return bounds;
+  assertRotatedBounds(placement, rotation % 180 ? cropHeight / cropWidth : cropWidth / cropHeight);
+  const before = rotationComponents(rotation), after = rotationComponents(rotation - placement.rotation);
+  const centerX = bounds.x + before.cosine * bounds.width / 2 - before.sine * bounds.height / 2;
+  const centerY = bounds.y + before.sine * bounds.width / 2 + before.cosine * bounds.height / 2;
+  return { ...bounds, x: centerX - after.cosine * bounds.width / 2 + after.sine * bounds.height / 2,
+    y: centerY - after.sine * bounds.width / 2 - after.cosine * bounds.height / 2,
+    rotate: degrees(rotation - placement.rotation) };
 }
 
 export async function signPdf(bytes: Uint8Array, placements: SignaturePlacement[], signatures: Map<string, Buffer>) {

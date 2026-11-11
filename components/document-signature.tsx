@@ -3,7 +3,7 @@
 /* eslint-disable @next/next/no-html-link-for-pages -- Cross-page tool navigation uses native links. */
 import { useEffect, useRef, useState, type DragEvent, type PointerEvent } from 'react';
 import {
-  ArrowDownTrayIcon, ArrowLeftIcon, ArrowPathIcon, ArrowUpTrayIcon, ChevronLeftIcon, ChevronRightIcon,
+  ArrowDownTrayIcon, ArrowLeftIcon, ArrowPathIcon, ArrowUpTrayIcon, ArrowUturnLeftIcon, ArrowUturnRightIcon, ChevronLeftIcon, ChevronRightIcon,
   CheckBadgeIcon, ClockIcon, DocumentCheckIcon, DocumentTextIcon, FingerPrintIcon, PencilSquareIcon, PlusIcon, RectangleStackIcon, TrashIcon,
 } from '@heroicons/react/24/outline';
 import type { RenderTask } from 'pdfjs-dist';
@@ -12,6 +12,7 @@ import { StampMaker } from './stamp-maker';
 import { SignatureViewport } from './signature-viewport';
 import { HandprintMaker } from './handprint-maker';
 import type { HandprintRaster } from '../lib/handprint-raster';
+import { fitSigningPlacement, signingPositionRange } from '../lib/signature-geometry';
 import { notifyAccountChanged, useAccount } from '../lib/account-client';
 import { accountLoginHref } from '../lib/account';
 import {
@@ -93,6 +94,7 @@ function SignatureEditor({ tool, stampTool, initialMode = 'create' }: SignatureE
   const draft = useRef<ImageData | null>(null);
   const preview = useRef<HTMLCanvasElement>(null);
   const stage = useRef<HTMLDivElement>(null);
+  const rotationInput = useRef<HTMLInputElement>(null);
   const signatureUpload = useRef<HTMLInputElement>(null);
   const documentUpload = useRef<HTMLInputElement>(null);
   const pen = useRef<{ id: number; x: number; y: number } | null>(null);
@@ -172,8 +174,13 @@ function SignatureEditor({ tool, stampTool, initialMode = 'create' }: SignatureE
   const currentAsset = choices.find(item => choiceKey(item) === selectedAssetKey) ?? choices[0];
   const pageCount = source?.kind === 'pdf' ? source.pdf.numPages : 1;
   const pageSize = source?.kind === 'image' ? source : pdfSize?.page === page ? pdfSize : null;
+  const aspect = pageSize ? pageSize.width / pageSize.height : .78;
   const activePlacement = placements.find(item => item.key === activeKey && item.page === page);
+  const positionRange = activePlacement ? signingPositionRange(activePlacement, aspect) : null;
   const visiblePlacements = placements.filter(item => item.page === page);
+  useEffect(() => {
+    if (rotationInput.current) rotationInput.current.value = String(activePlacement?.rotation ?? 0);
+  }, [activeKey, activePlacement?.rotation]);
   const estimate = (action: SignatureAction) => access?.hasMembership ? 0 : access?.costs[action] ?? tool.pointsCost ?? 0;
   const canRun = Boolean(access?.canProcess);
 
@@ -338,7 +345,7 @@ function SignatureEditor({ tool, stampTool, initialMode = 'create' }: SignatureE
 
   function movePlacement(key: string, x: number, y: number) {
     setPlacements(previous => previous.map(item => item.key === key
-      ? { ...item, x: clamp(x, 1 - item.width), y: clamp(y, 1 - item.height) } : item));
+      ? fitSigningPlacement({ ...item, x, y }, aspect) : item));
     resetResult();
   }
 
@@ -365,9 +372,17 @@ function SignatureEditor({ tool, stampTool, initialMode = 'create' }: SignatureE
   function resizePlacement(item: Placement, width: number) {
     const ratio = item.height / item.width;
     const nextWidth = Math.min(width, 1, 1 / ratio), nextHeight = nextWidth * ratio;
-    setPlacements(previous => previous.map(entry => entry.key === item.key ? {
+    setPlacements(previous => previous.map(entry => entry.key === item.key ? fitSigningPlacement({
       ...entry, width: nextWidth, height: nextHeight, x: clamp(entry.x, 1 - nextWidth), y: clamp(entry.y, 1 - nextHeight),
-    } : entry));
+    }, aspect) : entry));
+    resetResult();
+  }
+
+  function rotatePlacement(item: Placement, value: number) {
+    if (busy || operation.current || !Number.isFinite(value)) return;
+    const rotation = Math.max(-180, Math.min(180, Math.round(value)));
+    if (rotation === (item.rotation ?? 0)) return;
+    setPlacements(previous => previous.map(entry => entry.key === item.key ? fitSigningPlacement({ ...entry, rotation }, aspect) : entry));
     resetResult();
   }
 
@@ -465,7 +480,6 @@ function SignatureEditor({ tool, stampTool, initialMode = 'create' }: SignatureE
     {access?.hasMembership ? t('有效套餐优先使用') : <><b>{estimate(action)}</b> {t('积分 / 次')}</>}
   </span>;
   const signIn = <a className="ds-primary" href={accountLoginHref(tool.slug === 'handprint-maker' ? '/tools/handprint-maker.html' : signaturePage)}>{t('登录后使用')}</a>;
-  const aspect = pageSize ? pageSize.width / pageSize.height : .78;
 
   return <div className="ds-workspace">
     <aside className="ds-sidebar">
@@ -574,7 +588,7 @@ function SignatureEditor({ tool, stampTool, initialMode = 'create' }: SignatureE
                     const asset = (item.asset === 'stamp' ? stamps : item.asset === 'handprint' ? handprints : signatures).find(saved => saved.id === item.signatureId);
                     return asset && <button type="button" key={item.key} className="ds-placement"
                       aria-label={asset.name} aria-pressed={item.key === activeKey} disabled={busy}
-                      style={{ left: `${item.x * 100}%`, top: `${item.y * 100}%`, width: `${item.width * 100}%`, height: `${item.height * 100}%` }}
+                      style={{ left: `${item.x * 100}%`, top: `${item.y * 100}%`, width: `${item.width * 100}%`, height: `${item.height * 100}%`, transform: `rotate(${item.rotation ?? 0}deg)` }}
                       onClick={event => { event.stopPropagation(); setActiveKey(item.key); }} onPointerDown={event => startDrag(event, item)}
                       onPointerMove={dragPlacement} onPointerUp={() => { drag.current = null; }}
                       onPointerCancel={() => { drag.current = null; }} onLostPointerCapture={() => { drag.current = null; }}>
@@ -617,13 +631,28 @@ function SignatureEditor({ tool, stampTool, initialMode = 'create' }: SignatureE
               <p>{t('点击素材后在页面上放置，也可以直接拖入页面。')}</p>
               <button className="ds-secondary" type="button" disabled={busy || !pageSize || !currentAsset || placements.length >= signatureLimits.placements}
                 onClick={() => place(.5, .5)}><PlusIcon aria-hidden="true" />{t('在页面中央放置')}</button>
-              {activePlacement && <div className="ds-position">
+              {activePlacement && positionRange && <div className="ds-position">
                 <label>{t(activePlacement.asset === 'handprint' ? '手印大小' : activePlacement.asset === 'stamp' ? '印章大小' : '签名大小')}<input type="range" min=".1" max="100" step=".1" disabled={busy}
                   value={activePlacement.width * 100} onChange={event => resizePlacement(activePlacement, Number(event.target.value) / 100)} /></label>
-                <label>{t('横向位置')}<input type="range" min="0" max={(1 - activePlacement.width) * 100} step=".1" disabled={busy}
+                <label>{t('横向位置')}<input type="range" min={positionRange.minX * 100} max={positionRange.maxX * 100} step=".1" disabled={busy}
                   value={activePlacement.x * 100} onChange={event => movePlacement(activeKey, Number(event.target.value) / 100, activePlacement.y)} /></label>
-                <label>{t('纵向位置')}<input type="range" min="0" max={(1 - activePlacement.height) * 100} step=".1" disabled={busy}
+                <label>{t('纵向位置')}<input type="range" min={positionRange.minY * 100} max={positionRange.maxY * 100} step=".1" disabled={busy}
                   value={activePlacement.y * 100} onChange={event => movePlacement(activeKey, activePlacement.x, Number(event.target.value) / 100)} /></label>
+                <div className="ds-rotation">
+                  <div className="ds-rotation-heading"><label htmlFor="ds-rotation">{t('旋转角度')}</label>
+                    <span><input key={activeKey} ref={rotationInput} type="number" aria-label={t('旋转角度数值')} min="-180" max="180" step="1" disabled={busy}
+                      defaultValue={activePlacement.rotation ?? 0} onChange={event => rotatePlacement(activePlacement, event.target.valueAsNumber)}
+                      onBlur={event => { event.currentTarget.value = String(activePlacement.rotation ?? 0); }} />°</span></div>
+                  <input id="ds-rotation" aria-label={t('旋转角度')} type="range" min="-180" max="180" step="1" disabled={busy}
+                    value={activePlacement.rotation ?? 0} onChange={event => rotatePlacement(activePlacement, Number(event.target.value))} />
+                  <div className="ds-rotation-buttons">
+                    <button type="button" className="ds-secondary" disabled={busy} aria-label={t('向左旋转90度')}
+                      onClick={() => rotatePlacement(activePlacement, ((activePlacement.rotation ?? 0) - 90 + 540) % 360 - 180)}><ArrowUturnLeftIcon aria-hidden="true" />−90°</button>
+                    <button type="button" className="ds-secondary" disabled={busy} onClick={() => rotatePlacement(activePlacement, 0)}>{t('角度复位')}</button>
+                    <button type="button" className="ds-secondary" disabled={busy} aria-label={t('向右旋转90度')}
+                      onClick={() => rotatePlacement(activePlacement, ((activePlacement.rotation ?? 0) + 90 + 540) % 360 - 180)}>+90°<ArrowUturnRightIcon aria-hidden="true" /></button>
+                  </div>
+                </div>
                 <button className="ds-secondary" type="button" disabled={busy} onClick={removePlacement} aria-keyshortcuts="Delete">
                   <TrashIcon aria-hidden="true" />{t('移除选中项')}<kbd className="ds-key">Delete</kbd>
                 </button>

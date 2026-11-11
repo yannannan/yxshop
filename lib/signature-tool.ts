@@ -18,6 +18,7 @@ export type SignaturePlacement = {
   y: number;
   width: number;
   height: number;
+  rotation?: number;
 };
 
 export type SavedSignature = {
@@ -93,15 +94,20 @@ export function parseSignaturePlacements(value: unknown): SignaturePlacement[] {
     throw new SignatureError('请添加至少一个签名位置，最多30处');
   }
   return value.map(placement => {
-    const { signatureId, page, x, y, width, height, asset } = placement || {};
+    const { signatureId, page, x, y, width, height, asset, rotation } = placement || {};
     if ((asset !== undefined && asset !== 'stamp' && asset !== 'handprint') || !(asset === 'stamp' ? isStampId(signatureId) : isSignatureId(signatureId)) ||
       !Number.isInteger(page) || page < 1 || page > signatureLimits.pages ||
       ![x, y, width, height].every(Number.isFinite) || x < 0 || x >= 1 || y < 0 || y >= 1 || width <= 0 || height <= 0 ||
       x + width > 1.000001 || y + height > 1.000001) {
       throw new SignatureError('签名位置超出页面范围');
     }
+    if (rotation !== undefined && (!Number.isInteger(rotation) || rotation < -180 || rotation > 180)) {
+      throw new SignatureError('旋转角度必须是-180到180之间的整数');
+    }
+    // Omitting zero preserves the request hashes of existing unrotated tasks.
+    const angle = rotation ? { rotation } : {};
     return asset
-      ? { signatureId: signatureId.toLowerCase(), page, x, y, width, height, asset }
-      : { signatureId, page, x, y, width, height };
+      ? { signatureId: signatureId.toLowerCase(), page, x, y, width, height, asset, ...angle }
+      : { signatureId, page, x, y, width, height, ...angle };
   });
 }

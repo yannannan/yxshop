@@ -14,6 +14,8 @@ import { convertSignatureWord, signatureWordReadiness, validateWordArchive } fro
 const spec = await tsImport('../lib/signature-tool.ts', import.meta.url);
 const image = await tsImport('../lib/image-tool.ts', import.meta.url);
 const render = await tsImport('../lib/signature-render.ts', import.meta.url);
+const signingGeometry = await tsImport('../lib/signature-geometry.ts', import.meta.url);
+const rasterCodec = await tsImport('../lib/raster-codec.ts', import.meta.url);
 const requestHelpers = await tsImport('../lib/image-request.ts', import.meta.url);
 const pointsConfig = await tsImport('../lib/points.ts', import.meta.url);
 const stampOptions = await tsImport('../lib/stamp-options.ts', import.meta.url);
@@ -171,6 +173,10 @@ function load(file, mocks) {
   return exports;
 }
 
+// Share the route's error class in its VM renderer, as the production module graph does.
+const routeRender = load('../lib/signature-render.ts', { './signature-tool': spec,
+  './signature-geometry': signingGeometry, './raster-codec': rasterCodec });
+
 function fixture({ failUpload = false, changePrice = false, failSave = false, failHandprintSave = false, stamp = null, missingHandprints = false } = {}) {
   let data = { balance: 100, signatures: {}, handprints: {}, documents: {}, charges: [], signCost: 20 };
   let tail = Promise.resolve();
@@ -272,7 +278,7 @@ function fixture({ failUpload = false, changePrice = false, failSave = false, fa
     './signature-oss.mjs': { SignatureStorageError },
   });
   const mocks = {
-    '@/lib/image-request': requestHelpers, '@/lib/points-service': points, '@/lib/signature-render': render,
+    '@/lib/image-request': requestHelpers, '@/lib/points-service': points, '@/lib/signature-render': routeRender,
     '@/lib/signature-oss.mjs': { signatureStorage: storage }, '@/lib/signature-word.mjs': { signatureWordReady: () => false },
     '@/lib/signature-service': service, '@/lib/signature-tool': spec, '@/lib/signature-response': response,
     '@/lib/signature-stamps': signingStamps, '@/lib/stamp-service': stampService, '@/lib/stamp-options': stampOptions,
@@ -430,4 +436,21 @@ test('手印调价、余额不足及保存失败不扣积分；缺14号SQL时原
   const access = await f.access(1); assert.equal(access.status, 200); assert.equal((await access.json()).handprintReady, false);
   const response = await f.handprint(); assert.equal(response.status, 503); assert.match((await response.json()).message, /14/);
   assert.equal((await f.create()).status, 200); assert.equal((await f.sign()).status, 200);
+});
+
+test('旋转角度进入签署任务指纹，零角度兼容旧重试，非法角度及越界不上传也不结算', async () => {
+  const f = fixture(); assert.equal((await f.create()).status, 200);
+  for (const rotation of ['90', 181, .5]) {
+    assert.equal((await f.sign(1, taskId, [{ ...position, rotation }])).status, 400);
+  }
+  assert.equal((await f.sign(1, taskId, [{ ...position, x: 0, y: 0, rotation: 45 }])).status, 400);
+  assert.equal(f.uploads.length, 0); assert.equal(f.data.balance, 90);
+  assert.equal((await f.sign()).status, 200);
+  assert.equal((await f.sign(1, taskId, [{ ...position, rotation: 0 }])).status, 200);
+  assert.equal((await f.sign(1, taskId, [{ ...position, rotation: 30 }])).status, 409);
+  assert.equal(f.data.balance, 70);
+  assert.equal((await f.sign(1, nextTaskId, [{ ...position, rotation: 30 }])).status, 200);
+  assert.equal((await f.sign(1, nextTaskId, [{ ...position, rotation: 30 }])).status, 200);
+  assert.equal(f.data.balance, 50);
+  assert.deepEqual(f.data.charges.map(row => row.cost), [10, 20, 20]);
 });
