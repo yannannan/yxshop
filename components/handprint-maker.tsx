@@ -1,7 +1,7 @@
 'use client';
 /* eslint-disable @next/next/no-img-element -- Private handprint previews use native images. */
 import { useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
-import { ArrowDownTrayIcon, ArrowPathIcon, ArrowUpTrayIcon, CameraIcon, FingerPrintIcon, PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
+import { AdjustmentsHorizontalIcon, ArrowDownTrayIcon, ArrowPathIcon, ArrowUpTrayIcon, CameraIcon, FingerPrintIcon, PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
 import { useI18n } from './language-provider';
 import { applyHandprintEffects, defaultHandprintCrack, defaultHandprintEffects, extractHandprint, fullHandprintCrop,
   handprintSurface, randomHandprint, type HandprintCrack, type HandprintEffects, type HandprintRaster } from '../lib/handprint-raster';
@@ -125,13 +125,13 @@ export function HandprintMaker({ access, busy, cost, onSave, onRemove, onUse, si
     setEffects(previous => ({ ...previous, cracks: previous.cracks.map(crack => crack.id === id ? { ...crack, [field]: value } : crack) }));
   }
   return <div className="ds-layout hp-layout">
-    <section className="ds-panel">
+    <section className="ds-panel hp-preview-panel">
       <div className="ds-panel-heading"><h3><FingerPrintIcon aria-hidden="true" />{t('手印制作')}</h3><span>{t(mode === 'random' ? '随机图案' : '照片提取')}</span></div>
       <div className="ds-panel-body">
         <div className="hp-create-toolbar"><div className="ds-asset-tabs hp-methods" role="group" aria-label={t('手印制作方式')}>
           <button type="button" disabled={busy || loading} aria-pressed={mode === 'upload'} onClick={() => { setMode('upload'); setError(''); }}>{t('上传提取')}</button>
           <button type="button" disabled={busy || loading} aria-pressed={mode === 'random'} onClick={generatePattern}>{t('随机生成')}</button>
-        </div><label className="hp-color">{t('手印颜色')}<input type="color" value={color} disabled={busy || loading} onChange={event => setColor(event.target.value)} /></label></div>
+        </div></div>
         {mode === 'upload' ? <>
           <div className="hp-upload-actions">
             <button type="button" className="ds-secondary" disabled={busy || loading} onClick={() => upload.current?.click()}><ArrowUpTrayIcon aria-hidden="true" />{t('上传手印图片')}</button>
@@ -143,7 +143,6 @@ export function HandprintMaker({ access, busy, cost, onSave, onRemove, onUse, si
           <p className="hp-hint">{t('请上传清晰的手印或指印照片，框选需要保留的区域。')}</p>
         </> : <div className="hp-upload-actions"><button className="ds-secondary" type="button" disabled={busy} onClick={generatePattern}><ArrowPathIcon aria-hidden="true" />{t('换一个图案')}</button><span className="hp-hint">{t('随机生成装饰性指印图案。')}</span></div>}
         {loading && <p role="status" className="hp-hint">{t('正在读取文件…')}</p>}
-        {(error || output.error) && <p role="alert" className="ds-feedback ds-error">{t(error || output.error)}</p>}
         <div className={`hp-preview-grid${mode === 'random' ? ' hp-random' : ''}`}>
           {mode === 'upload' && <section><h4>{t('原照片')}</h4><div className="hp-preview">
             {source ? <div className="hp-photo" style={{ aspectRatio: source.width / source.height, width: `min(100%, ${300 * source.width / source.height}px)` }}
@@ -157,7 +156,14 @@ export function HandprintMaker({ access, busy, cost, onSave, onRemove, onUse, si
             {output.image ? <canvas ref={preview} width={output.image.width} height={output.image.height} aria-label={t('手印预览')} /> : <span>{t('处理后的手印将在这里展示')}</span>}
           </div></section>
         </div>
+        <p className="hp-hint hp-preview-note">{t('透明底 PNG，保存后可重复使用。')}</p>
+      </div>
+    </section>
+    <aside className="ds-panel hp-settings" aria-labelledby="hp-settings-title">
+      <div className="ds-panel-heading"><h3 id="hp-settings-title"><AdjustmentsHorizontalIcon aria-hidden="true" />{t('调整参数')}</h3></div>
+      <div className="ds-panel-body hp-settings-body" role="region" aria-labelledby="hp-settings-title" tabIndex={0}>
         <div className="hp-controls">
+          <label className="hp-color">{t('手印颜色')}<input type="color" value={color} disabled={busy || loading} onChange={event => setColor(event.target.value)} /></label>
           {mode === 'upload' && <label>{t('提取方式')}<select value={method} disabled={busy} onChange={event => setMethod(event.target.value as 'red' | 'dark')}><option value="red">{t('红色印迹')}</option><option value="dark">{t('深色笔迹')}</option></select></label>}
           <label>{t(mode === 'random' ? '图案浓度' : '提取强度')}<input type="range" min="1" max="100" value={strength} disabled={busy} onChange={event => setStrength(Number(event.target.value))} /></label>
         </div>
@@ -183,21 +189,24 @@ export function HandprintMaker({ access, busy, cost, onSave, onRemove, onUse, si
             </div>
           </section>)}</div>
         </section>
+      </div>
+      <div className="hp-settings-footer">
+        {(error || output.error) && <p role="alert" className="ds-feedback ds-error">{t(error || output.error)}</p>}
         {access?.handprintReady === false && <p className="ds-feedback ds-error">{t('请管理员先执行14号手印制作增量SQL')}</p>}
-        <div className="ds-panel-actions"><span className="ds-cost">{t('透明底 PNG，保存后可重复使用。')}</span><div><span className="ds-cost">{access?.hasMembership ? t('有效套餐优先使用') : <><b>{cost}</b> {t('积分 / 次')}</>}</span>
+        <div className="ds-panel-actions"><span className="ds-cost">{access?.hasMembership ? t('有效套餐优先使用') : <><b>{cost}</b> {t('积分 / 次')}</>}</span>
           {access?.signedIn ? <button type="button" className="ds-primary" disabled={busy || loading || !output.image || !access.canProcess || access.handprintReady === false}
             onClick={() => { returnFocus.current = document.activeElement as HTMLElement | null; setNameError(''); setNaming(true); }}>{t(busy ? '正在处理…' : '保存手印')}</button> : signIn}
-        </div></div>
+        </div>
       </div>
-    </section>
-    <aside className="ds-panel"><div className="ds-panel-heading"><h3>{t('手印制作记录')}</h3><span>{library.length} / 30</span></div><div className="ds-panel-body">
+    </aside>
+    <section className="ds-panel hp-history" aria-labelledby="hp-history-title"><div className="ds-panel-heading"><h3 id="hp-history-title">{t('手印制作记录')}</h3><span>{library.length} / 30</span></div><div className="ds-panel-body">
       {!library.length ? <p className="ds-empty-copy">{t('暂无已保存的手印')}</p> : <ul className="hp-records">{library.map(item => <li key={item.id}>
         <div className="hp-record-title"><img src={item.previewUrl} alt="" loading="lazy" /><div><strong>{item.name}</strong>{item.createdAt && <small>{new Date(item.createdAt).toLocaleString(locale)}</small>}</div></div>
         <div className="hp-record-actions"><button type="button" className="ds-secondary" disabled={busy} onClick={() => onUse(item)}>{t('用于签署')}</button>
           <a className="ds-secondary" href={item.previewUrl} download={`handprint-${item.id}.png`}><ArrowDownTrayIcon aria-hidden="true" />{t('下载')}</a>
           <button type="button" className="ds-icon-button" disabled={busy} aria-label={t('删除手印')} onClick={() => onRemove(item.id)}><TrashIcon aria-hidden="true" /></button></div>
       </li>)}</ul>}
-    </div></aside>
+    </div></section>
     {naming && <dialog className="hp-name-dialog" ref={nameDialog} aria-labelledby="hp-name-title" onCancel={() => setNaming(false)} onClose={() => setNaming(false)}>
       <form noValidate onSubmit={event => {
         event.preventDefault();

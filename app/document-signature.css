@@ -136,6 +136,27 @@
 .ds-asset-tabs button { padding: 6px 10px; min-height: 34px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: #4c6178; }
 .ds-asset-tabs button[aria-pressed=true] { border-color: #edc6ad; background: #fff4eb; color: #8d3918; font-weight: 650; }
 .ds-signing-tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.ds-layout.hp-layout {
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 380px);
+  grid-template-areas: "preview settings" "history settings";
+}
+.hp-preview-panel { grid-area: preview; }
+.hp-history { grid-area: history; }
+.hp-settings {
+  grid-area: settings; position: sticky; top: calc(var(--ds-topbar-height) + 16px); align-self: start;
+  display: flex; flex-direction: column; min-height: 0; max-height: calc(100dvh - var(--ds-topbar-height) - 112px);
+}
+.hp-settings > .ds-panel-heading, .hp-settings-footer { flex-shrink: 0; }
+.hp-settings-body { min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; scrollbar-width: thin; scrollbar-gutter: stable; }
+.hp-settings-body:focus-visible { outline: 2px solid var(--ds-orange); outline-offset: -3px; }
+.hp-settings-footer { padding: 12px 16px; border-top: 1px solid var(--ds-line); background: #fafcfe; }
+.hp-settings-footer .ds-panel-actions { justify-content: space-between; margin: 0; }
+.hp-settings-footer .ds-feedback { margin-bottom: 10px; font-size: 12px; }
+.hp-settings .hp-controls { margin-top: 0; padding: 0 0 16px; border: 0; border-bottom: 1px solid var(--ds-line); border-radius: 0; background: transparent; }
+.hp-settings .hp-controls > label:last-child { grid-column: 1 / -1; }
+.hp-settings .hp-effects { margin-top: 16px; padding: 0; border: 0; background: transparent; }
+.hp-settings .hp-crack-settings { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+.hp-history .hp-records { grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); max-height: 430px; padding: 2px; scrollbar-width: thin; }
 .hp-create-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
 .hp-methods { flex: 1; max-width: 330px; }
 .hp-color { flex-shrink: 0; }
@@ -153,6 +174,8 @@
 .hp-preview-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 18px; }
 .hp-preview-grid h4 { margin: 0; padding: 9px 12px; border: 1px solid var(--ds-line); border-bottom: 0; border-radius: 8px 8px 0 0; background: #f3f6fa; font-size: 14px; }
 .hp-preview { display: flex; align-items: center; justify-content: center; height: 340px; padding: 12px; border: 1px solid var(--ds-line); border-radius: 0 0 8px 8px; overflow: hidden; background: #f8fafc; color: var(--ds-muted); font-size: 13px; }
+.hp-preview-panel .hp-preview { height: clamp(260px, 42dvh, 400px); }
+.hp-preview-note { margin-bottom: 0; }
 .hp-transparent { background-color: #fff; background-image: repeating-conic-gradient(#eaf0f5 0% 25%, transparent 0% 50%); background-size: 18px 18px; }
 .hp-preview > canvas { display: block; max-width: 100%; max-height: 100%; width: auto; height: auto; }
 .hp-photo { position: relative; touch-action: none; cursor: crosshair; }
@@ -211,6 +234,9 @@
 }
 @media (max-width: 900px) {
   .ds-layout { grid-template-columns: minmax(0, 1fr); }
+  .ds-layout.hp-layout { grid-template-columns: minmax(0, 1fr); grid-template-areas: "preview" "settings" "history"; }
+  .hp-settings { position: static; max-height: none; }
+  .hp-settings-body { overflow-y: visible; scrollbar-gutter: auto; }
   .ds-library-list { max-height: 230px; }
 }
 @media (max-width: 800px) {
