@@ -76,7 +76,7 @@ for (const spec of ${JSON.stringify(paths)}) {
     continue;
   }
   const html = await response.text();
-  if (path === '/tools/document-signature.html') {
+  if (path === '/tools/document-signature.html' || path === '/tools/handprint-maker.html') {
     const sidebar = html.match(/<aside class="ds-sidebar">.*?<\\/aside>/s)?.[0] || '';
     const menu = [...sidebar.matchAll(/<button[^>]*aria-pressed="(true|false)"[^>]*>.*?<span>([^<]+)<\\/span><\\/button>/gs)];
     pages.push({ status: response.status, menu: menu.map(match => match.slice(1)), sidebarBeforeMain: !!sidebar && html.indexOf(sidebar) < html.indexOf('<main class="ds-main"'), hasCanvas: html.includes('id="ds-draw-heading"'), stampInactive: html.includes('id="ds-stamp-maker" hidden=""') });
@@ -188,5 +188,13 @@ test('文件签名生产页面及本地 PDF 资源可访问，匿名提交与成
   assert.ok(result.pages[2].wordReady);
   assert.equal(result.pages[7].type, 'text/javascript');
   assert.equal(result.pages[7].hash, createHash('sha256').update(worker).digest('hex'));
+  assert.deepEqual(result.errors, []);
+});
+
+test('手印独立页面中英文可直接打开，默认进入制作模块并复用共享工作区', { skip: needsBuild }, async () => {
+  const result = await renderPages(['/tools/handprint-maker.html', { path: '/tools/handprint-maker.html', locale: 'en' }]);
+  assert.deepEqual(result.pages.map(page => page.status), [200, 200]);
+  assert.deepEqual(result.pages[0].menu, [['false', '制作签名'], ['false', '签署文件'], ['false', '印章制作'], ['true', '手印制作']]);
+  assert.deepEqual(result.pages[1].menu, [['false', 'Create signature'], ['false', 'Sign document'], ['false', 'Stamp maker'], ['true', 'Create handprint']]);
   assert.deepEqual(result.errors, []);
 });

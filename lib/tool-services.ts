@@ -58,7 +58,14 @@ export type ToolService = {
 export const toolChargeLabels: Record<ToolChargeType, string> = { free: '免费使用', paid: '付费使用', pending: '收费待确认', points: '通用积分' };
 export const toolPagePath = (slug: string) => `/tools/${encodeURIComponent(slug)}.html`;
 export const isWebsiteAnalysis = (slug: string | undefined, name = '') => ['webmaster-tools','webmaster-analysis','webmaster','site-analysis','site-analyzer','website-analysis'].includes(slug || '') || name === '站长分析工具';
-export const builtInToolEntry = (slug: string | undefined) => slug && (slug === 'stamp-maker' || slug === 'video-extractor' || slug === 'image-processor' || slug === 'document-signature' || isWebsiteAnalysis(slug)) ? toolPagePath(slug) : '';
+export const builtInToolEntry = (slug: string | undefined) => slug && (slug === 'stamp-maker' || slug === 'video-extractor' || slug === 'image-processor' || slug === 'document-signature' || slug === 'handprint-maker' || isWebsiteAnalysis(slug)) ? toolPagePath(slug) : '';
+export function handprintToolEntry(owner: ToolService, pointsCost = owner.pointsCost): ToolService {
+  return { ...owner, slug: 'handprint-maker', name: '手印制作', logo: '/tool-logos/handprint-maker.svg',
+    description: '上传或拍摄手印照片，提取透明手印，也可随机生成指印图案。',
+    detail: '制作记录与文件在线签名中的手印库共用，保存成功后按手印制作配置结算。',
+    pointsCost, entryConfigured: true, seoTitle: '手印制作｜宇星脉通',
+    seoDescription: '上传或拍摄手印照片，提取透明手印，也可随机生成指印图案。' };
+}
 export const siteOrigin = () => (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.yxstar.shop').replace(/\/$/, '');
 export const isToolSlug = (value: string) => /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value) && value.length <= 100;
 

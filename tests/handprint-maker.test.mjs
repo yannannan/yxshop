@@ -57,7 +57,7 @@ function harness() {
   vm.runInNewContext(code, { module: output, exports: output.exports,
     Uint8Array, Uint32Array, crypto: webcrypto, ImageData: class { constructor(data, width, height) { Object.assign(this, { data, width, height }); } },
     createImageBitmap: async () => ({ width: 20, height: 10, close() { closed++; } }),
-    document: { createElement: () => ({ width: 0, height: 0, getContext: () => ({ drawImage() {}, getImageData: () => source(20, 10, [190, 20, 30, 255]) }) }) },
+    document: { activeElement: { focus() {} }, createElement: () => ({ width: 0, height: 0, getContext: () => ({ drawImage() {}, getImageData: () => source(20, 10, [190, 20, 30, 255]) }) }) },
     require(name) {
       if (name === 'react') return hooks;
       if (name === './language-provider') return { useI18n: () => ({ t: value => value, locale: 'zh-CN' }) };
@@ -69,14 +69,23 @@ function harness() {
     onSave: (...args) => saves.push(args), onUse: value => used.push(value), onRemove: id => removed.push(id), signIn: React.createElement('a', { href: '/login' }, '登录后使用') };
   function render() {
     cursor = 0; effects.length = 0; tree = output.exports.HandprintMaker(props);
-    for (const node of nodes(tree)) if (node.type === 'canvas') node.props.ref.current = { getContext: () => ({ putImageData() {} }) };
+    for (const node of nodes(tree)) {
+      if (node.type === 'canvas') node.props.ref.current = { getContext: () => ({ putImageData() {} }) };
+      if (node.type === 'dialog') node.props.ref.current = { showModal() {}, close() {} };
+      if (node.type === 'input' && node.props.ref) node.props.ref.current = { focus() {}, select() {} };
+    }
     for (const effect of effects) effect();
     return tree;
   }
   const find = predicate => nodes(tree).find(predicate);
   const button = label => find(node => node.type === 'button' && nodes(node).some(child => [child.props.children].flat().includes(label)));
   render();
-  return { props, saves, used, removed, find, button, render, html: () => renderToStaticMarkup(tree), get closed() { return closed; } };
+  function confirm(name) {
+    button('保存手印').props.onClick(); render();
+    if (name !== undefined) { find(node => node.props.id === 'hp-save-name').props.onChange({ target: { value: name } }); render(); }
+    find(node => node.type === 'form').props.onSubmit({ preventDefault() {} }); render();
+  }
+  return { props, saves, used, removed, find, button, render, confirm, html: () => renderToStaticMarkup(tree), get closed() { return closed; } };
 }
 
 test('手机拍照入口与上传提取均可用，拖动框选后的真实像素用于保存', async () => {
@@ -91,17 +100,16 @@ test('手机拍照入口与上传提取均可用，拖动框选后的真实像�
   const event = { button: 0, pointerId: 1, clientX: 10, clientY: 10, currentTarget: { getBoundingClientRect: () => ({ left: 0, top: 0, width: 100, height: 100 }), setPointerCapture() {} } };
   photo.props.onPointerDown(event); photo.props.onPointerMove({ ...event, clientX: 90, clientY: 80 }); photo.props.onPointerUp(); h.render();
   assert.equal(h.button('保存手印').props.disabled, false);
-  h.button('保存手印').props.onClick();
+  h.confirm();
   assert.equal(h.saves[0][0], '手印'); assert.deepEqual([h.saves[0][1].width, h.saves[0][1].height], [16, 7]);
 });
 
 test('随机手印保存重试沿用任务编号，改参数创建新任务，制作记录可下载和选用', () => {
   const h = harness();
   h.button('随机生成').props.onClick(); h.render();
-  h.find(node => node.type === 'input' && node.props.maxLength === 48).props.onChange({ target: { value: '随机图案1' } }); h.render();
-  h.button('保存手印').props.onClick(); h.render(); h.button('保存手印').props.onClick();
+  h.confirm('随机图案1'); h.confirm();
   assert.equal(h.saves.length, 2); assert.equal(h.saves[0][2], h.saves[1][2]);
-  h.button('换一个图案').props.onClick(); h.render(); h.button('保存手印').props.onClick();
+  h.button('换一个图案').props.onClick(); h.render(); h.confirm();
   assert.notEqual(h.saves[2][2], h.saves[1][2]);
   h.props.access.handprints = [{ id: 'own', name: '我的手印', previewUrl: '/private/handprint', createdAt: '2026-11-11' }]; h.render();
   assert.ok(h.find(node => node.type === 'a' && node.props.href === '/private/handprint' && node.props.download));
@@ -109,4 +117,20 @@ test('随机手印保存重试沿用任务编号，改参数创建新任务，�
   h.find(node => node.props['aria-label'] === '删除手印').props.onClick(); assert.deepEqual(h.removed, ['own']);
   h.props.access.handprintReady = false; h.render(); assert.equal(h.button('保存手印').props.disabled, true);
   assert.match(h.html(), /14号/);
+});
+
+test('保存时弹出命名窗口，空名称阻止保存，取消与Escape不扣费，确认后才提交并清理名称空格', () => {
+  const h = harness();
+  h.button('随机生成').props.onClick(); h.render();
+  assert.equal(h.find(node => node.type === 'input' && node.props.maxLength === 48), undefined, 'no name field on the main work area');
+  assert.equal(h.button('保存手印').props.disabled, false);
+  h.button('保存手印').props.onClick(); h.render(); assert.equal(h.saves.length, 0);
+  assert.ok(h.find(node => node.type === 'dialog'));
+  h.find(node => node.type === 'form').props.onSubmit({ preventDefault() {} }); h.render();
+  assert.match(h.html(), /请输入手印名称/); assert.equal(h.saves.length, 0);
+  h.button('取消').props.onClick(); h.render(); assert.equal(h.find(node => node.type === 'dialog'), undefined);
+  h.button('保存手印').props.onClick(); h.render();
+  h.find(node => node.type === 'dialog').props.onCancel(); h.render(); assert.equal(h.saves.length, 0);
+  h.confirm(' 自定义手印 '); assert.equal(h.saves[0][0], '自定义手印');
+  h.confirm(); assert.equal(h.saves[0][2], h.saves[1][2], 'confirming the same named image must retry the original task');
 });

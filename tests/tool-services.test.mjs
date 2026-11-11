@@ -14,6 +14,7 @@ import * as homepageHelpers from '../lib/homepage-display.ts';
 import * as stampOptions from '../lib/stamp-options.ts';
 import * as videoOptions from '../lib/video-options.ts';
 import * as catalogHelpers from '../lib/catalog.ts';
+import * as accountHelpers from '../lib/account.ts';
 
 const require = createRequire(import.meta.url);
 function load(file, mocks, globals = {}) {
@@ -106,6 +107,7 @@ function access({ type = 'free', url = 'https://example.com/tool', phone = null,
     '@/db/mysql-runtime': { env: { DB: { prepare(sql) { return { bind() { return this; }, async first() { return sql.includes('FROM users') ? { id: 1 } : exists ? { id: 101, tool_url: url, tool_charge_type: type, price: 10 } : null; } }; } } } },
     '@/db/setup': { getVerifiedSessionPhone: () => phone }, '@/lib/tool-services': helpers,
     '@/lib/tool-entitlements': { getToolEntitlement: async () => paid ? { id: 'order' } : null },
+    '@/lib/tool-module-pricing': { readModulePrices: async () => ({}) },
   });
   return route.GET(new Request('http://localhost/api/tools/access?slug=sample-tool'));
 }
@@ -115,6 +117,46 @@ test('免费工具直接进入；未配置、待确认和停用工具不提供�
   for (const options of [{ url: '' }, { type: 'pending' }, { exists: false }, { url: 'javascript:alert(1)' }]) {
     const response = await access(options); assert.ok(response.status >= 400); assert.equal((await response.json()).entryUrl, undefined);
   }
+});
+
+test('手印在公开工具列表和独立页面中展示，复用原手印模块价格与会员，不新增产品或记录', async () => {
+  let active = true;
+  const owner = { id: 91, name: '文件在线签名', tool_slug: 'document-signature', tool_charge_type: 'points', tool_points_cost: 10 };
+  const reads = [];
+  const data = load('../lib/tool-service-data.ts', {
+    '@/db/mysql-runtime': { env: { DB: { prepare(sql) {
+      assert.match(sql, /^SELECT/);
+      let slug;
+      return { bind(value) { slug = value; return this; }, async first() { reads.push(slug); return active && slug === 'document-signature' ? owner : null; }, async all() { return { results: active ? [owner] : [] }; } };
+    } } } },
+    './tool-services': helpers,
+    './tool-module-pricing': { readModulePrices: async (id, slug) => { assert.equal(id, 91); assert.equal(slug, 'document-signature'); return { handprint: 7 }; } },
+  });
+  const tools = await data.getPublishedTools(); assert.deepEqual([...tools.map(tool => tool.slug)], ['document-signature', 'handprint-maker']);
+  const entry = await data.getPublishedTool('handprint-maker');
+  assert.equal(entry.id, 91); assert.equal(entry.pointsCost, 7); assert.equal(entry.name, '手印制作');
+  assert.equal(entry.logo, '/tool-logos/handprint-maker.svg'); assert.equal(entry.entryConfigured, true);
+  assert.equal(helpers.builtInToolEntry(entry.slug), '/tools/handprint-maker.html');
+  assert.deepEqual(reads, ['document-signature']);
+  active = false;
+  assert.equal((await data.getPublishedTools()).length, 0); assert.equal(await data.getPublishedTool('handprint-maker'), null);
+});
+
+test('手印独立入口按模块价格检查余额，进入和刷新均不结算积分', async () => {
+  let balance = 7;
+  const queries = [];
+  const route = load('../app/api/tools/access/route.ts', {
+    '@/db/mysql-runtime': { env: { DB: { prepare(sql) { assert.match(sql, /^SELECT/); return { bind(...args) { queries.push({ sql, args }); return this; }, async first() { return sql.includes('FROM users') ? { id: 1 } : { id: 91, tool_charge_type: 'points', tool_points_cost: 10 }; } }; } } } },
+    '@/db/setup': { getVerifiedSessionPhone: () => '13800000000' }, '@/lib/tool-services': helpers,
+    '@/lib/tool-entitlements': { getToolEntitlement: async () => null },
+    '@/lib/points-service': { pointsBalance: async () => balance, PointsError: class extends Error {} },
+    '@/lib/tool-points-usage': {}, '@/lib/tool-module-pricing': { readModulePrices: async () => ({ handprint: 7 }) },
+  });
+  const request = () => route.GET(new Request('https://example.test/api/tools/access?slug=handprint-maker'));
+  const response = await request(); assert.equal(response.status, 200);
+  const result = await response.json(); assert.equal(result.pointsCost, 7); assert.equal(result.entryUrl, '/tools/handprint-maker.html');
+  assert.ok(queries.some(query => query.args[0] === 'document-signature'));
+  balance = 6; assert.equal((await request()).status, 402);
 });
 
 test('收费工具只向已通过支付核验的当前用户返回入口，不泄露给未登录或未付款用户', async () => {
@@ -186,7 +228,7 @@ test('跨页客户端路由不可用时，工具工作台、积分及购买页�
   };
   const Image = ({ src, alt }) => React.createElement('img', { src, alt });
   for (const [file, name, mocks, props, count] of [
-    ['stamp-maker', 'StampMaker', { '../lib/stamp-options': stampOptions, '../lib/tool-services': helpers }, { tool }, 2],
+    ['stamp-maker', 'StampMaker', { '../lib/stamp-options': stampOptions, '../lib/tool-services': helpers, '../lib/account': accountHelpers }, { tool }, 2],
     ['video-extractor', 'VideoExtractor', { '../lib/video-options': videoOptions, '../lib/tool-services': helpers }, { tool }, 2],
     ['points-center', 'PointsCenter', { '../lib/points': points }, {}, 1],
   ]) await t.test(file, () => {

@@ -64,8 +64,8 @@
 .ds-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 320px); align-items: start; gap: 18px; }
 .ds-layout-sign { grid-template-columns: minmax(0, 1fr) minmax(310px, 370px); align-items: stretch; }
 .ds-file-panel { display: flex; flex-direction: column; min-height: clamp(480px, 70vh, 820px); }
-.ds-file-panel > :not(.ds-preview-surface):not(.ds-file-empty) { flex-shrink: 0; }
-.ds-file-panel .ds-preview-surface { flex: 1; height: 0; min-height: 300px; }
+.ds-file-panel > :is(.ds-panel-heading, .ds-page-tools, .ds-zoom-controls, .ds-file-status) { flex-shrink: 0; }
+.ds-file-panel > .ds-viewport-frame { flex: 1 1 0px; height: 0; min-height: 300px; }
 .ds-file-panel .ds-file-empty { flex: 1; }
 .ds-panel { min-width: 0; overflow: hidden; border: 1px solid var(--ds-line); border-radius: 12px; background: #fff; box-shadow: 0 4px 16px #2133480b; }
 .ds-panel-heading { justify-content: space-between; flex-wrap: wrap; min-height: 50px; padding: 8px 16px; background: var(--ds-panel-bar); color: var(--ds-on-dark); }
@@ -118,8 +118,9 @@
 .ds-zoom-controls input[type=range] { flex: 1 1 60px; min-width: 48px; max-width: 160px; height: 34px; margin: 0 4px; accent-color: var(--ds-orange); cursor: pointer; }
 .ds-zoom-controls output { min-width: 44px; text-align: center; color: var(--ds-ink); font-size: 13px; font-variant-numeric: tabular-nums; }
 .ds-zoom-controls button { flex-shrink: 0; white-space: nowrap; }
-.ds-preview-surface { height: var(--ds-preview-height); overflow: scroll; overscroll-behavior: contain; background: #edf1f6; scrollbar-color: #9eafc2 #e5ebf2; }
-.ds-preview-content { display: flex; align-items: center; justify-content: center; box-sizing: border-box; padding: 20px; touch-action: none; }
+.ds-viewport-frame { position: relative; min-width: 0; height: var(--ds-preview-height); overflow: hidden; contain: size layout; }
+.ds-preview-surface { position: absolute; inset: 0; overflow: scroll; overflow-anchor: none; background: #edf1f6; scrollbar-color: #9eafc2 #e5ebf2; }
+.ds-preview-content { display: flex; align-items: flex-start; justify-content: center; box-sizing: border-box; padding: 20px; touch-action: none; }
 .ds-page { position: relative; min-width: 0; flex-shrink: 0; background: #fff; box-shadow: 0 2px 10px #21334826; cursor: crosshair; }
 .ds-page > :is(img, canvas) { display: block; position: absolute; inset: 0; width: 100%; height: 100%; }
 .ds-rendering { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--ds-muted); pointer-events: none; }
@@ -135,8 +136,18 @@
 .ds-asset-tabs button { padding: 6px 10px; min-height: 34px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: #4c6178; }
 .ds-asset-tabs button[aria-pressed=true] { border-color: #edc6ad; background: #fff4eb; color: #8d3918; font-weight: 650; }
 .ds-signing-tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.hp-methods { max-width: 330px; margin-bottom: 18px; }
-.hp-fields { margin-top: 16px; }
+.hp-create-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
+.hp-methods { flex: 1; max-width: 330px; }
+.hp-color { flex-shrink: 0; }
+.hp-color input { width: 54px; height: 36px; padding: 3px; border: 1px solid var(--ds-line); border-radius: 6px; background: #fff; }
+.hp-name-dialog { position: fixed; inset: 0; width: min(420px, calc(100vw - 32px)); margin: auto; padding: 24px; border: 1px solid var(--ds-line); border-radius: 14px; color: var(--ds-ink); background: #fff; box-shadow: 0 18px 70px #10243a33; }
+.hp-name-dialog::backdrop { background: #10243a66; }
+.hp-name-dialog h3 { margin: 0 0 20px; font-size: 19px; }
+.hp-name-dialog label { display: block; margin-bottom: 8px; font-size: 14px; }
+.hp-name-dialog input { width: 100%; min-height: 42px; padding: 9px 12px; border: 1px solid var(--ds-line); border-radius: 7px; color: var(--ds-ink); background: #fafcfe; }
+.hp-name-dialog input[aria-invalid=true] { border-color: #b94416; }
+.hp-name-dialog p { margin: 8px 0 0; font-size: 13px; }
+.hp-name-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 22px; }
 .hp-upload-actions, .hp-record-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .hp-hint { margin: 12px 0; color: var(--ds-muted); font-size: 13px; line-height: 1.7; }
 .hp-preview-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 18px; }

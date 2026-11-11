@@ -43,10 +43,10 @@ export default async function ToolPage({ params }: Props) {
   if (slug === 'stamp-maker') return <><StorefrontHeader /><StampMaker tool={tool} /><script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData).replace(/</g, '\\u003c') }} /></>;
   if (slug === 'video-extractor') return <><StorefrontHeader /><VideoExtractor tool={tool} /><script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData).replace(/</g, '\\u003c') }} /></>;
   if (slug === 'image-processor') { const { ImageProcessor } = await import('@/components/image-processor'); return <><StorefrontHeader /><ImageProcessor tool={tool} /><script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData).replace(/</g, '\\u003c') }} /></>; }
-  if (slug === 'document-signature') {
+  if (slug === 'document-signature' || slug === 'handprint-maker') {
     const { DocumentSignature } = await import('@/components/document-signature');
     const stampTool = await getPublishedTool('stamp-maker');
-    return <><StorefrontHeader /><DocumentSignature tool={tool} stampTool={stampTool} /></>;
+    return <><StorefrontHeader /><DocumentSignature tool={tool} stampTool={stampTool} initialMode={slug === 'handprint-maker' ? 'handprint' : 'create'} /></>;
   }
   if (isWebsiteAnalysis(slug, tool.name)) { const { SiteAnalysisDashboard } = await import('@/components/site-analysis-dashboard'); return <><StorefrontHeader /><SiteAnalysisDashboard tool={tool} /></>; }
   return <><StorefrontHeader /><main className="tools-page">

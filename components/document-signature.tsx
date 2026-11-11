@@ -59,16 +59,16 @@ function SigningAssetList({ items, busy, selectedKey, draggable = false, onChoos
   </ul>;
 }
 
-type SignatureEditorProps = { tool: ToolService; stampTool: ToolService | null };
+type SignatureEditorProps = { tool: ToolService; stampTool: ToolService | null; initialMode?: 'create' | 'handprint' };
 
-export function DocumentSignature({ tool, stampTool }: SignatureEditorProps) {
+export function DocumentSignature({ tool, stampTool, initialMode }: SignatureEditorProps) {
   const { account } = useAccount();
-  return <SignatureEditor key={account?.user?.id ?? 'guest'} tool={tool} stampTool={stampTool} />;
+  return <SignatureEditor key={account?.user?.id ?? 'guest'} tool={tool} stampTool={stampTool} initialMode={initialMode} />;
 }
 
-function SignatureEditor({ tool, stampTool }: SignatureEditorProps) {
+function SignatureEditor({ tool, stampTool, initialMode = 'create' }: SignatureEditorProps) {
   const { t, locale } = useI18n();
-  const [mode, setMode] = useState<WorkspaceMode>('create');
+  const [mode, setMode] = useState<WorkspaceMode>(initialMode);
   const [access, setAccess] = useState<SignatureAccess | null>(null);
   const [busy, setBusy] = useState(false);
   const [fileLoading, setFileLoading] = useState('');
@@ -88,7 +88,7 @@ function SignatureEditor({ tool, stampTool }: SignatureEditorProps) {
   const [activeKey, setActiveKey] = useState('');
   const [result, setResult] = useState<SignedDocument | null>(null);
   const [stampVisited, setStampVisited] = useState(false);
-  const [handprintVisited, setHandprintVisited] = useState(false);
+  const [handprintVisited, setHandprintVisited] = useState(initialMode === 'handprint');
   const penCanvas = useRef<HTMLCanvasElement>(null);
   const draft = useRef<ImageData | null>(null);
   const preview = useRef<HTMLCanvasElement>(null);
@@ -464,14 +464,14 @@ function SignatureEditor({ tool, stampTool }: SignatureEditorProps) {
   const priceNote = (action: SignatureAction) => <span className="ds-cost">
     {access?.hasMembership ? t('有效套餐优先使用') : <><b>{estimate(action)}</b> {t('积分 / 次')}</>}
   </span>;
-  const signIn = <a className="ds-primary" href={accountLoginHref(signaturePage)}>{t('登录后使用')}</a>;
+  const signIn = <a className="ds-primary" href={accountLoginHref(tool.slug === 'handprint-maker' ? '/tools/handprint-maker.html' : signaturePage)}>{t('登录后使用')}</a>;
   const aspect = pageSize ? pageSize.width / pageSize.height : .78;
 
   return <div className="ds-workspace">
     <aside className="ds-sidebar">
       <div className="ds-brand">
         <DocumentCheckIcon aria-hidden="true" />
-        <h1>{t('文件在线签名')}</h1>
+        <h1>{t(tool.slug === 'handprint-maker' ? '手印制作' : '文件在线签名')}</h1>
       </div>
       <nav className="ds-modes" aria-label={t('文件签名功能')}>
         {(['create', 'sign'] as const).map(action => <button type="button" key={action} aria-pressed={mode === action}

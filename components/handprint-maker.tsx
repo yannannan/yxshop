@@ -22,12 +22,23 @@ export function HandprintMaker({ access, busy, cost, onSave, onRemove, onUse, si
   const [seed, setSeed] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [naming, setNaming] = useState(false);
+  const [nameError, setNameError] = useState('');
   const upload = useRef<HTMLInputElement>(null), camera = useRef<HTMLInputElement>(null);
   const photo = useRef<HTMLCanvasElement>(null), preview = useRef<HTMLCanvasElement>(null);
   const selection = useRef<{ id: number; x: number; y: number } | null>(null);
-  const request = useRef(0), task = useRef('');
+  const nameDialog = useRef<HTMLDialogElement>(null), nameInput = useRef<HTMLInputElement>(null);
+  const returnFocus = useRef<HTMLElement | null>(null);
+  const request = useRef(0);
+  const task = useRef<{ id: string; name: string; image: HandprintRaster } | null>(null);
   useEffect(() => () => { request.current++; }, []);
-  useEffect(() => { task.current = ''; }, [mode, source, crop, color, strength, method, seed, name]);
+  useEffect(() => {
+    const dialog = nameDialog.current;
+    if (!naming || !dialog) return;
+    dialog.showModal();
+    nameInput.current?.focus(); nameInput.current?.select();
+    return () => { dialog.close(); returnFocus.current?.focus({ preventScroll: true }); };
+  }, [naming]);
   const output = useMemo(() => {
     try {
       return { image: mode === 'random' ? randomHandprint(seed, color, strength) : source ? extractHandprint(source, crop, color, strength, method) : null, error: '' };
@@ -78,18 +89,18 @@ export function HandprintMaker({ access, busy, cost, onSave, onRemove, onUse, si
     }
   }
   const library = access?.handprints ?? [];
+  function generatePattern() {
+    setMode('random'); setError('');
+    setSeed(crypto.getRandomValues(new Uint32Array(1))[0]);
+  }
   return <div className="ds-layout hp-layout">
     <section className="ds-panel">
       <div className="ds-panel-heading"><h3><FingerPrintIcon aria-hidden="true" />{t('手印制作')}</h3><span>{t(mode === 'random' ? '随机图案' : '照片提取')}</span></div>
       <div className="ds-panel-body">
-        <div className="ds-asset-tabs hp-methods" role="group" aria-label={t('手印制作方式')}>
+        <div className="hp-create-toolbar"><div className="ds-asset-tabs hp-methods" role="group" aria-label={t('手印制作方式')}>
           <button type="button" disabled={busy || loading} aria-pressed={mode === 'upload'} onClick={() => { setMode('upload'); setError(''); }}>{t('上传提取')}</button>
-          <button type="button" disabled={busy || loading} aria-pressed={mode === 'random'} onClick={() => { setMode('random'); setError(''); setSeed(crypto.getRandomValues(new Uint32Array(1))[0]); }}>{t('随机生成')}</button>
-        </div>
-        <div className="ds-form-row hp-fields">
-          <label>{t('手印名称')}<input value={name} maxLength={48} disabled={busy || loading} onChange={event => setName(event.target.value)} placeholder={t('例如：我的手印')} /></label>
-          <label>{t('手印颜色')}<input type="color" value={color} disabled={busy || loading} onChange={event => setColor(event.target.value)} /></label>
-        </div>
+          <button type="button" disabled={busy || loading} aria-pressed={mode === 'random'} onClick={generatePattern}>{t('随机生成')}</button>
+        </div><label className="hp-color">{t('手印颜色')}<input type="color" value={color} disabled={busy || loading} onChange={event => setColor(event.target.value)} /></label></div>
         {mode === 'upload' ? <>
           <div className="hp-upload-actions">
             <button type="button" className="ds-secondary" disabled={busy || loading} onClick={() => upload.current?.click()}><ArrowUpTrayIcon aria-hidden="true" />{t('上传手印图片')}</button>
@@ -99,7 +110,7 @@ export function HandprintMaker({ access, busy, cost, onSave, onRemove, onUse, si
           <input ref={upload} hidden type="file" accept="image/png,image/jpeg,image/webp" onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void readPhoto(file); }} />
           <input ref={camera} hidden type="file" accept="image/png,image/jpeg,image/webp" capture="environment" onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void readPhoto(file); }} />
           <p className="hp-hint">{t('请上传清晰的手印或指印照片，框选需要保留的区域。')}</p>
-        </> : <div className="hp-upload-actions"><button className="ds-secondary" type="button" disabled={busy} onClick={() => setSeed(crypto.getRandomValues(new Uint32Array(1))[0])}><ArrowPathIcon aria-hidden="true" />{t('换一个图案')}</button><span className="hp-hint">{t('随机生成装饰性指印图案。')}</span></div>}
+        </> : <div className="hp-upload-actions"><button className="ds-secondary" type="button" disabled={busy} onClick={generatePattern}><ArrowPathIcon aria-hidden="true" />{t('换一个图案')}</button><span className="hp-hint">{t('随机生成装饰性指印图案。')}</span></div>}
         {loading && <p role="status" className="hp-hint">{t('正在读取文件…')}</p>}
         {(error || output.error) && <p role="alert" className="ds-feedback ds-error">{t(error || output.error)}</p>}
         <div className={`hp-preview-grid${mode === 'random' ? ' hp-random' : ''}`}>
@@ -121,8 +132,8 @@ export function HandprintMaker({ access, busy, cost, onSave, onRemove, onUse, si
         </div>
         {access?.handprintReady === false && <p className="ds-feedback ds-error">{t('请管理员先执行14号手印制作增量SQL')}</p>}
         <div className="ds-panel-actions"><span className="ds-cost">{t('透明底 PNG，保存后可重复使用。')}</span><div><span className="ds-cost">{access?.hasMembership ? t('有效套餐优先使用') : <><b>{cost}</b> {t('积分 / 次')}</>}</span>
-          {access?.signedIn ? <button type="button" className="ds-primary" disabled={busy || loading || !output.image || !name.trim() || !access.canProcess || access.handprintReady === false}
-            onClick={() => { if (output.image) onSave(name, output.image, task.current ||= crypto.randomUUID()); }}>{t(busy ? '正在处理…' : '保存手印')}</button> : signIn}
+          {access?.signedIn ? <button type="button" className="ds-primary" disabled={busy || loading || !output.image || !access.canProcess || access.handprintReady === false}
+            onClick={() => { returnFocus.current = document.activeElement as HTMLElement | null; setNameError(''); setNaming(true); }}>{t(busy ? '正在处理…' : '保存手印')}</button> : signIn}
         </div></div>
       </div>
     </section>
@@ -134,5 +145,26 @@ export function HandprintMaker({ access, busy, cost, onSave, onRemove, onUse, si
           <button type="button" className="ds-icon-button" disabled={busy} aria-label={t('删除手印')} onClick={() => onRemove(item.id)}><TrashIcon aria-hidden="true" /></button></div>
       </li>)}</ul>}
     </div></aside>
+    {naming && <dialog className="hp-name-dialog" ref={nameDialog} aria-labelledby="hp-name-title" onCancel={() => setNaming(false)} onClose={() => setNaming(false)}>
+      <form noValidate onSubmit={event => {
+        event.preventDefault();
+        if (busy || !output.image || !access?.canProcess || access.handprintReady === false) return;
+        const cleaned = name.trim();
+        if (!cleaned) { setNameError('请输入手印名称'); nameInput.current?.focus(); return; }
+        if (!task.current || task.current.name !== cleaned || task.current.image !== output.image) {
+          task.current = { id: crypto.randomUUID(), name: cleaned, image: output.image };
+        }
+        setName(cleaned); setNaming(false);
+        onSave(cleaned, output.image, task.current.id);
+      }}>
+        <h3 id="hp-name-title">{t('保存手印')}</h3>
+        <label htmlFor="hp-save-name">{t('手印名称')}</label>
+        <input ref={nameInput} id="hp-save-name" value={name} maxLength={48} required autoComplete="off" aria-invalid={Boolean(nameError)} aria-describedby={nameError ? 'hp-name-error' : undefined}
+          onChange={event => { setName(event.target.value); setNameError(''); }} placeholder={t('例如：我的手印')} />
+        {nameError && <p id="hp-name-error" role="alert" className="ds-error">{t(nameError)}</p>}
+        <div className="hp-name-actions"><button type="button" className="ds-secondary" onClick={() => setNaming(false)}>{t('取消')}</button>
+          <button type="submit" className="ds-primary" disabled={busy}>{t('确认保存')}</button></div>
+      </form>
+    </dialog>}
   </div>;
 }

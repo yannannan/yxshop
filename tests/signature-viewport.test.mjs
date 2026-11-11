@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import vm from 'node:vm';
 import ts from 'typescript';
+import postcss from 'postcss';
 
 function load(file, mocks = {}, globals = {}) {
   const compiled = { exports: {} };
@@ -78,7 +79,7 @@ function viewportHarness({ width = 800, height = 600, aspect = .707 } = {}) {
     getBoundingClientRect() {
       const page = named('ds-page').props.style, content = named('ds-preview-content').props.style;
       const left = 50 + (content.width - page.width) / 2 - scrollX;
-      const top = 70 + (content.height - page.height) / 2 - scrollY;
+      const top = 70 + 20 - scrollY;
       return { left, top, width: page.width, height: page.height, right: left + page.width, bottom: top + page.height };
     },
   };
@@ -153,12 +154,14 @@ test('滚动后的按钮缩放保持视口中心，点击坐标仍对应文件�
 test('手机双指以手势中点缩放并可接续单指平移，松手不误放素材', () => {
   const h = viewportHarness({ width: 320, height: 480 });
   h.pointer('onPointerDownCapture', 1, 160, 310);
+  const original = h.sheet.getBoundingClientRect();
+  const anchor = { x: (210 - original.left) / original.width, y: (310 - original.top) / original.height };
   h.pointer('onPointerDownCapture', 2, 260, 310);
   const moved = h.pointer('onPointerMoveCapture', 2, 360, 310);
   near(h.props.zoom, 2);
   assert.equal(moved.prevented && moved.stopped, true);
   const box = h.sheet.getBoundingClientRect();
-  near((260 - box.left) / box.width, .5); near((310 - box.top) / box.height, .5);
+  near((260 - box.left) / box.width, anchor.x); near((310 - box.top) / box.height, anchor.y);
   assert.ok(h.captures.includes(1) && h.captures.includes(2));
   h.pointer('onPointerUpCapture', 2, 360, 310);
   const scrollBefore = h.surface.scrollTop;
@@ -221,6 +224,28 @@ test('鼠标事件仍走原点击和拖放路径，缩放仅改变显示大小',
   near(bottom.right, 50 + h.surface.clientWidth - 20);
   near(bottom.bottom, 70 + h.surface.clientHeight - 20);
   assert.equal(h.placements.length, 0);
+  h.close();
+});
+
+test('反复放大缩小只改变内部滚动范围，不累计顶部空白；滚轮交由原生滚动', () => {
+  const h = viewportHarness();
+  for (let i = 0; i < 20; i++) {
+    h.change(400); h.surface.scrollTop = 9999;
+    h.change(91); h.change(25); h.button('适应窗口');
+    near(h.sheet.getBoundingClientRect().top, 90);
+    near(h.surface.clientHeight, 600);
+    near(h.named('ds-preview-content').props.style.height, 600);
+    near(h.surface.scrollTop, 0);
+  }
+  assert.equal(h.named('ds-preview-surface').props.onWheel, undefined);
+  const frame = h.named('ds-viewport-frame');
+  assert.equal(frame.props.children.props.className, 'ds-preview-surface');
+  const css = postcss.parse(readFileSync(new URL('../app/document-signature.css', import.meta.url), 'utf8'));
+  const declarations = selector => Object.fromEntries(css.nodes.filter(node => node.type === 'rule' && node.selector === selector).flatMap(node => node.nodes.filter(child => child.type === 'decl').map(child => [child.prop, child.value])));
+  assert.match(declarations('.ds-viewport-frame').contain, /size/);
+  assert.equal(declarations('.ds-preview-surface').position, 'absolute', 'scroll content must not contribute to grid row height');
+  assert.equal(declarations('.ds-preview-surface')['overscroll-behavior'], undefined, 'allow native wheel chaining at the document edge');
+  assert.equal(declarations('.ds-preview-surface')['overflow-anchor'], 'none');
   h.close();
 });
 

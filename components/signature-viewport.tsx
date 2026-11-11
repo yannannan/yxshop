@@ -187,16 +187,18 @@ export function SignatureViewport({ aspect, zoom, onZoom, pageRef, children, onP
       <output htmlFor="ds-preview-zoom">{Math.round(zoom * 100)}%</output>
       <button className="ds-secondary" type="button" onClick={() => changeZoom(1)}><ArrowsPointingInIcon aria-hidden="true" />{t('适应窗口')}</button>
     </div>
-    <div className="ds-preview-surface" ref={viewport} tabIndex={0} role="region" aria-label={t('文件预览')}>
-      <div className="ds-preview-content" style={{ width: Math.max(size.width, pageWidth + 40), height: Math.max(size.height, pageHeight + 40) }}
-        onPointerDownCapture={touchDown} onPointerMoveCapture={touchMove}
-        onPointerUpCapture={event => touchEnd(event)} onPointerCancelCapture={event => touchEnd(event, true)}
-        onClickCapture={event => {
-          if (Date.now() < ignoreClickUntil.current) { event.preventDefault(); event.stopPropagation(); }
-        }}>
-        <div className="ds-page" ref={pageRef} tabIndex={-1} style={{ width: pageWidth, height: pageHeight }}
-          onClick={event => { if (event.button === 0) placeAt({ x: event.clientX, y: event.clientY }); }}
-          onDragOver={onDragOver} onDrop={onDrop}>{children}</div>
+    <div className="ds-viewport-frame">
+      <div className="ds-preview-surface" ref={viewport} tabIndex={0} role="region" aria-label={t('文件预览')}>
+        <div className="ds-preview-content" style={{ width: Math.max(size.width, pageWidth + 40), height: Math.max(size.height, pageHeight + 40) }}
+          onPointerDownCapture={touchDown} onPointerMoveCapture={touchMove}
+          onPointerUpCapture={event => touchEnd(event)} onPointerCancelCapture={event => touchEnd(event, true)}
+          onClickCapture={event => {
+            if (Date.now() < ignoreClickUntil.current) { event.preventDefault(); event.stopPropagation(); }
+          }}>
+          <div className="ds-page" ref={pageRef} tabIndex={-1} style={{ width: pageWidth, height: pageHeight }}
+            onClick={event => { if (event.button === 0) placeAt({ x: event.clientX, y: event.clientY }); }}
+            onDragOver={onDragOver} onDrop={onDrop}>{children}</div>
+        </div>
       </div>
     </div>
   </>;

@@ -196,7 +196,7 @@ test('印章权益显示账户余额和工具价格，余额不足和未登录�
   f.state.wallets[0].balance = 100; assert.equal((await f.stamp.stampAccess(f.state.products[0], { id: 1 })).canGenerate, true);
 });
 test('积分工具入口只签发任务不扣分，内置印章直接进入；未配置外部回调时禁止跳转', async () => {
-  const f = fixture(); const route = load('../app/api/tools/access/route.ts', { '@/db/mysql-runtime': f.runtime, '@/db/setup': f.setup, '@/lib/tool-services': tools, '@/lib/tool-entitlements': f.entitlements, '@/lib/points-service': f.service, '@/lib/tool-points-usage': f.usage });
+  const f = fixture(); const route = load('../app/api/tools/access/route.ts', { '@/db/mysql-runtime': f.runtime, '@/db/setup': f.setup, '@/lib/tool-services': tools, '@/lib/tool-entitlements': f.entitlements, '@/lib/points-service': f.service, '@/lib/tool-points-usage': f.usage, '@/lib/tool-module-pricing': { readModulePrices: async () => ({}) } });
   const request = () => route.GET(new Request('http://localhost/api/tools/access?slug=stamp-maker'));
   let data = await (await request()).json(); assert.equal(data.entryUrl, '/tools/stamp-maker.html'); assert.equal(f.state.wallets[0].balance, 100);
   f.state.products[0].tool_slug = 'video-tool'; f.state.products[0].tool_url = 'https://tools.example.com/video';
