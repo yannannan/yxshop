@@ -23,7 +23,7 @@ export function ToolLaunch({ tool }: { tool: ToolService }) {
     finally { setLoading(false); }
   }
   const unavailable = !tool.entryConfigured || tool.chargeType === 'pending';
-  return <div className="tool-launch"><button disabled={unavailable || loading} onClick={() => void launch()}>{t(!tool.entryConfigured ? '工具入口待配置' : tool.chargeType === 'pending' ? '收费方式待确认' : loading ? '正在打开…' : '进入工具 →')}</button>
+  return <div className="tool-launch"><button data-tool-entry={tool.slug} disabled={unavailable || loading} onClick={() => void launch()}>{t(!tool.entryConfigured ? '工具入口待配置' : tool.chargeType === 'pending' ? '收费方式待确认' : loading ? '正在打开…' : '进入工具 →')}</button>
     {tool.entryConfigured && tool.chargeType === 'paid' && <div className="tool-purchase-plans">{tool.plans.map(plan => <Link className="tool-purchase-link" key={toolPlanKey(plan)} href={`/product/${tool.id}?${toolPlanQuery(plan)}`}>{t(toolPlanLabel(plan))} · {t(toolPlanPrice(plan))} →</Link>)}<small>{t("按次套餐只在成功完成处理后扣次，打开和刷新页面不扣次。")}</small></div>}
     {tool.chargeType === 'points' && <div className="tool-purchase-plans"><Link className="tool-purchase-link" href="/points">{t(tool.pointsCost)}{t(" 积分 / 次 · 我的积分与充值 →")}</Link><small>{t("成功处理后扣积分；预览和失败不扣，已有本工具会员 / 次数优先使用。")}</small></div>}
     {message && <p role="alert">{t(message)}{purchaseUrl && <> <Link href={purchaseUrl}>{t("前往购买")}</Link></>}</p>}

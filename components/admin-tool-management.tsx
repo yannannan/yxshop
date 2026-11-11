@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { builtInToolEntry, readToolPlans, toolBillingLabels, toolPlanKey, toolPlanLabel, toolChargeLabels, toolPagePath, toolPlanPrice, type ToolBillingCycle, type ToolChargeType } from '../lib/tool-services';
 import { ToolPaymentConfig } from './admin-tool-payment';
 import { ToolPointsEditor } from './tool-points-editor';
+import { ToolStatistics } from './admin-tool-statistics';
 
 type Row = Record<string, string | number | null>;
 type Form = { id?: number; name: string; slug: string; description: string; detail: string; logo: string; entryUrl: string; chargeType: ToolChargeType; price: string; pointsCost: string; plans: { cycle: ToolBillingCycle; price: string; key?: string; name?: string }[]; seoTitle: string; seoDescription: string; status: string };
@@ -25,13 +26,19 @@ export function ToolManagement({ autoCreate = false, initialDraft, onCreateClose
   const [savedPlans, setSavedPlans] = useState('');
   const [formMessage, setFormMessage] = useState('');
   const [pricingId, setPricingId] = useState(0);
+  const [pricingModule, setPricingModule] = useState('');
+  const [tab, setTab] = useState<'tools' | 'statistics'>('tools');
+  const [sorts, setSorts] = useState<Record<string, string>>({});
+  const [sorting, setSorting] = useState(false);
+  const [sortingReady, setSortingReady] = useState(true);
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await fetch('/api/admin/tools', { cache: 'no-store' });
-      const result = await response.json() as { tools?: Row[]; message?: string };
+      const response = await fetch('/api/admin/tool-entries', { cache: 'no-store' });
+      const result = await response.json() as { tools?: Row[]; message?: string; sortingReady?: boolean };
       if (!response.ok) { setNotice(result.message || '工具读取失败'); return; }
       setTools(result.tools || []);
+      setSorts({}); setSortingReady(result.sortingReady !== false);
     } catch { setNotice('无法读取工具列表，请稍后重试'); }
     finally { setLoading(false); }
   }, []);
@@ -72,19 +79,41 @@ export function ToolManagement({ autoCreate = false, initialDraft, onCreateClose
   }
   async function changeStatus(tool: Row) {
     try {
-      const response = await fetch('/api/admin/tools', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'status', id: Number(tool.id), status: tool.status === 'active' ? 'inactive' : 'active' }) });
+      const isHandprint = tool.module_key === 'handprint';
+      const response = await fetch(isHandprint ? '/api/admin/tool-entries' : '/api/admin/tools', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(isHandprint ? { action: 'visibility', slug: 'handprint-maker', enabled: !tool.entry_enabled } : { action: 'status', id: Number(tool.id), status: tool.status === 'active' ? 'inactive' : 'active' }) });
       const result = await response.json() as { message?: string };
       if (!response.ok) { setNotice(result.message || '操作失败'); return; }
       await load();
     } catch { setNotice('状态更新失败，请稍后重试'); }
   }
-  const visible = tools.filter(tool => `${value(tool.name)} ${value(tool.description)} ${value(tool.tool_slug)}`.toLowerCase().includes(keyword.trim().toLowerCase()));
+  const ordered = [...tools].sort((a, b) => Number(sorts[value(a.tool_slug)] ?? a.entry_sort) - Number(sorts[value(b.tool_slug)] ?? b.entry_sort) || value(a.tool_slug).localeCompare(value(b.tool_slug)));
+  const visible = ordered.filter(tool => `${value(tool.name)} ${value(tool.description)} ${value(tool.tool_slug)}`.toLowerCase().includes(keyword.trim().toLowerCase()));
+  function move(slug: string, direction: number) { const next = [...ordered], index = next.findIndex(row => row.tool_slug === slug), target = index + direction; if (index < 0 || target < 0 || target >= next.length) return; [next[index], next[target]] = [next[target], next[index]]; setSorts(Object.fromEntries(next.map((row, i) => [value(row.tool_slug), String(i * 10)]))); }
+  async function saveSort() {
+    if (sorting) return; setSorting(true);
+    try { const response = await fetch('/api/admin/tool-entries', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'sort', entries: ordered.map(row => ({ slug: value(row.tool_slug), sort: sorts[value(row.tool_slug)] === '' ? null : Number(sorts[value(row.tool_slug)] ?? row.entry_sort) })) }) }); const result = await response.json() as { message?: string }; if (!response.ok) throw Error(result.message || '排序保存失败'); await load(); setNotice('工具顺序已保存，前台工具列表同步生效'); }
+    catch (reason) { setNotice((reason as Error).message); } finally { setSorting(false); }
+  }
   return <>
     {notice && <div className="admin-message" role="status">{notice}</div>}
     <div className="panel-title"><div><h2>工具服务</h2><p>独立维护工具入口、页面介绍、收费方式与支付配置</p></div><div className="panel-title-actions"><button onClick={() => void load()} disabled={loading}>↻ 刷新列表</button><button onClick={() => { setError(''); setForm(emptyForm()); }}>＋ 添加工具</button></div></div>
-    <div className="product-filter"><b>查找工具</b><input value={keyword} onChange={event => setKeyword(event.target.value)} placeholder="工具名称、描述、页面标识" /><small>共 {visible.length} 个工具</small></div>
-    <div className="table-wrap"><table><thead><tr><th>工具</th><th>独立页面</th><th>收费方式 / 套餐</th><th>入口配置</th><th>状态</th><th>操作</th></tr></thead><tbody>{visible.map(tool => <tr key={Number(tool.id)}><td><div className="admin-product-cell">{tool.cover_image ? <Image unoptimized src={value(tool.cover_image)} alt="" width={44} height={44} /> : <span>工</span>}<div><b>{value(tool.name)}</b><small>{value(tool.description)}</small></div></div></td><td><Link href={toolPagePath(value(tool.tool_slug))} target="_blank">{toolPagePath(value(tool.tool_slug))}</Link></td><td>{toolChargeLabels[value(tool.tool_charge_type) as ToolChargeType] || '收费待确认'}{tool.tool_charge_type === 'points' && <small>{value(tool.tool_points_cost)} 积分 / 次</small>}{tool.tool_charge_type === 'paid' && readToolPlans(tool.tool_plans_json, Number(tool.price), value(tool.billing_cycle)).map(plan => <small key={toolPlanKey(plan)}>{toolPlanLabel(plan)} · {toolPlanPrice(plan)}</small>)}</td><td>{builtInToolEntry(value(tool.tool_slug)) ? '内置功能' : tool.tool_url ? '已配置' : '待配置'}</td><td>{tool.status === 'active' ? '已启用' : '已停用'}</td><td><button className="text-action" onClick={() => edit(tool)}>编辑 / 收款配置</button><button className="text-action" onClick={() => setPricingId(Number(tool.id))}>积分配置</button><button className="text-action" onClick={() => void changeStatus(tool)}>{tool.status === 'active' ? '停用' : '启用'}</button></td></tr>)}</tbody></table>{!loading && !visible.length && <p className="tool-directory-empty">暂无工具，请添加或执行初始化 SQL。</p>}</div>
-    {pricingId > 0 && <ToolPointsEditor id={pricingId} onClose={() => setPricingId(0)} onSaved={() => { setNotice('积分配置已保存'); void load(); }} />}
+    <div className="tool-admin-tabs" role="tablist" aria-label="工具服务管理"><button type="button" role="tab" id="tools-list-tab" aria-selected={tab === 'tools'} aria-controls="tools-list-panel" onClick={() => setTab('tools')}>工具管理</button><button type="button" role="tab" id="tools-stats-tab" aria-selected={tab === 'statistics'} aria-controls="tools-stats-panel" onClick={() => setTab('statistics')}>使用统计</button></div>
+    <section id="tools-list-panel" role="tabpanel" aria-labelledby="tools-list-tab" hidden={tab !== 'tools'}>
+    <div className="product-filter"><b>查找工具</b><input value={keyword} onChange={event => setKeyword(event.target.value)} placeholder="工具名称、描述、页面标识" /><small>共 {visible.length} 个工具</small><button type="button" disabled={sorting || loading || !Object.keys(sorts).length || !sortingReady} onClick={() => void saveSort()}>{sorting ? '正在保存…' : '保存排序'}</button></div>
+    {!sortingReady && <p className="tool-stat-notes">执行15号增量SQL后可保存排序和手印入口状态。工具使用仍可继续。</p>}
+    <div className="table-wrap"><table><thead><tr><th>排序</th><th>工具</th><th>独立页面</th><th>收费方式 / 套餐</th><th>入口配置</th><th>状态</th><th>操作</th></tr></thead><tbody>{visible.map(tool => <tr key={value(tool.tool_slug)}>
+      <td><div className="tool-sort-control"><input aria-label={`${value(tool.name)}排序`} type="number" min="0" max="1000000" step="1" disabled={sorting || !sortingReady} value={sorts[value(tool.tool_slug)] ?? value(tool.entry_sort)} onChange={event => setSorts(previous => ({ ...previous, [value(tool.tool_slug)]: event.target.value }))} /><div><button type="button" aria-label={`上移${value(tool.name)}`} disabled={sorting || !sortingReady || Boolean(keyword.trim()) || ordered[0] === tool} onClick={() => move(value(tool.tool_slug), -1)}>↑</button><button type="button" aria-label={`下移${value(tool.name)}`} disabled={sorting || !sortingReady || Boolean(keyword.trim()) || ordered.at(-1) === tool} onClick={() => move(value(tool.tool_slug), 1)}>↓</button></div></div></td>
+      <td><div className="admin-product-cell">{tool.cover_image ? <Image unoptimized src={value(tool.cover_image)} alt="" width={44} height={44} /> : <span>工</span>}<div><b>{value(tool.name)}</b>{tool.module_key === 'handprint' && <small className="tool-module-label">文件在线签名子功能</small>}<small>{value(tool.description)}</small></div></div></td>
+      <td><Link href={toolPagePath(value(tool.tool_slug))} target="_blank">{toolPagePath(value(tool.tool_slug))}</Link></td>
+      <td>{toolChargeLabels[value(tool.tool_charge_type) as ToolChargeType] || '收费待确认'}{tool.tool_charge_type === 'points' && <small>{value(tool.tool_points_cost)} 积分 / 次</small>}{tool.tool_charge_type === 'paid' && readToolPlans(tool.tool_plans_json, Number(tool.price), value(tool.billing_cycle)).map(plan => <small key={toolPlanKey(plan)}>{toolPlanLabel(plan)} · {toolPlanPrice(plan)}</small>)}</td>
+      <td>{builtInToolEntry(value(tool.tool_slug)) ? '内置功能' : tool.tool_url ? '已配置' : '待配置'}</td>
+      <td>{tool.module_key === 'handprint' && tool.owner_status !== 'active' ? '主工具已停用' : tool.status === 'active' ? '已启用' : '已停用'}</td>
+      <td>{tool.module_key === 'handprint' ? <button className="text-action" onClick={() => { const owner = tools.find(row => row.tool_slug === 'document-signature'); if (owner) edit(owner); }}>所属工具配置</button> : <button className="text-action" onClick={() => edit(tool)}>编辑 / 收款配置</button>}
+        <button className="text-action" onClick={() => { setPricingModule(value(tool.module_key)); setPricingId(Number(tool.id)); }}>积分配置</button><button className="text-action" onClick={() => void changeStatus(tool)}>{tool.module_key === 'handprint' ? tool.entry_enabled ? '停用入口' : '启用入口' : tool.status === 'active' ? '停用' : '启用'}</button></td>
+    </tr>)}</tbody></table>{!loading && !visible.length && <p className="tool-directory-empty">暂无工具，请添加或执行初始化 SQL。</p>}</div>
+    </section>
+    {tab === 'statistics' && <section id="tools-stats-panel" role="tabpanel" aria-labelledby="tools-stats-tab"><ToolStatistics /></section>}
+    {pricingId > 0 && <ToolPointsEditor id={pricingId} moduleKey={pricingModule} onClose={() => setPricingId(0)} onSaved={() => { setNotice('积分配置已保存'); void load(); }} />}
     {form && <div className="admin-modal-mask"><section className="admin-modal tool-editor-modal product-editor-modal" role="dialog" aria-modal="true" aria-labelledby="tool-editor-title"><div className="editor-head"><div><span className="section-kicker">TOOL SERVICE</span><b id="tool-editor-title">{form.id ? '编辑工具' : '添加工具'}</b></div><button className="modal-close" disabled={saving || uploading} onClick={close} aria-label="关闭工具编辑">×</button></div>
       <div className="tool-editor-section"><h3>入口展示</h3><div className="tool-editor-grid">
         <label>工具名称<input autoFocus value={form.name} onChange={event => setForm({ ...form, name: event.target.value })} /></label>

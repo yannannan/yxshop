@@ -49,6 +49,7 @@ const rows = [
 let queries = 0;
 // 只允许页面读取模拟的公开工具数据；没有真实连接或写业务数据库。
 mysql.createPool = () => ({ async execute(sql, values = []) {
+  if (sql.startsWith('SELECT tool_slug,sort_order,enabled FROM tool_entry_settings')) return [[]];
   if (sql.startsWith('SELECT ') && sql.includes('FROM site_analysis_integrations i')) { queries++; return [[{ site_id: '22222222-2222-4222-8222-222222222222', script_token: 'a'.repeat(64), user_id: 1, verified_at: '2026-10-26', host: 'example.org' }]]; }
   const publicTool = sql.includes("FROM products WHERE product_type='tool' AND status='active'") ||
     sql.includes("WHERE tool_slug=? AND product_type='tool' AND status='active'");
@@ -209,4 +210,10 @@ test('印章中英文独立入口复用侧边菜单，默认选中印章工作�
   assert.deepEqual(result.pages[1].menu, [['false', 'Create signature'], ['false', 'Sign document'], ['true', 'Stamp maker'], ['false', 'Create handprint']]);
   for (const page of result.pages) { assert.equal(page.stampActive, true); assert.equal(page.structuredData, true); assert.equal(page.embeddedStamp, true); }
   assert.deepEqual(result.errors, []);
+});
+
+test('生产工具管理与统计拒绝匿名访问，点击接口拒绝损坏请求，不连接业务库', { skip: needsBuild }, async () => {
+  const result = await renderPages(['/api/admin/tool-entries', '/api/admin/tool-statistics', { path: '/api/tools/activity', method: 'POST' }]);
+  assert.deepEqual(result.pages.map(page => page.status), [403, 403, 400]);
+  assert.equal(result.queries, 0); assert.deepEqual(result.errors, []);
 });

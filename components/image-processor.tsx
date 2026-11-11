@@ -41,7 +41,7 @@ export function ImageProcessor({tool}:{tool:ToolService}) {
         <h1>{t('图片在线处理')}</h1>
       </div>
       <nav aria-label={t('图片处理菜单')}>
-        {menu.map(([id,Icon])=><button type="button" key={id} aria-current={action===id?'page':undefined} disabled={busy||uploading} onClick={()=>change(id)}>
+        {menu.map(([id,Icon])=><button type="button" key={id} data-tool-slug="image-processor" data-tool-module={id} aria-current={action===id?'page':undefined} disabled={busy||uploading} onClick={()=>change(id)}>
           <span className="ip-menu-icon"><Icon aria-hidden="true"/></span>
           <span>{t(imageActions[id])}</span>
         </button>)}
@@ -50,7 +50,7 @@ export function ImageProcessor({tool}:{tool:ToolService}) {
         <a className="ip-return" href="/tools"><ChevronLeftIcon aria-hidden="true"/>{t('工具服务')}</a>
       </div>
     </aside>
-    <main className="ip-main"><header className="ip-topbar"><div><strong>{t('图像处理工具')}</strong></div><div className="ip-tool-buttons" role="toolbar" aria-label={t('图像处理工具')}>{topActions.map(([id,Icon])=><button type="button" key={id} aria-pressed={action===id} disabled={busy||uploading} onClick={()=>change(id)}><Icon aria-hidden="true"/>{t(imageActions[id])}</button>)}</div></header>
+    <main className="ip-main"><header className="ip-topbar"><div><strong>{t('图像处理工具')}</strong></div><div className="ip-tool-buttons" role="toolbar" aria-label={t('图像处理工具')}>{topActions.map(([id,Icon])=><button type="button" key={id} data-tool-slug="image-processor" data-tool-module={id} aria-pressed={action===id} disabled={busy||uploading} onClick={()=>change(id)}><Icon aria-hidden="true"/>{t(imageActions[id])}</button>)}</div></header>
       {error&&<p className="ip-feedback error" role="alert">{t(error)}</p>}{notice&&<p className="ip-feedback success" role="status">{t(notice)}</p>}
       <div className="ip-canvases">
         <section className="ip-preview" aria-labelledby="ip-source-title">

@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { getI18n, localizeMetadata } from '@/lib/i18n-server';
 import { LanguageProvider } from '@/components/language-provider';
+import { ToolActivity } from '@/components/tool-activity';
 import './globals.css';
 import './extra.css';
 import './refined.css';
@@ -19,6 +20,7 @@ import './language.css';
 import './site-analysis.css';
 import './image-processor.css';
 import './document-signature.css';
+import './tool-admin.css';
 const pageMetadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'https://www.yxstar.shop'),
   title: '宇星脉通｜精选数字商品',
@@ -38,5 +40,5 @@ const pageMetadata: Metadata = {
 export async function generateMetadata() { return localizeMetadata(pageMetadata); }
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const { locale } = await getI18n();
-  return <html lang={locale}><head><script async src="https://www.yxstar.shop/s/RDYfVdtkRd-iXLHGxvrdEA" data-exclude-path="/admin" /></head><body><LanguageProvider locale={locale}>{children}</LanguageProvider></body></html>;
+  return <html lang={locale}><head><script async src="https://www.yxstar.shop/s/RDYfVdtkRd-iXLHGxvrdEA" data-exclude-path="/admin" /></head><body><LanguageProvider locale={locale}><ToolActivity />{children}</LanguageProvider></body></html>;
 }

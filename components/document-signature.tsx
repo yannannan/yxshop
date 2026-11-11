@@ -493,16 +493,16 @@ function SignatureEditor({ tool, stampTool, initialMode = 'create' }: SignatureE
         <h1>{t(tool.slug === 'handprint-maker' || tool.slug === 'stamp-maker' ? tool.name : '文件在线签名')}</h1>
       </div>
       <nav className="ds-modes" aria-label={t('文件签名功能')}>
-        {(['create', 'sign'] as const).map(action => <button type="button" key={action} aria-pressed={mode === action}
+        {(['create', 'sign'] as const).map(action => <button type="button" key={action} data-tool-slug="document-signature" data-tool-module={action} aria-pressed={mode === action}
           disabled={busy} onClick={() => switchMode(action)}>
           {action === 'create' ? <PencilSquareIcon aria-hidden="true" /> : <DocumentTextIcon aria-hidden="true" />}
           <span>{t(signatureActions[action])}</span>
         </button>)}
-        {stampTool && <button type="button" aria-controls="ds-stamp-maker" aria-pressed={mode === 'stamp'}
+        {stampTool && <button type="button" data-tool-slug="stamp-maker" data-tool-module="make" aria-controls="ds-stamp-maker" aria-pressed={mode === 'stamp'}
           disabled={busy} onClick={() => switchMode('stamp')}>
           <CheckBadgeIcon aria-hidden="true" /><span>{t('印章制作')}</span>
         </button>}
-        <button type="button" disabled={busy} aria-controls="ds-handprint-maker" aria-pressed={mode === 'handprint'} onClick={() => switchMode('handprint')}>
+        <button type="button" data-tool-slug="handprint-maker" data-tool-module="handprint" disabled={busy} aria-controls="ds-handprint-maker" aria-pressed={mode === 'handprint'} onClick={() => switchMode('handprint')}>
           <FingerPrintIcon aria-hidden="true" /><span>{t('手印制作')}</span>
         </button>
       </nav>

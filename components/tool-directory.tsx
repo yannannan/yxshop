@@ -15,7 +15,7 @@ export function ToolDirectory({ tools, loading = false, error = '', title = '让
   return <section className="tool-directory" aria-labelledby="tool-directory-title">
     <header className="tool-directory-heading"><div><span className="section-kicker">TOOLS & UTILITIES</span><h2 id="tool-directory-title">{t(title)}</h2><p>{t("清理、提取、签名与制作，从这里找到需要的工具。共 ")}{t(tools.length)}{t(" 个工具。")}</p></div>{moreHref && <a href={moreHref}>{t("更多工具 →")}</a>}</header>
     {/* 工具是独立操作页，使用浏览器原生导航，入口不等待客户端路由完成。 */}
-    {loading ? <p className="tool-directory-empty" role="status">{t("正在读取工具…")}</p> : error ? <p className="tool-directory-empty" role="alert">{t(error)}</p> : tools.length ? <div className="tool-entry-grid">{result.items.map(tool => <a className="tool-entry-card" href={toolPagePath(tool.slug)} key={tool.slug}>
+    {loading ? <p className="tool-directory-empty" role="status">{t("正在读取工具…")}</p> : error ? <p className="tool-directory-empty" role="alert">{t(error)}</p> : tools.length ? <div className="tool-entry-grid">{result.items.map(tool => <a className="tool-entry-card" data-tool-entry={tool.slug} href={toolPagePath(tool.slug)} key={tool.slug}>
       <div className="tool-entry-logo">{tool.logo ? <Image unoptimized src={tool.logo} alt="" width={72} height={72} /> : <span className="tool-logo-fallback" aria-hidden="true">{tool.name.slice(0, 1)}</span>}</div>
       <h3>{t(tool.name)}</h3><p>{tool.description ? t(tool.description) : t('查看工具介绍与使用方式。')}</p>
       <span className={`tool-charge-badge ${tool.chargeType}`}>{t(toolChargeLabels[tool.chargeType])}{t(tool.chargeType === 'points' ? ` · ${tool.pointsCost} 积分/次` : '')}{t(tool.chargeType === 'paid' ? ` · ${toolPriceSummary(tool)}` : '')}</span>

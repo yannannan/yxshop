@@ -130,6 +130,8 @@ test('手印在公开工具列表和独立页面中展示，复用原手印模�
       return { bind(value) { slug = value; return this; }, async first() { reads.push(slug); return active && slug === 'document-signature' ? owner : null; }, async all() { return { results: active ? [owner] : [] }; } };
     } } } },
     './tool-services': helpers,
+    './tool-entry-settings': { readToolEntrySettings: async () => ({ ready: true, settings: [] }) },
+    './tool-entries': load('../lib/tool-entries.ts', { './tool-services': helpers }),
     './tool-module-pricing': { readModulePrices: async (id, slug) => { assert.equal(id, 91); assert.equal(slug, 'document-signature'); return { handprint: 7 }; } },
   });
   const tools = await data.getPublishedTools(); assert.deepEqual([...tools.map(tool => tool.slug)], ['document-signature', 'handprint-maker']);

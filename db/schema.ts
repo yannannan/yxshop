@@ -1,6 +1,15 @@
 import { integer, real, sqliteTable, text, primaryKey, uniqueIndex, index } from 'drizzle-orm/sqlite-core';
 
 // MySQL production DDL is maintained in sql/10_site_analysis_20261025.sql and sql/11_site_management_20261026.sql.
+// Tool entry ordering and click analytics: sql/15_tool_management_20261111.sql.
+export const toolEntrySettings = sqliteTable('tool_entry_settings', {
+  toolSlug: text('tool_slug').primaryKey(), sortOrder: integer('sort_order').notNull().default(0),
+  enabled: integer('enabled').notNull().default(1), updatedAt: text('updated_at').notNull(),
+});
+export const toolActivityEvents = sqliteTable('tool_activity_events', {
+  id: text('id').primaryKey(), toolSlug: text('tool_slug').notNull(), moduleKey: text('module_key').notNull().default(''),
+  eventType: text('event_type').notNull(), userId: integer('user_id'), sessionHash: text('session_hash').notNull(), createdAt: text('created_at').notNull(),
+}, table => [index('idx_tool_activity_time').on(table.createdAt, table.toolSlug, table.eventType), index('idx_tool_activity_module').on(table.toolSlug, table.moduleKey, table.createdAt)]);
 export const siteAnalysisIntegrations = sqliteTable('site_analysis_integrations', {
   siteId:text('site_id').primaryKey(),userId:integer('user_id').notNull(),scriptToken:text('script_token').notNull(),verifiedAt:text('verified_at').notNull().default(''),lastSeenAt:text('last_seen_at').notNull().default(''),verifyRequestedAt:text('verify_requested_at').notNull().default(''),deletedAt:text('deleted_at').notNull().default(''),createdAt:text('created_at').notNull(),updatedAt:text('updated_at').notNull(),
 }, table=>[uniqueIndex('uq_site_script').on(table.scriptToken)]);
