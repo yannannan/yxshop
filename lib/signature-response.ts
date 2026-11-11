@@ -17,7 +17,7 @@ export function signatureFailure(error: unknown) {
   const code = (error as { code?: string })?.code;
   console.error('文件签名服务失败', { name: (error as Error)?.name, code });
   const message = ['ER_NO_SUCH_TABLE', 'ER_BAD_FIELD_ERROR'].includes(code || '')
-    ? '请管理员先执行13号文件签名增量SQL'
+    ? (String((error as Error)?.message).includes('document_handprints') ? '请管理员先执行14号手印制作增量SQL' : '请管理员先执行13号文件签名增量SQL')
     : '文件签名暂不可用，可重试同一任务';
   return Response.json({ message }, { status: 503, headers: signatureHeaders });
 }

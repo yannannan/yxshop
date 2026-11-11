@@ -240,7 +240,8 @@ test('PDF缩放提高预览分辨率，保留签署坐标、已生成结果和�
   const jsx = (type, props) => ({ type, props });
   const canvas = { width: 0, height: 0, getContext: () => ({ drawImage: buffer => draws.push([buffer.width, buffer.height]) }) };
   const signature = { id: 'signature', name: '手写签名', width: 100, height: 40, previewUrl: '/private/signature' };
-  const access = { signedIn: true, canProcess: true, signatures: [signature], stamps: [], documents: [], costs: { create: 10, sign: 20 }, chargeType: 'points', wordReady: true };
+  const handprint = { ...signature, id: 'own-handprint', name: '我的手印', height: 140 };
+  const access = { signedIn: true, canProcess: true, signatures: [signature], stamps: [], handprints: [handprint], documents: [], costs: { create: 10, sign: 20, handprint: 7 }, chargeType: 'points', wordReady: true };
   const source = { name: '合同.docx', kind: 'pdf', file: {}, pdf: {
     numPages: 2,
     async getPage(page) { return {
@@ -255,12 +256,14 @@ test('PDF缩放提高预览分辨率，保留签署坐标、已生成结果和�
     }; },
   } };
   function Viewport() {}
+  function HandprintMaker() {}
   const spec = load('../lib/signature-tool.ts', { './stamp-options': { isStampId: () => true } });
   const { DocumentSignature } = load('../components/document-signature.tsx', {
     react, 'react/jsx-runtime': { jsx, jsxs: jsx, Fragment: 'fragment' },
     '@heroicons/react/24/outline': {},
     './language-provider': { useI18n: () => ({ t: value => value, locale: 'zh-CN' }) },
     './stamp-maker': { StampMaker() {} }, './signature-viewport': { SignatureViewport: Viewport },
+    './handprint-maker': { HandprintMaker },
     '../lib/account-client': { useAccount: () => ({ account: { user: { id: 1 } } }), notifyAccountChanged() {} },
     '../lib/account': { accountLoginHref: () => '/login' }, '../lib/signature-tool': spec,
     '../lib/signature-client': { signaturePage: '/tools/document-signature.html', signatureAccess: async () => access,
@@ -292,6 +295,11 @@ test('PDF缩放提高预览分辨率，保留签署坐标、已生成结果和�
   view().props.onPlace(.3, .4); render();
   const placementBefore = view().props.children.flat().find(node => node?.props?.className === 'ds-placement');
   const style = { ...placementBefore.props.style };
+  namedButton('手印制作').props.onClick(); render();
+  assert.equal(find(node => node.type === 'section' && node.props.id === 'ds-handprint-maker').props.hidden, false);
+  find(node => node.type === HandprintMaker).props.onUse(handprint); render(); await settle();
+  assert.ok(view(), 'returning from handprint creation preserves the uploaded document');
+  view().props.onPlace(.7, .7); render();
   await zoom(3);
   assert.ok(draws.at(-1)[0] > 1200, 'zoom should sharpen the PDF raster');
   assert.ok(draws.at(-1)[0] * draws.at(-1)[1] < 6_010_000, 'raster must stay bounded');
@@ -303,6 +311,8 @@ test('PDF缩放提高预览分辨率，保留签署坐标、已生成结果和�
   placement.props.onPointerUp(); render();
   namedButton('生成签署文件').props.onClick(); await settle();
   assert.equal(submitted.length, 1); assert.equal(submitted[0].cost, 20);
+  assert.equal(submitted[0].placements.length, 2);
+  assert.equal(submitted[0].placements[1].asset, 'handprint');
   near(submitted[0].placements[0].x, .275); near(submitted[0].placements[0].y, .45 - .25 * (600 / 840) * .4 / 2);
   await zoom(4);
   assert.ok(find(node => node.type === 'a' && node.props.href === '/private/signed'), 'zoom must preserve the existing result');

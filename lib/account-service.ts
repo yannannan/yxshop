@@ -114,6 +114,7 @@ function recordHref(row: RecordRow) {
     case 'video': return `/tools/video-extractor.html?task=${id}`;
     case 'stamp': return `/tools/stamp-maker.html?result=${id}`;
     case 'signature': return row.status === 'ready' ? `${signatureApi}/${id}?kind=signature` : null;
+    case 'handprint': return row.status === 'ready' ? `${signatureApi}/${id}?kind=handprint` : null;
     case 'signed-document': return row.status === 'ready' ? `${signatureApi}/${id}` : null;
     default: return `/checkout/${id}`;
   }
@@ -137,6 +138,10 @@ export async function readAccountRecords(userId: number, group: 'orders' | 'acti
         args: [new Date().toISOString(), userId], warning: '文件签名记录尚未初始化',
       });
     }
+    if (['all', 'handprint'].includes(filter)) sources.push({
+      sql: "SELECT CONVERT(id USING utf8mb4) COLLATE utf8mb4_general_ci AS id,name AS title,'handprint' AS kind,CASE WHEN deleted_at IS NULL THEN 'ready' ELSE 'deleted' END AS status,created_at,NULL AS amount FROM document_handprints WHERE user_id=?",
+      args: [userId], warning: '手印记录尚未初始化',
+    });
   }
   if (!sources.length) throw new AccountError('记录筛选条件不正确');
   // 各模块独立查询以兼容尚未初始化的历史模块；真正查询失败不会伪装成空记录。

@@ -171,34 +171,45 @@ function load(file, mocks) {
   return exports;
 }
 
-function fixture({ failUpload = false, changePrice = false, failSave = false, stamp = null } = {}) {
-  let data = { balance: 100, signatures: {}, documents: {}, charges: [], signCost: 20 };
+function fixture({ failUpload = false, changePrice = false, failSave = false, failHandprintSave = false, stamp = null, missingHandprints = false } = {}) {
+  let data = { balance: 100, signatures: {}, handprints: {}, documents: {}, charges: [], signCost: 20 };
   let tail = Promise.resolve();
   const uploads = [], removed = [];
   const tool = { id: 91, tool_charge_type: 'points', tool_points_cost: 10 };
   const db = {
     prepare(sql) {
+      const library = () => {
+        if (sql.includes('document_handprints') && missingHandprints) throw Object.assign(Error('document_handprints missing'), { code: 'ER_NO_SUCH_TABLE' });
+        return sql.includes('document_handprints') ? data.handprints : data.signatures;
+      };
       return { bind(...args) {
         const [user, id] = args;
         const key = `${user}:${id}`;
         return {
           async first() {
             if (sql.includes('FROM products')) return tool;
-            if (sql.includes('COUNT(*)')) return { total: Object.keys(data.signatures).length };
-            if (sql.includes('FROM document_signatures')) return data.signatures[key] || null;
+            if (sql.includes('COUNT(*)')) return { total: Object.values(library()).filter(row => !row.deleted_at).length };
+            if (/FROM document_(signatures|handprints)/.test(sql)) {
+              const row = library()[key];
+              return row && !(sql.includes('deleted_at IS NULL') && row.deleted_at) ? row : null;
+            }
             if (sql.includes('FROM signed_documents')) return data.documents[key] || null;
             throw Error(sql);
           },
           async all() {
             if (sql.includes('FROM orders')) return { results: [] };
-            if (sql.includes('FROM document_signatures')) return { results: Object.entries(data.signatures).filter(([key]) => key.startsWith(`${user}:`)).map(([, row]) => row) };
+            if (/FROM document_(signatures|handprints)/.test(sql)) return { results: Object.entries(library()).filter(([key, row]) => key.startsWith(`${user}:`) && !row.deleted_at).map(([, row]) => row) };
             if (sql.includes('FROM signed_documents')) return { results: [] };
             throw Error(sql);
           },
           async run() {
-            if (sql.includes('INSERT INTO document_signatures')) {
-              const [, , product_id, request_hash, name, png, image_width, image_height, points_spent] = args;
-              data.signatures[key] = { id, product_id, request_hash, name, png, image_width, image_height, points_spent };
+            if (/INSERT INTO document_(signatures|handprints)/.test(sql)) {
+              const [, , product_id, request_hash, name, png, image_width, image_height, points_spent, created_at] = args;
+              if (failHandprintSave && sql.includes('document_handprints')) throw Error('simulated handprint insert failure');
+              library()[key] = { id, product_id, request_hash, name, png, image_width, image_height, points_spent, created_at };
+            } else if (/UPDATE document_(signatures|handprints)/.test(sql)) {
+              const row = library()[`${args[1]}:${args[2]}`];
+              if (row && !row.deleted_at) { row.deleted_at = args[0]; row.png = null; }
             } else if (sql.includes('INSERT INTO signed_documents')) {
               if (failSave) throw Error('simulated database insert failure');
               const [, , product_id, request_hash, file_name, file_bytes, points_spent, , expires_at, storage_json] = args;
@@ -252,7 +263,7 @@ function fixture({ failUpload = false, changePrice = false, failSave = false, st
   });
   const service = load('../lib/signature-service.ts', {
     '@/db/mysql-runtime': { env: { DB: db } }, './points-service': points, './points': pointsConfig,
-    './tool-module-pricing': { modulePrices: async () => ({ create: 10, sign: data.signCost }) },
+    './tool-module-pricing': { modulePrices: async () => ({ create: 10, sign: data.signCost, handprint: 7 }) },
     './tool-entitlements': { getToolEntitlement: async () => null, usableToolOrder: () => false }, './signature-tool': spec,
     './signature-stamps': signingStamps,
   });
@@ -279,6 +290,7 @@ function fixture({ failUpload = false, changePrice = false, failSave = false, st
   return {
     get data() { return data; }, uploads, removed,
     create: () => post({ action: 'create', id: signatureId, name: '测试签名', cost: 10, width: 1, height: 1 }, raster().data),
+    handprint: (user = 1, cost = 7) => post({ action: 'handprint', id: signatureId, name: '测试手印', cost, width: 1, height: 1 }, new Uint8Array([40, 160, 80, 255]), user),
     sign: (user = 1, id = taskId, placements = [position]) => post({ action: 'sign', kind: 'image', id, name: '合同.png', cost: 20,
       width: 8, height: 8, placements }, blank(8, 8).data, user),
     access: user => route.GET(new Request('https://example.test/api/tools/document-signature', {
@@ -286,6 +298,10 @@ function fixture({ failUpload = false, changePrice = false, failSave = false, st
     })),
     stampPreview: user => download.GET(new Request(`https://example.test/api/tools/document-signature/${signatureId}?kind=stamp`,
       { headers: user ? { 'test-user': String(user) } : {} }), { params: Promise.resolve({ id: signatureId }) }),
+    handprintPreview: user => download.GET(new Request(`https://example.test/api/tools/document-signature/${signatureId}?kind=handprint`,
+      { headers: user ? { 'test-user': String(user) } : {} }), { params: Promise.resolve({ id: signatureId }) }),
+    deleteHandprint: user => download.DELETE(new Request(`https://example.test/api/tools/document-signature/${signatureId}?kind=handprint`,
+      { method: 'DELETE', headers: { 'test-user': String(user), origin: 'https://example.test' } }), { params: Promise.resolve({ id: signatureId }) }),
     download: user => download.GET(new Request('https://example.test/api/tools/document-signature/' + taskId,
       { headers: { 'test-user': String(user) } }), { params: Promise.resolve({ id: taskId }) }),
   };
@@ -353,4 +369,65 @@ test('上传失败、结算前调价或成品入库失败均保留签署积分�
     assert.equal(Object.keys(f.data.documents).length, 0);
     assert.equal(f.removed.length, removed);
   }
+});
+
+test('手印并发保存幂等、独立定价且只在本人素材库显示，读取下载不再次扣积分', async () => {
+  const f = fixture();
+  const saved = await Promise.all([f.handprint(), f.handprint()]);
+  assert.deepEqual(saved.map(response => response.status), [200, 200]);
+  const [first, second] = await Promise.all(saved.map(response => response.json()));
+  assert.deepEqual(first, second);
+  assert.match(first.signature.previewUrl, /kind=handprint$/);
+  assert.ok(first.signature.createdAt);
+  assert.equal(f.data.balance, 93); assert.equal(Object.keys(f.data.handprints).length, 1);
+  assert.equal((await (await f.access(1)).json()).handprints.length, 1);
+  assert.deepEqual((await (await f.access(2)).json()).handprints, []);
+  assert.deepEqual((await (await f.access()).json()).handprints, []);
+  assert.equal((await f.handprintPreview(2)).status, 404);
+  assert.equal((await f.handprintPreview()).status, 401);
+  for (let i = 0; i < 2; i++) {
+    const response = await f.handprintPreview(1);
+    assert.equal(response.status, 200); assert.match(response.headers.get('cache-control'), /private, no-store/);
+    assert.deepEqual([...PNG.sync.read(Buffer.from(await response.arrayBuffer())).data], [40, 160, 80, 255]);
+  }
+  assert.equal(f.data.charges.length, 1);
+});
+
+test('签名、印章和手印相同编号仍可混合签署；删除手印不删除签名，保留历史且禁用素材', async () => {
+  const png = new PNG({ width: 256, height: 256 }); png.data.fill(Buffer.from([20, 70, 220, 255]));
+  const stamp = { owner: 1, id: signatureId, size: 256, createdAt: new Date().toISOString(), ...stampOptions.stampImageData(PNG.sync.write(png).toString('base64')) };
+  const f = fixture({ stamp });
+  assert.equal((await f.create()).status, 200); assert.equal((await f.handprint()).status, 200);
+  const small = { ...position, width: .25, height: .25 };
+  const handprint = { ...small, x: .75, y: .75, asset: 'handprint' };
+  const placements = [position, { ...small, x: 0, y: 0, asset: 'stamp' }, handprint];
+  assert.equal((await f.sign(2, taskId, placements)).status, 404);
+  assert.equal((await f.sign(1, taskId, placements)).status, 200);
+  assert.equal((await f.sign(1, taskId, placements)).status, 200);
+  const image = PNG.sync.read(f.uploads[0].bytes);
+  assert.deepEqual([...image.data.subarray(0, 4)], [20, 70, 220, 255]);
+  assert.deepEqual([...image.data.subarray(72, 76)], red);
+  assert.deepEqual([...image.data.subarray(216, 220)], [40, 160, 80, 255]);
+  assert.deepEqual(f.data.charges.map(row => row.cost), [10, 7, 20]);
+  assert.equal((await f.deleteHandprint(2)).status, 200);
+  assert.equal((await f.handprintPreview(1)).status, 200);
+  assert.equal((await f.deleteHandprint(1)).status, 200);
+  assert.equal((await f.handprintPreview(1)).status, 404);
+  assert.equal((await (await f.access(1)).json()).signatures.length, 1);
+  assert.equal((await (await f.access(1)).json()).handprints.length, 0);
+  assert.ok(f.data.handprints[`1:${signatureId}`].deleted_at);
+  assert.equal((await f.sign(1, nextTaskId, [handprint])).status, 404);
+  assert.equal((await f.download(1)).status, 302, 'old signed result remains available');
+  assert.equal(f.data.balance, 63);
+});
+
+test('手印调价、余额不足及保存失败不扣积分；缺14号SQL时原签名和签署继续可用', async () => {
+  let f = fixture(); assert.equal((await f.handprint(1, 10)).status, 409); assert.equal(f.data.balance, 100);
+  f.data.balance = 6; assert.equal((await f.handprint()).status, 402); assert.equal(Object.keys(f.data.handprints).length, 0);
+  f = fixture({ failHandprintSave: true }); assert.equal((await f.handprint()).status, 503);
+  assert.equal(f.data.balance, 100); assert.equal(f.data.charges.length, 0);
+  f = fixture({ missingHandprints: true });
+  const access = await f.access(1); assert.equal(access.status, 200); assert.equal((await access.json()).handprintReady, false);
+  const response = await f.handprint(); assert.equal(response.status, 503); assert.match((await response.json()).message, /14/);
+  assert.equal((await f.create()).status, 200); assert.equal((await f.sign()).status, 200);
 });

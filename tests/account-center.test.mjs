@@ -24,7 +24,7 @@ function fixture({ missingProfile = false, missingModules = false, walletFailure
   let state = {
     users: [{ id: 1, phone: '13800000000', email: 'one@example.com', status: 'active', permission_type: '10001', created_at: '2026-10-24T00:00:00Z' }, { id: 2, phone: '13900000000', email: 'two@example.com', status: 'active', permission_type: '10002', created_at: '2026-10-24T00:00:00Z' }],
     profiles: [{ user_id: 1, nickname: '小宇', avatar_data: '', avatar_mime: '', avatar_version: '' }, { user_id: 2, nickname: '其他用户', avatar_data: png, avatar_mime: 'image/png', avatar_version: 'other-secret' }],
-    points: { 1: 680, 2: 900 }, analyses: [], signatures: [], documents: [],
+    points: { 1: 680, 2: 900 }, analyses: [], signatures: [], handprints: [], documents: [],
     orders: [{ id: 'order-1', user_id: 1, title: '普通商品', kind: 'mall', status: 'pending', created_at: '2026-10-25T00:00:00Z', amount: 20 }, { id: 'order-2', user_id: 1, title: '600积分', kind: 'points', status: 'delivered', created_at: '2026-10-24T00:00:00Z', amount: 50 }, { id: 'private-order', user_id: 2, title: 'private', kind: 'mall' }],
     technical: [{ id: 'service-1', user_id: 1, title: '电脑维护', kind: 'technical', status: 'in_service', created_at: '2026-10-25T01:00:00Z', amount: null }],
     videos: [{ id: 'video-1', user_id: 1, title: '我的视频', kind: 'video', status: 'ready', created_at: '2026-10-25T00:00:00Z' }, { id: 'private-video', user_id: 2, title: 'private-video', kind: 'video', status: 'ready' }],
@@ -35,13 +35,14 @@ function fixture({ missingProfile = false, missingModules = false, walletFailure
   function sourceRows(sql, args) {
     const userId = args.at(-1);
     if (dbFailure && sql.includes(dbFailure)) throw error('ER_ACCESS_DENIED_ERROR');
-    if (missingModules && /technical_service_orders|video_extraction_tasks|tool_generation_results|site_analysis_runs|document_signatures|signed_documents/.test(sql)) throw error('ER_NO_SUCH_TABLE');
+    if (missingModules && /technical_service_orders|video_extraction_tasks|tool_generation_results|site_analysis_runs|document_signatures|document_handprints|signed_documents/.test(sql)) throw error('ER_NO_SUCH_TABLE');
     let rows;
     if (sql.includes('site_analysis_runs')) rows = state.analyses;
     else if (sql.includes('technical_service_orders')) rows = state.technical;
     else if (sql.includes('video_extraction_tasks')) rows = state.videos;
     else if (sql.includes('tool_generation_results')) rows = state.stamps;
     else if (sql.includes('document_signatures')) rows = state.signatures.map(row => ({ ...row, kind: 'signature', status: row.deleted_at ? 'deleted' : 'ready' }));
+    else if (sql.includes('document_handprints')) rows = state.handprints.map(row => ({ ...row, kind: 'handprint', status: row.deleted_at ? 'deleted' : 'ready' }));
     else if (sql.includes('signed_documents')) rows = state.documents.map(row => ({ ...row, kind: 'signed-document', status: row.expires_at <= args[0] ? 'expired' : 'ready' }));
     else rows = state.orders.filter(row => !sql.includes("AND p.product_type='points'") || row.kind === 'points').filter(row => !sql.includes("p.product_type<>'points'") || row.kind !== 'points');
     return rows.filter(row => row.user_id === userId);
@@ -193,6 +194,18 @@ test('工具记录展示本人历史签名和签署文件，删除或过期后�
   assert.ok(all.items.some(row => row.id === 'document-1'));
   assert.equal(f.writes.length, 0);
 });
+test('手印记录按当前账号筛选，删除后保留记录但关闭图片入口', async () => {
+  const f = fixture(), item = { id: 'handprint-1', user_id: 1, title: '我的手印', created_at: '2026-11-11T00:00:00Z' };
+  f.state().handprints.push(item, { ...item, id: 'deleted', deleted_at: '2026-11-11' }, { ...item, id: 'private', user_id: 2 });
+  const response = await f.routes['/records'].GET(f.request('/records?kind=activity&filter=handprint&userId=2'));
+  assert.equal(response.status, 200);
+  const data = await response.json(); assert.equal(data.total, 2);
+  assert.equal(data.items.find(row => row.id === 'handprint-1').href, '/api/tools/document-signature/handprint-1?kind=handprint');
+  assert.equal(data.items.find(row => row.id === 'deleted').href, null);
+  assert.equal(helpers.recordStatusLabel(data.items.find(row => row.id === 'deleted')), '已删除');
+  assert.equal(f.writes.length, 0);
+});
+
 test('登录返回地址限制站内地址；状态区分积分到账、无记录和处理失败', () => {
   for (const value of ['https://evil.example','//evil.example','/\\evil.example','/\t/evil.example','/api/account','/admin']) assert.equal(helpers.accountReturnPath(value), '');
   assert.equal(helpers.accountReturnPath('/account/activity?page=2#history'), '/account/activity?page=2#history');

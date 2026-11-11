@@ -175,10 +175,11 @@ test('文件签名生产页面及本地 PDF 资源可访问，匿名提交与成
     '/api/tools/document-signature/assets/build/pdf.worker.min.mjs?v=' + version,
     '/api/tools/document-signature/assets/build/pdf.mjs',
     '/api/tools/document-signature/11111111-1111-4111-8111-111111111111?kind=stamp',
+    '/api/tools/document-signature/11111111-1111-4111-8111-111111111111?kind=handprint',
   ]);
-  assert.deepEqual(result.pages.map(page => page.status), [200, 200, 200, 401, 401, 200, 404, 200, 404, 401]);
-  assert.deepEqual(result.pages[0].menu, [['true', '制作签名'], ['false', '签署文件'], ['false', '印章制作']]);
-  assert.deepEqual(result.pages[1].menu, [['true', 'Create signature'], ['false', 'Sign document'], ['false', 'Stamp maker']]);
+  assert.deepEqual(result.pages.map(page => page.status), [200, 200, 200, 401, 401, 200, 404, 200, 404, 401, 401]);
+  assert.deepEqual(result.pages[0].menu, [['true', '制作签名'], ['false', '签署文件'], ['false', '印章制作'], ['false', '手印制作']]);
+  assert.deepEqual(result.pages[1].menu, [['true', 'Create signature'], ['false', 'Sign document'], ['false', 'Stamp maker'], ['false', 'Create handprint']]);
   for (const page of result.pages.slice(0, 2)) {
     assert.ok(page.sidebarBeforeMain);
     assert.ok(page.hasCanvas);

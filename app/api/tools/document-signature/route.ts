@@ -60,22 +60,24 @@ export async function POST(request: Request) {
       }
     }
 
-    if (!isSignatureId(input.id) || !['create', 'sign'].includes(input.action) ||
+    if (!isSignatureId(input.id) || !['create', 'sign', 'handprint'].includes(input.action) ||
       !['points', 'paid', 'free'].includes(input.chargeType) || !Number.isSafeInteger(input.cost) || input.cost < 0) {
       throw new SignatureError('签名请求参数不正确');
     }
-    const name = signatureName(input.name, input.action === 'create' ? 48 : 100);
-    if (!name) throw new SignatureError(input.action === 'create' ? '请输入签名名称' : '请输入文件名称');
+    const name = signatureName(input.name, input.action === 'sign' ? 100 : 48);
+    if (!name) throw new SignatureError(input.action === 'handprint' ? '请输入手印名称' : input.action === 'create' ? '请输入签名名称' : '请输入文件名称');
     const quote = { chargeType: input.chargeType, cost: input.cost };
     const identity = { userId: user.id, toolId: tool.id, id: input.id, quote };
-    if (input.action === 'create') {
+    if (input.action === 'create' || input.action === 'handprint') {
+      const kind = input.action === 'handprint' ? 'handprint' : 'signature';
       const raster = readSignatureRaster(bytes, input.width, input.height, signatureLimits.signaturePixels);
       const hash = createHash('sha256').update(JSON.stringify({ name, width: raster.width, height: raster.height })).update(bytes).digest('hex');
       const operation = { ...identity, hash };
-      const previous = await findCreatedSignature(operation);
+      const previous = await findCreatedSignature(operation, undefined, kind);
       if (previous) return Response.json({ signature: previous }, { headers: signatureHeaders });
-      await checkSignatureAccess(tool, user.id, 'create', quote);
-      const signature = await saveCreatedSignature(operation, { name, ...trimSignature(raster) });
+      await checkSignatureAccess(tool, user.id, input.action, quote);
+      if (kind === 'handprint' && !raster.data.some((value, index) => index % 4 === 3 && value)) throw new SignatureError('未提取到清晰手印，请调整范围或提取强度');
+      const signature = await saveCreatedSignature(operation, { name, ...trimSignature(raster) }, kind);
       return Response.json({ signature }, { headers: signatureHeaders });
     }
 
@@ -101,8 +103,8 @@ export async function POST(request: Request) {
       if (assets.has(key)) continue;
       const png = placement.asset === 'stamp'
         ? stampTool && await readSigningStamp(user.id, stampTool.id, placement.signatureId)
-        : (await readSignatureImage(user.id, placement.signatureId))?.png;
-      if (!png) throw new SignatureError(placement.asset === 'stamp' ? '印章不存在或不属于当前账号' : '请选择签名库中的有效签名', 404);
+        : (await readSignatureImage(user.id, placement.signatureId, placement.asset === 'handprint' ? 'handprint' : 'signature'))?.png;
+      if (!png) throw new SignatureError(placement.asset === 'handprint' ? '手印不存在或不属于当前账号' : placement.asset === 'stamp' ? '印章不存在或不属于当前账号' : '请选择签名库中的有效签名', 404);
       assets.set(key, png);
     }
     const result = raster ? signImage(raster, placements, assets) : await signPdf(bytes, placements, assets);

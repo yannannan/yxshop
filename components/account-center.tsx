@@ -40,7 +40,7 @@ function RecordsTable({ state, kind, compact = false }: { state: ReturnType<type
     <div className="account-table-wrap"><table className="account-table">
       <thead><tr><th>{t(kind === 'orders' ? '商品 / 服务' : '工具 / 任务')}</th><th>{t("类型")}</th><th>{t("时间")}</th><th>{t("状态")}</th><th>{t("操作")}</th></tr></thead>
       <tbody>{rows.map((row: AccountRecord) => {
-        const action = row.kind === 'signed-document' ? '下载签署文件' : row.kind === 'signature' ? '查看签名' : kind === 'orders' ? '查看详情' : '查看记录';
+        const action = row.kind === 'signed-document' ? '下载签署文件' : row.kind === 'handprint' ? '查看手印' : row.kind === 'signature' ? '查看签名' : kind === 'orders' ? '查看详情' : '查看记录';
         const statusClass = ['ready','completed','delivered'].includes(row.status) ? 'complete' : row.status === 'failed' ? 'failed' : '';
         return <tr key={`${row.kind}:${row.id}`}>
           <td><strong>{row.title}</strong>{kind === 'orders' && <small>{row.id}</small>}</td>
@@ -64,7 +64,7 @@ export function AccountOverview() {
 }
 export function AccountRecordList({ kind, initialFilter = 'all' }: { kind: 'orders' | 'activity'; initialFilter?: string }) {
   const { t } = useI18n();
-  const options = kind === 'orders' ? [['all','全部订单'],['mall','商城订单'],['points','积分充值'],['technical','技术服务']] : [['all','全部记录'],['video','视频提取'],['stamp','印章制作'],['site','站长分析'],['signature','文件在线签名']];
+  const options = kind === 'orders' ? [['all','全部订单'],['mall','商城订单'],['points','积分充值'],['technical','技术服务']] : [['all','全部记录'],['video','视频提取'],['stamp','印章制作'],['site','站长分析'],['signature','文件在线签名'],['handprint','手印制作']];
   const [filter, setFilter] = useState(() => options.some(([value]) => value === initialFilter) ? initialFilter : 'all');
   const [page, setPage] = useState(1), state = useRecords(kind, filter, page);
   return <><div className="account-page-heading"><div><h1>{t(kind === 'orders' ? '我的订单' : '工具记录')}</h1><p>{t(kind === 'orders' ? '商城、积分充值与技术服务订单，集中查看。' : '查看服务端已保存的任务和成品，重复查看不扣积分。')}</p></div><button className="account-quiet" onClick={state.retry}><ArrowPathIcon aria-hidden="true" />{t("刷新")}</button></div><section className="account-panel"><div className="account-filters" aria-label={t("记录类型")}>{options.map(([value,label]) => <button key={value} aria-pressed={filter === value} className={filter === value ? 'active' : ''} onClick={() => { setFilter(value); setPage(1); }}>{t(label)}</button>)}</div><RecordsTable state={state} kind={kind} /><div className="account-pagination"><button disabled={state.loading || !state.data || state.data.page <= 1} onClick={() => setPage((state.data?.page || 1) - 1)}>{t("上一页")}</button><span>{t("共 ")}{t(state.data?.total ?? '—')}{t(" 条 · 第 ")}{t(state.data?.page || 1)} / {t(Math.max(1, Math.ceil((state.data?.total || 0) / 10)))}{t(" 页")}</span><button disabled={state.loading || !state.data || state.data.page >= Math.ceil(state.data.total / 10)} onClick={() => setPage((state.data?.page || 1) + 1)}>{t("下一页")}</button></div></section></>;

@@ -4,12 +4,14 @@
 import { useEffect, useRef, useState, type DragEvent, type PointerEvent } from 'react';
 import {
   ArrowDownTrayIcon, ArrowLeftIcon, ArrowPathIcon, ArrowUpTrayIcon, ChevronLeftIcon, ChevronRightIcon,
-  CheckBadgeIcon, ClockIcon, DocumentCheckIcon, DocumentTextIcon, PencilSquareIcon, PlusIcon, RectangleStackIcon, TrashIcon,
+  CheckBadgeIcon, ClockIcon, DocumentCheckIcon, DocumentTextIcon, FingerPrintIcon, PencilSquareIcon, PlusIcon, RectangleStackIcon, TrashIcon,
 } from '@heroicons/react/24/outline';
 import type { RenderTask } from 'pdfjs-dist';
 import { useI18n } from './language-provider';
 import { StampMaker } from './stamp-maker';
 import { SignatureViewport } from './signature-viewport';
+import { HandprintMaker } from './handprint-maker';
+import type { HandprintRaster } from '../lib/handprint-raster';
 import { notifyAccountChanged, useAccount } from '../lib/account-client';
 import { accountLoginHref } from '../lib/account';
 import {
@@ -80,12 +82,13 @@ function SignatureEditor({ tool, stampTool }: SignatureEditorProps) {
   const [pdfSize, setPdfSize] = useState<PageSize | null>(null);
   const [previewZoom, setPreviewZoom] = useState(1);
   const [renderZoom, setRenderZoom] = useState(1);
-  const [assetType, setAssetType] = useState<'signature' | 'stamp'>('signature');
+  const [assetType, setAssetType] = useState<'signature' | 'stamp' | 'handprint'>('signature');
   const [selectedAssetKey, setSelectedAssetKey] = useState('');
   const [placements, setPlacements] = useState<Placement[]>([]);
   const [activeKey, setActiveKey] = useState('');
   const [result, setResult] = useState<SignedDocument | null>(null);
   const [stampVisited, setStampVisited] = useState(false);
+  const [handprintVisited, setHandprintVisited] = useState(false);
   const penCanvas = useRef<HTMLCanvasElement>(null);
   const draft = useRef<ImageData | null>(null);
   const preview = useRef<HTMLCanvasElement>(null);
@@ -164,7 +167,8 @@ function SignatureEditor({ tool, stampTool }: SignatureEditorProps) {
   const stamps: SigningChoice[] = (access?.stamps ?? []).map(stamp => ({
     ...stamp, asset: 'stamp', name: t(`印章 · ${new Date(stamp.createdAt).toLocaleString(locale)}`),
   }));
-  const choices: SigningChoice[] = assetType === 'stamp' ? stamps : signatures;
+  const handprints: SigningChoice[] = (access?.handprints ?? []).map(item => ({ ...item, asset: 'handprint' }));
+  const choices: SigningChoice[] = assetType === 'stamp' ? stamps : assetType === 'handprint' ? handprints : signatures;
   const currentAsset = choices.find(item => choiceKey(item) === selectedAssetKey) ?? choices[0];
   const pageCount = source?.kind === 'pdf' ? source.pdf.numPages : 1;
   const pageSize = source?.kind === 'image' ? source : pdfSize?.page === page ? pdfSize : null;
@@ -199,6 +203,7 @@ function SignatureEditor({ tool, stampTool }: SignatureEditorProps) {
     setError('');
     setNotice('');
     if (next === 'stamp') setStampVisited(true);
+    if (next === 'handprint') setHandprintVisited(true);
     setMode(next);
     toolbar.current?.scrollIntoView({ block: 'nearest' });
   }
@@ -321,13 +326,13 @@ function SignatureEditor({ tool, stampTool }: SignatureEditorProps) {
     if (!event.dataTransfer.types.includes(assetDragType)) return;
     event.preventDefault();
     const key = event.dataTransfer.getData(assetDragType);
-    const availableAssets: SigningChoice[] = [...signatures, ...stamps];
+    const availableAssets: SigningChoice[] = [...signatures, ...stamps, ...handprints];
     const asset = availableAssets.find(item => choiceKey(item) === key);
     if (!asset) return;
     const bounds = event.currentTarget.getBoundingClientRect();
     if (!place((event.clientX - bounds.left) / bounds.width, (event.clientY - bounds.top) / bounds.height, asset)) return;
     event.currentTarget.focus({ preventScroll: true });
-    setAssetType(asset.asset === 'stamp' ? 'stamp' : 'signature');
+    setAssetType(asset.asset ?? 'signature');
     setSelectedAssetKey(key);
   }
 
@@ -380,7 +385,7 @@ function SignatureEditor({ tool, stampTool }: SignatureEditorProps) {
       await signatureRequest('DELETE', signal, undefined, undefined, `/${id}`);
       signal.throwIfAborted();
       setAccess(old => old && ({ ...old, signatures: old.signatures.filter(signature => signature.id !== id) }));
-      setPlacements(previous => previous.filter(entry => entry.asset === 'stamp' || entry.signatureId !== id));
+      setPlacements(previous => previous.filter(entry => entry.asset !== undefined || entry.signatureId !== id));
       resetResult();
       await refresh(signal);
     });
@@ -403,6 +408,34 @@ function SignatureEditor({ tool, stampTool }: SignatureEditorProps) {
       setNotice('签署文件已生成，可下载');
       notifyAccountChanged();
       await refresh(signal);
+    });
+  }
+
+  function saveHandprint(handprintName: string, image: HandprintRaster, id: string) {
+    void run(async signal => {
+      if (!access) return;
+      const response = await signatureRequest<{ signature: SavedSignature }>('POST', signal, {
+        id, action: 'handprint', name: handprintName, width: image.width, height: image.height,
+        chargeType: access.chargeType, cost: access.costs.handprint,
+      }, new Blob([new Uint8Array(image.data)], { type: 'application/octet-stream' }));
+      signal.throwIfAborted();
+      setAccess(old => old && ({ ...old, handprints: [response.signature, ...(old.handprints ?? []).filter(item => item.id !== response.signature.id)] }));
+      setAssetType('handprint');
+      setSelectedAssetKey(signingAssetKey({ signatureId: response.signature.id, asset: 'handprint' }));
+      setNotice('手印已保存，可用于签署');
+      notifyAccountChanged();
+      await refresh(signal);
+    });
+  }
+
+  function removeHandprint(id: string) {
+    if (!window.confirm(t('确认删除此手印？'))) return;
+    void run(async signal => {
+      await signatureRequest('DELETE', signal, undefined, undefined, `/${id}?kind=handprint`);
+      signal.throwIfAborted();
+      setAccess(old => old && ({ ...old, handprints: old.handprints.filter(item => item.id !== id) }));
+      setPlacements(previous => previous.filter(item => item.asset !== 'handprint' || item.signatureId !== id));
+      resetResult();
     });
   }
 
@@ -450,6 +483,9 @@ function SignatureEditor({ tool, stampTool }: SignatureEditorProps) {
           disabled={busy} onClick={() => switchMode('stamp')}>
           <CheckBadgeIcon aria-hidden="true" /><span>{t('印章制作')}</span>
         </button>}
+        <button type="button" disabled={busy} aria-controls="ds-handprint-maker" aria-pressed={mode === 'handprint'} onClick={() => switchMode('handprint')}>
+          <FingerPrintIcon aria-hidden="true" /><span>{t('手印制作')}</span>
+        </button>
       </nav>
       <a className="ds-return" href="/tools"><ArrowLeftIcon aria-hidden="true" />{t('工具服务')}</a>
     </aside>
@@ -463,12 +499,12 @@ function SignatureEditor({ tool, stampTool }: SignatureEditorProps) {
     }}>
       <header className="ds-toolbar" ref={toolbar}>
         <h2 id="ds-mode-title">{t(mode === 'stamp' ? '印章制作' : signatureActions[mode])}</h2>
-        {access?.signedIn && <a className="ds-secondary" href={mode === 'stamp' ? '/account/activity?filter=stamp' : '/account/activity'}><ClockIcon aria-hidden="true" />{t('工具记录')}</a>}
+        {access?.signedIn && <a className="ds-secondary" href={mode === 'handprint' ? '/account/activity?filter=handprint' : mode === 'stamp' ? '/account/activity?filter=stamp' : '/account/activity'}><ClockIcon aria-hidden="true" />{t('工具记录')}</a>}
       </header>
       {error && <p className="ds-feedback ds-error" role="alert">{t(error)}</p>}
       {notice && <p className="ds-feedback ds-success" role="status">{t(notice)}</p>}
 
-      {mode !== 'stamp' && <div className="ds-layout">
+      {(mode === 'create' || mode === 'sign') && <div className={`ds-layout${mode === 'sign' ? ' ds-layout-sign' : ''}`}>
         {mode === 'create' ? (
           <section className="ds-panel" aria-labelledby="ds-draw-heading">
             <div className="ds-panel-heading"><h3 id="ds-draw-heading"><PencilSquareIcon aria-hidden="true" />{t('签名画板')}</h3>
@@ -502,7 +538,7 @@ function SignatureEditor({ tool, stampTool }: SignatureEditorProps) {
             </div>
           </section>
         ) : (
-          <section className="ds-panel" aria-labelledby="ds-file-heading">
+          <section className="ds-panel ds-file-panel" aria-labelledby="ds-file-heading">
             <div className="ds-panel-heading"><h3 id="ds-file-heading"><DocumentTextIcon aria-hidden="true" />{t('文件预览')}</h3>
               <button type="button" className="ds-secondary" disabled={busy} onClick={() => documentUpload.current?.click()}>
                 <ArrowUpTrayIcon aria-hidden="true" />{t(source ? '更换文件' : '上传文件')}
@@ -535,7 +571,7 @@ function SignatureEditor({ tool, stampTool }: SignatureEditorProps) {
                     : <canvas ref={preview} aria-label={t('文件预览')} style={{ visibility: pageSize ? 'visible' : 'hidden' }} />}
                   {!pageSize && <span className="ds-rendering"><ArrowPathIcon />{t('正在加载预览…')}</span>}
                   {pageSize && visiblePlacements.map(item => {
-                    const asset = (item.asset === 'stamp' ? stamps : signatures).find(saved => saved.id === item.signatureId);
+                    const asset = (item.asset === 'stamp' ? stamps : item.asset === 'handprint' ? handprints : signatures).find(saved => saved.id === item.signatureId);
                     return asset && <button type="button" key={item.key} className="ds-placement"
                       aria-label={asset.name} aria-pressed={item.key === activeKey} disabled={busy}
                       style={{ left: `${item.x * 100}%`, top: `${item.y * 100}%`, width: `${item.width * 100}%`, height: `${item.height * 100}%` }}
@@ -560,24 +596,29 @@ function SignatureEditor({ tool, stampTool }: SignatureEditorProps) {
           </aside>
         ) : (
           <aside className="ds-panel">
-            <div className="ds-panel-heading"><h3><DocumentCheckIcon aria-hidden="true" />{t('选择签名或印章')}</h3></div>
+            <div className="ds-panel-heading"><h3><DocumentCheckIcon aria-hidden="true" />{t('签署素材')}</h3></div>
             <div className="ds-panel-body ds-placement-settings">
-              <div className="ds-asset-tabs" role="group" aria-label={t('选择签名或印章')}>
+              <div className="ds-asset-tabs ds-signing-tabs" role="group" aria-label={t('签署素材')}>
                 <button type="button" disabled={busy} aria-pressed={assetType === 'signature'} onClick={() => setAssetType('signature')}>{t('签名')}</button>
                 <button type="button" disabled={busy} aria-pressed={assetType === 'stamp'} onClick={() => setAssetType('stamp')}>{t('印章')}</button>
+                <button type="button" disabled={busy} aria-pressed={assetType === 'handprint'} onClick={() => setAssetType('handprint')}>{t('手印')}</button>
               </div>
               {assetType === 'stamp' && stampTool && <button type="button" className="ds-secondary" disabled={busy}
                 aria-controls="ds-stamp-maker" onClick={() => switchMode('stamp')}>
                   <CheckBadgeIcon aria-hidden="true" />{t('印章制作')}
               </button>}
+              {assetType === 'handprint' && <button type="button" className="ds-secondary" disabled={busy} onClick={() => switchMode('handprint')}>
+                <FingerPrintIcon aria-hidden="true" />{t('手印制作')}
+              </button>}
               {assetType === 'stamp' && !stamps.length ? <p className="ds-empty-copy">{t('暂无已保存的印章')}</p>
+                : assetType === 'handprint' && !handprints.length ? <p className="ds-empty-copy">{t('暂无已保存的手印')}</p>
                 : <SigningAssetList items={choices} busy={busy} draggable={Boolean(pageSize)} selectedKey={currentAsset && choiceKey(currentAsset)}
                 onChoose={item => setSelectedAssetKey(choiceKey(item))} />}
               <p>{t('点击素材后在页面上放置，也可以直接拖入页面。')}</p>
               <button className="ds-secondary" type="button" disabled={busy || !pageSize || !currentAsset || placements.length >= signatureLimits.placements}
                 onClick={() => place(.5, .5)}><PlusIcon aria-hidden="true" />{t('在页面中央放置')}</button>
               {activePlacement && <div className="ds-position">
-                <label>{t(activePlacement.asset === 'stamp' ? '印章大小' : '签名大小')}<input type="range" min=".1" max="100" step=".1" disabled={busy}
+                <label>{t(activePlacement.asset === 'handprint' ? '手印大小' : activePlacement.asset === 'stamp' ? '印章大小' : '签名大小')}<input type="range" min=".1" max="100" step=".1" disabled={busy}
                   value={activePlacement.width * 100} onChange={event => resizePlacement(activePlacement, Number(event.target.value) / 100)} /></label>
                 <label>{t('横向位置')}<input type="range" min="0" max={(1 - activePlacement.width) * 100} step=".1" disabled={busy}
                   value={activePlacement.x * 100} onChange={event => movePlacement(activeKey, Number(event.target.value) / 100, activePlacement.y)} /></label>
@@ -606,7 +647,14 @@ function SignatureEditor({ tool, stampTool }: SignatureEditorProps) {
         {stampVisited && <StampMaker tool={stampTool} onStampReady={syncStamp} />}
       </section>}
 
-      {mode !== 'stamp' && Boolean(access?.documents.length) && <section className="ds-panel ds-history">
+      <section id="ds-handprint-maker" hidden={mode !== 'handprint'} aria-labelledby="ds-mode-title">
+        {handprintVisited && <HandprintMaker access={access} busy={busy} cost={estimate('handprint')} signIn={signIn}
+          onSave={saveHandprint} onRemove={removeHandprint} onUse={item => {
+            setAssetType('handprint'); setSelectedAssetKey(signingAssetKey({ signatureId: item.id, asset: 'handprint' })); switchMode('sign');
+          }} />}
+      </section>
+
+      {(mode === 'create' || mode === 'sign') && Boolean(access?.documents.length) && <section className="ds-panel ds-history">
         <div className="ds-panel-heading"><h3><ClockIcon aria-hidden="true" />{t('最近签署文件')}</h3><span>{t('重复下载不扣积分')}</span></div>
         <ul>{access?.documents.map(file => <li key={file.id}>
           <div><strong>{file.name}</strong><small>{(file.bytes / 1024).toFixed(0)} KB · {t('有效期至')} {new Date(file.expiresAt).toLocaleString(locale)}</small></div>

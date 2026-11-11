@@ -23,12 +23,12 @@ export async function GET(request: Request, context: Context) {
   try {
     const kind = new URL(request.url).searchParams.get('kind');
     const { userId, id } = await identity(request, context, kind === 'stamp');
-    if (kind === 'signature' || kind === 'stamp') {
+    if (kind === 'signature' || kind === 'stamp' || kind === 'handprint') {
       const tool = kind === 'stamp' ? await findStampTool() : null;
       const png = kind === 'stamp'
         ? tool && await readSigningStamp(userId, tool.id, id, true)
-        : (await readSignatureImage(userId, id))?.png;
-      if (!png) throw new SignatureError(kind === 'stamp' ? '印章不存在或不属于当前账号' : '签名记录不存在', 404);
+        : (await readSignatureImage(userId, id, kind === 'handprint' ? 'handprint' : 'signature'))?.png;
+      if (!png) throw new SignatureError(kind === 'handprint' ? '手印记录不存在' : kind === 'stamp' ? '印章不存在或不属于当前账号' : '签名记录不存在', 404);
       return new Response(new Uint8Array(png), {
         headers: { ...signatureHeaders, 'Content-Type': 'image/png', 'Cross-Origin-Resource-Policy': 'same-origin' },
       });
@@ -48,8 +48,10 @@ export async function GET(request: Request, context: Context) {
 export async function DELETE(request: Request, context: Context) {
   try {
     requireImageOrigin(request);
+    const kind = new URL(request.url).searchParams.get('kind');
+    if (kind && kind !== 'handprint' && kind !== 'signature') throw new SignatureError('签名请求参数不正确');
     const { userId, id } = await identity(request, context);
-    await deleteSignature(userId, id);
+    await deleteSignature(userId, id, kind === 'handprint' ? 'handprint' : 'signature');
     return Response.json({ ok: true }, { headers: signatureHeaders });
   } catch (error) {
     return signatureFailure(error);
