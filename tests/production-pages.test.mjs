@@ -76,6 +76,8 @@ for (const spec of ${JSON.stringify(paths)}) {
     continue;
   }
   const html = await response.text();
+  const stampSidebar = path.startsWith('/tools/stamp-maker.html') ? html.match(/<aside class="ds-sidebar">.*?<\\/aside>/s)?.[0] || '' : '';
+  const stampMenu = [...stampSidebar.matchAll(/<button[^>]*aria-pressed="(true|false)"[^>]*>.*?<span>([^<]+)<\\/span><\\/button>/gs)].map(match => match.slice(1));
   if (path === '/tools/document-signature.html' || path === '/tools/handprint-maker.html') {
     const sidebar = html.match(/<aside class="ds-sidebar">.*?<\\/aside>/s)?.[0] || '';
     const menu = [...sidebar.matchAll(/<button[^>]*aria-pressed="(true|false)"[^>]*>.*?<span>([^<]+)<\\/span><\\/button>/gs)];
@@ -85,6 +87,7 @@ for (const spec of ${JSON.stringify(paths)}) {
   const trackerSource = 'https://www.yxstar.shop/s/RDYfVdtkRd-iXLHGxvrdEA';
   const trackerTags = [...html.matchAll(/<script[^>]*>/g)].filter(match => match[0].includes('src="' + trackerSource + '"'));
   pages.push({ path, script: (path.startsWith('/api/site-tracker/') || path.startsWith('/s/')) && response.status === 200 ? html : undefined, siteTrackerCount: trackerTags.length, siteTrackerInHead: trackerTags.every(match => match.index < html.indexOf('</head>')), siteTrackerSkipsAdmin: trackerTags.every(match => match[0].includes('data-exclude-path="/admin"')), status: response.status, failed: html.includes('This page couldn'), hasBrand: html.includes('宇星脉通'), hasVideoForm: html.includes('粘贴视频链接'), hasStampPreview: html.includes('效果预览'), language: /<html[^>]*lang="([^"]+)"/.exec(html)?.[1], hasImageWorkspace: html.includes('ip-workspace'), englishImage: html.includes('Online Image Editor'), englishNav: html.includes('AI Digital Services'), englishPoints: html.includes('One balance. Many possibilities.'), englishStamp: html.includes('Design Your Stamp'), englishVideo: html.includes('Paste a Video Link'), chineseAdmin: html.includes('正在验证管理权限'), wordReady: html.includes('"wordReady":true') });
+  if (stampSidebar) Object.assign(pages.at(-1), { menu: stampMenu, stampActive: /id="ds-stamp-maker" aria-labelledby/.test(html), structuredData: html.includes('application/ld+json'), embeddedStamp: html.includes('stamp-signature-view') });
 }
 console.log(JSON.stringify({ pages, errors, queries }));
 `;
@@ -196,5 +199,14 @@ test('手印独立页面中英文可直接打开，默认进入制作模块并�
   assert.deepEqual(result.pages.map(page => page.status), [200, 200]);
   assert.deepEqual(result.pages[0].menu, [['false', '制作签名'], ['false', '签署文件'], ['false', '印章制作'], ['true', '手印制作']]);
   assert.deepEqual(result.pages[1].menu, [['false', 'Create signature'], ['false', 'Sign document'], ['false', 'Stamp maker'], ['true', 'Create handprint']]);
+  assert.deepEqual(result.errors, []);
+});
+
+test('印章中英文独立入口复用侧边菜单，默认选中印章工作区且保留SEO结构化数据', { skip: needsBuild }, async () => {
+  const result = await renderPages(['/tools/stamp-maker.html', { path: '/tools/stamp-maker.html', locale: 'en' }]);
+  assert.deepEqual(result.pages.map(page => page.status), [200, 200]);
+  assert.deepEqual(result.pages[0].menu, [['false', '制作签名'], ['false', '签署文件'], ['true', '印章制作'], ['false', '手印制作']]);
+  assert.deepEqual(result.pages[1].menu, [['false', 'Create signature'], ['false', 'Sign document'], ['true', 'Stamp maker'], ['false', 'Create handprint']]);
+  for (const page of result.pages) { assert.equal(page.stampActive, true); assert.equal(page.structuredData, true); assert.equal(page.embeddedStamp, true); }
   assert.deepEqual(result.errors, []);
 });

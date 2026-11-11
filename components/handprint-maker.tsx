@@ -1,10 +1,31 @@
 'use client';
 /* eslint-disable @next/next/no-img-element -- Private handprint previews use native images. */
 import { useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
-import { ArrowDownTrayIcon, ArrowPathIcon, ArrowUpTrayIcon, CameraIcon, FingerPrintIcon, TrashIcon } from '@heroicons/react/24/outline';
+import { ArrowDownTrayIcon, ArrowPathIcon, ArrowUpTrayIcon, CameraIcon, FingerPrintIcon, PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
 import { useI18n } from './language-provider';
-import { extractHandprint, fullHandprintCrop, randomHandprint, type HandprintRaster } from '../lib/handprint-raster';
+import { applyHandprintEffects, defaultHandprintCrack, defaultHandprintEffects, extractHandprint, fullHandprintCrop,
+  handprintSurface, randomHandprint, type HandprintCrack, type HandprintEffects, type HandprintRaster } from '../lib/handprint-raster';
 import type { SavedSignature, SignatureAccess } from '../lib/signature-tool';
+
+function EffectSlider({ id, label, value, min, max, step = 1, unit, disabled, onChange }: {
+  id: string; label: string; value: number; min: number; max: number; step?: number; unit: string;
+  disabled: boolean; onChange: (value: number) => void;
+}) {
+  const { t } = useI18n();
+  const number = useRef<HTMLInputElement>(null);
+  useEffect(() => { if (number.current) number.current.value = String(value); }, [value]);
+  function change(next: number) {
+    if (!Number.isFinite(next)) return;
+    const normalized = Number(Math.max(min, Math.min(max, Math.round((next - min) / step) * step + min)).toFixed(2));
+    if (normalized !== value) onChange(normalized);
+  }
+  return <div className="hp-effect-setting"><div className="hp-effect-setting-heading"><label htmlFor={id}>{t(label)}</label>
+    <span><input ref={number} type="number" aria-label={t(label)} min={min} max={max} step={step} disabled={disabled}
+      defaultValue={value} onChange={event => change(event.target.valueAsNumber)} onBlur={event => { event.currentTarget.value = String(value); }} />{unit}</span></div>
+    <input id={id} aria-label={t(label)} type="range" min={min} max={max} step={step} value={value} disabled={disabled}
+      onChange={event => change(Number(event.target.value))} />
+  </div>;
+}
 
 export function HandprintMaker({ access, busy, cost, onSave, onRemove, onUse, signIn }: {
   access: SignatureAccess | null; busy: boolean; cost: number; signIn: React.ReactNode;
@@ -24,6 +45,7 @@ export function HandprintMaker({ access, busy, cost, onSave, onRemove, onUse, si
   const [error, setError] = useState('');
   const [naming, setNaming] = useState(false);
   const [nameError, setNameError] = useState('');
+  const [effects, setEffects] = useState<HandprintEffects>(defaultHandprintEffects);
   const upload = useRef<HTMLInputElement>(null), camera = useRef<HTMLInputElement>(null);
   const photo = useRef<HTMLCanvasElement>(null), preview = useRef<HTMLCanvasElement>(null);
   const selection = useRef<{ id: number; x: number; y: number } | null>(null);
@@ -39,11 +61,17 @@ export function HandprintMaker({ access, busy, cost, onSave, onRemove, onUse, si
     nameInput.current?.focus(); nameInput.current?.select();
     return () => { dialog.close(); returnFocus.current?.focus({ preventScroll: true }); };
   }, [naming]);
-  const output = useMemo(() => {
+  const original = useMemo(() => {
     try {
-      return { image: mode === 'random' ? randomHandprint(seed, color, strength) : source ? extractHandprint(source, crop, color, strength, method) : null, error: '' };
-    } catch (reason) { return { image: null, error: (reason as Error).message }; }
+      const image = mode === 'random' ? randomHandprint(seed, color, strength) : source ? extractHandprint(source, crop, color, strength, method) : null;
+      return { image, surface: image ? handprintSurface(image) : null, error: '' };
+    } catch (reason) { return { image: null, surface: null, error: (reason as Error).message }; }
   }, [mode, source, crop, color, strength, method, seed]);
+  const output = useMemo(() => {
+    if (!original.image || !original.surface) return { image: null, error: original.error };
+    try { return { image: applyHandprintEffects(original.image, effects, original.surface), error: '' }; }
+    catch (reason) { return { image: null, error: (reason as Error).message }; }
+  }, [original, effects]);
   useEffect(() => {
     if (mode === 'upload' && source) photo.current?.getContext('2d')?.putImageData(new ImageData(source.data, source.width, source.height), 0, 0);
   }, [mode, source]);
@@ -93,6 +121,9 @@ export function HandprintMaker({ access, busy, cost, onSave, onRemove, onUse, si
     setMode('random'); setError('');
     setSeed(crypto.getRandomValues(new Uint32Array(1))[0]);
   }
+  function updateCrack(id: string, field: keyof Omit<HandprintCrack, 'id'>, value: number) {
+    setEffects(previous => ({ ...previous, cracks: previous.cracks.map(crack => crack.id === id ? { ...crack, [field]: value } : crack) }));
+  }
   return <div className="ds-layout hp-layout">
     <section className="ds-panel">
       <div className="ds-panel-heading"><h3><FingerPrintIcon aria-hidden="true" />{t('手印制作')}</h3><span>{t(mode === 'random' ? '随机图案' : '照片提取')}</span></div>
@@ -130,6 +161,28 @@ export function HandprintMaker({ access, busy, cost, onSave, onRemove, onUse, si
           {mode === 'upload' && <label>{t('提取方式')}<select value={method} disabled={busy} onChange={event => setMethod(event.target.value as 'red' | 'dark')}><option value="red">{t('红色印迹')}</option><option value="dark">{t('深色笔迹')}</option></select></label>}
           <label>{t(mode === 'random' ? '图案浓度' : '提取强度')}<input type="range" min="1" max="100" value={strength} disabled={busy} onChange={event => setStrength(Number(event.target.value))} /></label>
         </div>
+        <section className="hp-effects" aria-labelledby="hp-effects-title">
+          <div className="hp-effects-heading"><h4 id="hp-effects-title">{t('手印效果')}</h4>
+            <button className="ds-secondary" type="button" disabled={busy || loading} onClick={() => setEffects(defaultHandprintEffects)}>{t('重置效果')}</button></div>
+          <EffectSlider id="hp-edge-fade" label="边缘淡化" value={effects.edgeFade} min={0} max={100} unit="%" disabled={busy || loading}
+            onChange={edgeFade => setEffects(previous => ({ ...previous, edgeFade }))} />
+          <div className="hp-effects-heading hp-cracks-heading"><h4>{t('横穿裂纹')} <small>{effects.cracks.length} / 6</small></h4>
+            <button className="ds-secondary" type="button" disabled={busy || loading || effects.cracks.length >= 6}
+              onClick={() => setEffects(previous => previous.cracks.length < 6 ? { ...previous, cracks: [...previous.cracks, { ...defaultHandprintCrack, id: crypto.randomUUID() }] } : previous)}>
+              <PlusIcon aria-hidden="true" />{t('添加裂纹')}</button></div>
+          <div className="hp-cracks">{effects.cracks.map((crack, index) => <section className="hp-crack" key={crack.id} aria-labelledby={`hp-crack-${crack.id}`}>
+            <div className="hp-effects-heading"><h5 id={`hp-crack-${crack.id}`}>{t('裂纹')} {index + 1}</h5>
+              <button className="ds-icon-button" type="button" disabled={busy || loading} aria-label={`${t('删除裂纹')} ${index + 1}`}
+                onClick={() => setEffects(previous => ({ ...previous, cracks: previous.cracks.filter(item => item.id !== crack.id) }))}><TrashIcon aria-hidden="true" /></button></div>
+            <div className="hp-crack-settings">
+              <EffectSlider id={`hp-${crack.id}-angle`} label="裂纹角度" min={-180} max={180} value={crack.angle} unit="°" disabled={busy || loading} onChange={value => updateCrack(crack.id, 'angle', value)} />
+              <EffectSlider id={`hp-${crack.id}-length`} label="裂纹长度" min={1} max={200} value={crack.length} unit="%" disabled={busy || loading} onChange={value => updateCrack(crack.id, 'length', value)} />
+              <EffectSlider id={`hp-${crack.id}-width`} label="裂纹宽度" min={.5} max={80} step={.5} value={crack.width} unit="px" disabled={busy || loading} onChange={value => updateCrack(crack.id, 'width', value)} />
+              <EffectSlider id={`hp-${crack.id}-x`} label="裂纹横向位置" min={0} max={100} value={crack.x} unit="%" disabled={busy || loading} onChange={value => updateCrack(crack.id, 'x', value)} />
+              <EffectSlider id={`hp-${crack.id}-y`} label="裂纹纵向位置" min={0} max={100} value={crack.y} unit="%" disabled={busy || loading} onChange={value => updateCrack(crack.id, 'y', value)} />
+            </div>
+          </section>)}</div>
+        </section>
         {access?.handprintReady === false && <p className="ds-feedback ds-error">{t('请管理员先执行14号手印制作增量SQL')}</p>}
         <div className="ds-panel-actions"><span className="ds-cost">{t('透明底 PNG，保存后可重复使用。')}</span><div><span className="ds-cost">{access?.hasMembership ? t('有效套餐优先使用') : <><b>{cost}</b> {t('积分 / 次')}</>}</span>
           {access?.signedIn ? <button type="button" className="ds-primary" disabled={busy || loading || !output.image || !access.canProcess || access.handprintReady === false}

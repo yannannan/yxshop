@@ -162,6 +162,20 @@
 .hp-controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 16px; padding: 13px; border: 1px solid var(--ds-line); border-radius: 8px; background: #f7f9fc; }
 .hp-controls select { min-height: 36px; padding: 5px 8px; border: 1px solid var(--ds-line); border-radius: 6px; background: #fff; color: var(--ds-ink); }
 .hp-controls input { width: 100%; accent-color: var(--ds-orange); }
+.hp-effects { margin-top: 18px; padding: 16px; border: 1px solid var(--ds-line); border-radius: 10px; background: #fafcfe; }
+.hp-effects-heading { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 12px; }
+.hp-effects-heading :is(h4, h5) { margin: 0; font-size: 14px; font-weight: 650; }
+.hp-effects-heading small { margin-left: 5px; font-size: 12px; font-weight: 400; color: var(--ds-muted); }
+.hp-cracks-heading { margin-top: 18px; padding-top: 15px; border-top: 1px solid var(--ds-line); }
+.hp-cracks { display: grid; gap: 12px; }
+.hp-crack { min-width: 0; padding: 12px; border: 1px solid var(--ds-line); border-radius: 8px; background: #fff; }
+.hp-crack-settings { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px 18px; }
+.hp-effect-setting { min-width: 0; }
+.hp-effect-setting-heading { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 6px; margin-bottom: 7px; }
+.hp-effect-setting-heading label { margin: 0; }
+.hp-effect-setting-heading > span { display: inline-flex; align-items: center; gap: 4px; color: var(--ds-muted); font-size: 12px; }
+.hp-effect-setting input[type=number] { width: 65px; min-height: 34px; padding: 5px 6px; border: 1px solid var(--ds-line); border-radius: 6px; color: var(--ds-ink); background: #fff; text-align: center; }
+.hp-effect-setting input[type=range] { width: 100%; margin: 3px 0; accent-color: var(--ds-orange); }
 .hp-records { display: grid; gap: 14px; max-height: 640px; overflow: auto; margin: 0; padding: 0; list-style: none; }
 .hp-records li { padding: 12px; border: 1px solid var(--ds-line); border-radius: 9px; background: #fafcfe; }
 .hp-record-title { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }
@@ -217,6 +231,7 @@
   .ds-toolbar, .ds-panel-heading { padding-inline: 10px; }
   .ds-panel-body { padding: 12px; }
   .hp-preview-grid { grid-template-columns: minmax(0, 1fr); }
+  .hp-crack-settings { grid-template-columns: minmax(0, 1fr); }
   .ds-modes button { gap: 4px; padding-inline: 4px; font-size: 12px; }
   .ds-modes svg { width: 16px; height: 16px; }
   .ds-history li { align-items: flex-start; flex-direction: column; }

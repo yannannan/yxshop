@@ -432,17 +432,20 @@ test('购买时按套餐标识采用对应分类服务端价格并保存快照�
     else assert.equal(writes.length, 0);
   }
 });
-test('印章独立页渲染商城导航、三栏工作台、各会员套餐及独立购买链接', async () => {
+test('印章独立入口默认打开左侧菜单工作区，保留预览、套餐、购买链接与记录', async () => {
   const Link = ({ href, children, ...props }) => React.createElement('a', { href, ...props }, children);
   const Image = ({ src, alt }) => React.createElement('img', { src, alt });
   const header = load('../components/storefront-header.tsx', { 'next/link': Link, 'next/image': Image });
   const workspace = load('../components/stamp-maker.tsx', { 'next/link': Link, 'next/image': Image, '../lib/stamp-options': options, '../lib/tool-services': tools });
   const tool = { id: 40, slug: 'stamp-maker', name: '印章在线制作', plans: memberPlans, chargeType: 'paid', detail: '', description: '', seoTitle: '', seoDescription: '', entryConfigured: true };
-  const page = load('../app/tools/[slug]/page.tsx', { 'next/link': Link, 'next/image': Image, 'next/navigation': { notFound() { throw new Error('404'); }, permanentRedirect() { throw new Error('redirect'); } }, '@/components/tool-launch': { ToolLaunch: () => null }, '@/components/storefront-header': header, '@/components/stamp-maker': workspace, '@/lib/tool-services': tools, '@/lib/tool-service-data': { getPublishedTool: async () => tool } });
+  let editorProps;
+  const editor = { DocumentSignature(props) { editorProps = props; return React.createElement('section', {}, React.createElement('h1', {}, props.tool.name), React.createElement(workspace.StampMaker, { tool: props.stampTool, onStampReady() {} })); } };
+  const page = load('../app/tools/[slug]/page.tsx', { 'next/link': Link, 'next/image': Image, 'next/navigation': { notFound() { throw new Error('404'); }, permanentRedirect() { throw new Error('redirect'); } }, '@/components/tool-launch': { ToolLaunch: () => null }, '@/components/storefront-header': header, '@/components/document-signature': editor, '@/lib/tool-services': tools, '@/lib/tool-service-data': { getPublishedTool: async () => tool } });
   const html = renderToStaticMarkup(await page.default({ params: Promise.resolve({ slug: 'stamp-maker.html' }) }));
+  assert.equal(editorProps.initialMode, 'stamp'); assert.equal(editorProps.tool, tool); assert.equal(editorProps.stampTool, tool);
   for (const text of ['主导航', '印章在线制作', '效果预览', '导出下载设置', '导出格式', '基础会员', '专业会员', '单次制作', '制作高清印章', '文字距边框', '印章字体', '宋体', '黑体', '霞鹜文楷']) assert.ok(html.includes(text));
   assert.ok(html.includes('/product/40?plan=basic-month&amp;cycle=month')); assert.ok(html.includes('application/ld+json'));
-  assert.match(html, /href="#stamp-history"/);
+  assert.match(html, /class="stamp-signature-view"/);
   assert.match(html, /id="stamp-history"[^>]*aria-busy="true"/);
   const signingWorkspace = renderToStaticMarkup(React.createElement(workspace.StampMaker, { tool, onStampReady() {} }));
   assert.ok(signingWorkspace.includes('<div class="stamp-signature-view"><div class="stamp-workspace">'));

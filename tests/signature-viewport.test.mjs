@@ -251,7 +251,7 @@ test('反复放大缩小只改变内部滚动范围，不累计顶部空白；�
 });
 
 test('PDF缩放及三类素材旋转保留导出坐标，修改角度才重新生成，预览操作不结算', async () => {
-  let cursor = 0, tree, effectQueue = [], timerId = 0, holdRender = false;
+  let cursor = 0, tree, effectQueue = [], timerId = 0, holdRender = false, accessReads = 0, signatureModuleAvailable = false;
   const slots = [], timers = new Map(), rendered = [], draws = [], submitted = [];
   const react = {
     useState(initial) { const i = cursor++; if (!(i in slots)) slots[i] = initial;
@@ -284,17 +284,18 @@ test('PDF缩放及三类素材旋转保留导出坐标，修改角度才重新�
   } };
   function Viewport() {}
   function HandprintMaker() {}
+  function StampMaker() {}
   const spec = load('../lib/signature-tool.ts', { './stamp-options': { isStampId: () => true } });
   const { DocumentSignature } = load('../components/document-signature.tsx', {
     react, 'react/jsx-runtime': { jsx, jsxs: jsx, Fragment: 'fragment' },
     '@heroicons/react/24/outline': {},
     './language-provider': { useI18n: () => ({ t: value => value, locale: 'zh-CN' }) },
-    './stamp-maker': { StampMaker() {} }, './signature-viewport': { SignatureViewport: Viewport },
+    './stamp-maker': { StampMaker }, './signature-viewport': { SignatureViewport: Viewport },
     './handprint-maker': { HandprintMaker },
     '../lib/account-client': { useAccount: () => ({ account: { user: { id: 1 } } }), notifyAccountChanged() {} },
     '../lib/account': { accountLoginHref: () => '/login' }, '../lib/signature-tool': spec,
     '../lib/signature-geometry': signingGeometry,
-    '../lib/signature-client': { signaturePage: '/tools/document-signature.html', signatureAccess: async () => access,
+    '../lib/signature-client': { signaturePage: '/tools/document-signature.html', signatureAccess: async () => { accessReads++; if (!signatureModuleAvailable) throw Error('签名模块未启用'); return access; },
       disposeSignatureSource() {}, loadSignatureSource: async () => source,
       signatureRequest: async (method, signal, metadata) => { submitted.push(metadata); return { document: { id: 'signed', name: source.name, downloadUrl: '/private/signed' } }; },
     },
@@ -303,7 +304,7 @@ test('PDF缩放及三类素材旋转保留导出坐标，修改角度才重新�
     document: { createElement: () => ({ width: 0, height: 0 }) },
     setTimeout(fn) { const id = ++timerId; timers.set(id, fn); return id; }, clearTimeout(id) { timers.delete(id); },
   });
-  const entry = DocumentSignature({ tool: { pointsCost: 10 }, stampTool: {} });
+  const entry = DocumentSignature({ tool: { slug: 'stamp-maker', name: '印章在线制作', pointsCost: 10 }, stampTool: {}, initialMode: 'stamp' });
   const find = predicate => nodes(tree).find(predicate);
   const view = () => find(node => node.type === Viewport);
   const namedButton = label => find(node => node.type === 'button' && nodes(node).some(child => [child.props?.children].flat().includes(label)));
@@ -316,12 +317,22 @@ test('PDF缩放及三类素材旋转保留导出坐标，修改角度才重新�
   }
   async function settle() { for (let i = 0; i < 3; i++) { await new Promise(resolve => setImmediate(resolve)); render(); } }
   async function zoom(value) { view().props.onZoom(value); render(); for (const [id, fn] of timers) { timers.delete(id); fn(); } render(); await settle(); }
-  render(); await settle(); namedButton('签署文件').props.onClick(); render();
+  render(); await settle();
+  assert.equal(accessReads, 0, 'the standalone stamp entry must not depend on document-signature availability');
+  assert.equal(find(node => node.props?.id === 'ds-stamp-maker').props.hidden, false);
+  find(node => node.type === StampMaker).props.onStampReady(stamp.id, false); await settle();
+  assert.equal(find(node => node.props?.role === 'alert'), undefined, 'failed optional signing-palette refresh must not break stamp creation');
+  signatureModuleAvailable = true;
+  namedButton('签署文件').props.onClick(); render(); await settle();
   find(node => node.type === 'input' && node.props.type === 'file').props.onChange({ target: { files: [{ name: source.name }], value: 'chosen' } });
   await settle();
   assert.equal(draws.length, 1); assert.deepEqual(draws[0], [1200, 1680]);
   view().props.onPlace(.3, .4); render();
   const placementBefore = view().props.children.flat().find(node => node?.props?.className === 'ds-placement');
+  namedButton('印章制作').props.onClick(); render();
+  assert.equal(find(node => node.props?.id === 'ds-stamp-maker').props.hidden, false);
+  namedButton('签署文件').props.onClick(); render(); await settle();
+  assert.deepEqual({ ...view().props.children.flat().find(node => node?.props?.className === 'ds-placement').props.style }, { ...placementBefore.props.style }, 'switching the stamp menu must retain the uploaded document and placed assets');
   namedButton('手印制作').props.onClick(); render();
   assert.equal(find(node => node.type === 'section' && node.props.id === 'ds-handprint-maker').props.hidden, false);
   find(node => node.type === HandprintMaker).props.onUse(handprint); render(); await settle();

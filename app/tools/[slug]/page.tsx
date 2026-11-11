@@ -6,7 +6,6 @@ import Image from 'next/image';
 import { notFound, permanentRedirect } from 'next/navigation';
 import { ToolLaunch } from '@/components/tool-launch';
 import { StorefrontHeader } from '@/components/storefront-header';
-import { StampMaker } from '@/components/stamp-maker';
 import { VideoExtractor } from '@/components/video-extractor';
 import { getPublishedTool } from '@/lib/tool-service-data';
 import { isToolSlug, isWebsiteAnalysis, siteOrigin, toolPlanKey, toolPlanLabel, toolChargeLabels, toolPagePath, toolPlanPrice, toolPriceSummary } from '@/lib/tool-services';
@@ -40,13 +39,13 @@ export default async function ToolPage({ params }: Props) {
     applicationCategory: 'UtilitiesApplication',
     ...(tool.chargeType === 'free' ? { offers: { '@type': 'Offer', price: 0, priceCurrency: 'CNY' } } : tool.chargeType === 'paid' ? { offers: tool.plans.map(plan => ({ '@type': 'Offer', name: toolPlanLabel(plan), price: plan.price, priceCurrency: 'CNY' })) } : {}),
   };
-  if (slug === 'stamp-maker') return <><StorefrontHeader /><StampMaker tool={tool} /><script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData).replace(/</g, '\\u003c') }} /></>;
   if (slug === 'video-extractor') return <><StorefrontHeader /><VideoExtractor tool={tool} /><script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData).replace(/</g, '\\u003c') }} /></>;
   if (slug === 'image-processor') { const { ImageProcessor } = await import('@/components/image-processor'); return <><StorefrontHeader /><ImageProcessor tool={tool} /><script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData).replace(/</g, '\\u003c') }} /></>; }
-  if (slug === 'document-signature' || slug === 'handprint-maker') {
+  if (slug === 'document-signature' || slug === 'handprint-maker' || slug === 'stamp-maker') {
     const { DocumentSignature } = await import('@/components/document-signature');
-    const stampTool = await getPublishedTool('stamp-maker');
-    return <><StorefrontHeader /><DocumentSignature tool={tool} stampTool={stampTool} initialMode={slug === 'handprint-maker' ? 'handprint' : 'create'} /></>;
+    const stampTool = slug === 'stamp-maker' ? tool : await getPublishedTool('stamp-maker');
+    return <><StorefrontHeader /><DocumentSignature tool={tool} stampTool={stampTool} initialMode={slug === 'stamp-maker' ? 'stamp' : slug === 'handprint-maker' ? 'handprint' : 'create'} />
+      {slug === 'stamp-maker' && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData).replace(/</g, '\\u003c') }} />}</>;
   }
   if (isWebsiteAnalysis(slug, tool.name)) { const { SiteAnalysisDashboard } = await import('@/components/site-analysis-dashboard'); return <><StorefrontHeader /><SiteAnalysisDashboard tool={tool} /></>; }
   return <><StorefrontHeader /><main className="tools-page">

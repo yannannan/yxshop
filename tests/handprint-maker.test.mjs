@@ -41,6 +41,81 @@ test('随机图案可稳定复用同一参数，换种子外观变化，PNG像�
   assert.throws(() => raster.randomHandprint(1234, 'bad', 60), /颜色/);
 });
 
+const alphaAt = (image, x, y) => image.data[(y * image.width + x) * 4 + 3];
+const inkTotal = image => image.data.reduce((sum, value, i) => sum + (i % 4 === 3 ? value : 0), 0);
+function inkRectangle() {
+  const image = source(180, 200, [201, 52, 48, 0]);
+  for (let y = 20; y < 180; y++) for (let x = 20; x < 160; x++) image.data[(y * image.width + x) * 4 + 3] = 255;
+  return image;
+}
+const crease = changes => ({ ...raster.defaultHandprintCrack, id: 'fixed-crease', ...changes });
+const effect = (image, cracks = [], edgeFade = 0) => raster.applyHandprintEffects(image, { cracks, edgeFade });
+
+test('边缘淡化沿印迹外轮廓渐变，不淡化内部纹路缝隙，不修改原图，重置完全恢复', () => {
+  const image = inkRectangle();
+  for (let y = 40; y < 160; y += 4) for (let x = 40; x < 140; x++) image.data[(y * image.width + x) * 4 + 3] = 0;
+  const before = image.data.slice(), shape = raster.handprintSurface(image);
+  assert.deepEqual([shape.left, shape.top, shape.inkWidth, shape.inkHeight], [20, 20, 140, 160]);
+  assert.equal(effect(image), image);
+  const faded = raster.applyHandprintEffects(image, { edgeFade: 70, cracks: [] }, shape);
+  assert.ok(alphaAt(faded, 20, 100) < 10);
+  assert.ok(alphaAt(faded, 32, 100) > alphaAt(faded, 20, 100));
+  assert.equal(alphaAt(faded, 90, 101), 255, 'interior ridges beside a transparent gap retain full opacity');
+  assert.equal(alphaAt(faded, 90, 100), 0);
+  assert.equal(alphaAt(faded, 5, 5), 0);
+  assert.ok(inkTotal(effect(image, [], 35)) > inkTotal(faded));
+  for (let i = 0; i < before.length; i++) if (i % 4 !== 3) assert.equal(faded.data[i], before[i]);
+  assert.deepEqual(image.data, before); assert.deepEqual([faded.width, faded.height], [180, 200]);
+  assert.equal(effect(image), image, 'reset returns the source bitmap rather than progressively reprocessing it');
+});
+
+test('上传照片白边不影响淡化范围，随机图案与照片提取均可使用同一效果', () => {
+  const photo = source(180, 200, [255, 255, 255, 255]);
+  for (let y = 20; y < 180; y++) for (let x = 20; x < 160; x++) photo.data.set([180, 20, 30, 255], (y * photo.width + x) * 4);
+  const extracted = raster.extractHandprint(photo, raster.fullHandprintCrop, '#c93430', 60, 'red');
+  const cropped = raster.extractHandprint(photo, { x: 20 / 180, y: .1, width: 140 / 180, height: .8 }, '#c93430', 60, 'red');
+  const fullFade = effect(extracted, [], 70), cropFade = effect(cropped, [], 70);
+  for (const [x, y] of [[0, 50], [8, 50], [40, 70]]) assert.equal(alphaAt(fullFade, x + 20, y + 20), alphaAt(cropFade, x, y));
+  const random = raster.randomHandprint(1234, '#c93430', 60);
+  assert.ok(inkTotal(effect(random, [crease({ angle: 33 })], 65)) < inkTotal(random));
+});
+
+test('横穿裂纹透明擦除，可独立改变角度、长度、宽度与位置，多条裂纹确定性叠加', () => {
+  const image = inkRectangle(), original = image.data.slice();
+  const horizontal = effect(image, [crease({ width: 8 })]), vertical = effect(image, [crease({ angle: 90, width: 8 })]);
+  const changedBounds = output => {
+    const xs = [], ys = [];
+    for (let y = 0; y < image.height; y++) for (let x = 0; x < image.width; x++) if (alphaAt(output, x, y) < alphaAt(image, x, y)) { xs.push(x); ys.push(y); }
+    return { left: Math.min(...xs), top: Math.min(...ys), right: Math.max(...xs), bottom: Math.max(...ys) };
+  };
+  const h = changedBounds(horizontal), v = changedBounds(vertical);
+  assert.ok(h.right - h.left > 100 && h.bottom - h.top < 20);
+  assert.ok(v.bottom - v.top > 120 && v.right - v.left < 20);
+  assert.ok(inkTotal(effect(image, [crease({ length: 30, width: 8 })])) > inkTotal(horizontal));
+  assert.ok(inkTotal(effect(image, [crease({ width: 16 })])) < inkTotal(horizontal));
+  const movedH = changedBounds(effect(image, [crease({ width: 8, y: 25 })]));
+  const movedV = changedBounds(effect(image, [crease({ width: 8, angle: 90, x: 25 })]));
+  assert.ok(movedH.bottom < h.top - 25); assert.ok(movedV.right < v.left - 20);
+  const angled = effect(image, [crease({ angle: -37, width: 4, length: 70 })]);
+  assert.notDeepEqual(angled.data, horizontal.data); assert.notDeepEqual(angled.data, vertical.data);
+  assert.deepEqual(angled.data, effect(image, [crease({ angle: -37, width: 4, length: 70 })]).data);
+  const both = effect(image, [crease({ width: 8 }), crease({ id: 'cross', angle: 90, width: 8 })]);
+  assert.ok(inkTotal(both) < inkTotal(horizontal));
+  assert.ok([...horizontal.data].some((value, i) => i % 4 === 3 && value === 0 && original[i] === 255));
+  for (let i = 0; i < original.length; i++) if (i % 4 !== 3) assert.equal(both.data[i], original[i], 'erase alpha instead of drawing white over a document');
+  assert.deepEqual(image.data, original);
+});
+
+test('效果拒绝非法范围及过多裂纹，完全透明时明确报错', () => {
+  const image = inkRectangle();
+  for (const changes of [{ angle: 181 }, { angle: NaN }, { length: 0 }, { length: 201 }, { width: .1 }, { width: 81 }, { x: -1 }, { y: 101 }, { id: '' }]) {
+    assert.throws(() => effect(image, [crease(changes)]), /参数/);
+  }
+  assert.throws(() => effect(image, [], 101), /参数/);
+  assert.throws(() => effect(image, Array.from({ length: 7 }, (_, i) => crease({ id: String(i) }))), /参数/);
+  assert.throws(() => effect(source(10, 10, [201, 52, 48, 255]), [crease({ width: 80, length: 200 })]), /完全透明/);
+});
+
 function harness() {
   const slots = [], effects = [], saves = [], used = [], removed = [];
   let cursor = 0, tree, closed = 0;
@@ -133,4 +208,34 @@ test('保存时弹出命名窗口，空名称阻止保存，取消与Escape不�
   h.find(node => node.type === 'dialog').props.onCancel(); h.render(); assert.equal(h.saves.length, 0);
   h.confirm(' 自定义手印 '); assert.equal(h.saves[0][0], '自定义手印');
   h.confirm(); assert.equal(h.saves[0][2], h.saves[1][2], 'confirming the same named image must retry the original task');
+});
+
+test('随机和照片效果可预览、重置、增删，调整不会保存扣费，确认后的实际像素含淡化与裂纹', async () => {
+  const h = harness(), adjust = (label, value) => { h.find(node => node.props.label === label).props.onChange(value); h.render(); };
+  h.button('随机生成').props.onClick(); h.render(); h.confirm('效果手印');
+  const original = h.saves[0][1];
+  adjust('边缘淡化', 60);
+  h.button('添加裂纹').props.onClick(); h.render();
+  for (const [label, value] of [['裂纹角度', -37], ['裂纹长度', 75], ['裂纹宽度', 8], ['裂纹横向位置', 35], ['裂纹纵向位置', 65]]) adjust(label, value);
+  assert.equal(h.saves.length, 1, 'all preview adjustments must be free of save calls');
+  h.confirm(); h.confirm();
+  assert.notEqual(h.saves[1][2], h.saves[0][2]); assert.equal(h.saves[1][2], h.saves[2][2]);
+  assert.ok(inkTotal(h.saves[1][1]) < inkTotal(original));
+  const sourceWithEffects = raster.applyHandprintEffects(original, { edgeFade: 60, cracks: [{ ...crease(), id: h.find(node => node.props.label === '裂纹角度').props.id.slice(3, -6), angle: -37, length: 75, width: 8, x: 35, y: 65 }] });
+  assert.deepEqual(h.saves[1][1].data, sourceWithEffects.data, 'saved pixels must match the preview effect parameters');
+  h.find(node => node.props['aria-label'] === '删除裂纹 1').props.onClick(); h.render();
+  assert.equal(h.find(node => node.props.label === '裂纹角度'), undefined);
+  for (let i = 0; i < 6; i++) { h.button('添加裂纹').props.onClick(); h.render(); }
+  assert.equal(h.button('添加裂纹').props.disabled, true);
+  h.button('重置效果').props.onClick(); h.render();
+  assert.equal(h.find(node => node.props.label === '边缘淡化').props.value, 0); h.confirm();
+  assert.deepEqual(h.saves.at(-1)[1].data, original.data);
+  h.button('上传提取').props.onClick(); h.render();
+  h.find(node => node.type === 'input' && node.props.type === 'file' && !node.props.capture).props.onChange({ target: { value: 'picked', files: [{ type: 'image/png', size: 100, name: '照片.png' }] } });
+  await new Promise(resolve => setImmediate(resolve)); h.render();
+  h.confirm('照片'); const photo = h.saves.at(-1)[1];
+  adjust('边缘淡化', 65); h.button('添加裂纹').props.onClick(); h.render(); adjust('裂纹宽度', 1);
+  h.confirm(); assert.ok(inkTotal(h.saves.at(-1)[1]) < inkTotal(photo));
+  adjust('裂纹宽度', 80); adjust('裂纹长度', 200);
+  assert.equal(h.button('保存手印').props.disabled, true); assert.match(h.html(), /当前效果使手印完全透明/);
 });

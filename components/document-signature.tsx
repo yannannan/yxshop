@@ -60,7 +60,7 @@ function SigningAssetList({ items, busy, selectedKey, draggable = false, onChoos
   </ul>;
 }
 
-type SignatureEditorProps = { tool: ToolService; stampTool: ToolService | null; initialMode?: 'create' | 'handprint' };
+type SignatureEditorProps = { tool: ToolService; stampTool: ToolService | null; initialMode?: WorkspaceMode };
 
 export function DocumentSignature({ tool, stampTool, initialMode }: SignatureEditorProps) {
   const { account } = useAccount();
@@ -70,6 +70,7 @@ export function DocumentSignature({ tool, stampTool, initialMode }: SignatureEdi
 function SignatureEditor({ tool, stampTool, initialMode = 'create' }: SignatureEditorProps) {
   const { t, locale } = useI18n();
   const [mode, setMode] = useState<WorkspaceMode>(initialMode);
+  const inStampView = mode === 'stamp';
   const [access, setAccess] = useState<SignatureAccess | null>(null);
   const [busy, setBusy] = useState(false);
   const [fileLoading, setFileLoading] = useState('');
@@ -88,7 +89,7 @@ function SignatureEditor({ tool, stampTool, initialMode = 'create' }: SignatureE
   const [placements, setPlacements] = useState<Placement[]>([]);
   const [activeKey, setActiveKey] = useState('');
   const [result, setResult] = useState<SignedDocument | null>(null);
-  const [stampVisited, setStampVisited] = useState(false);
+  const [stampVisited, setStampVisited] = useState(initialMode === 'stamp');
   const [handprintVisited, setHandprintVisited] = useState(initialMode === 'handprint');
   const penCanvas = useRef<HTMLCanvasElement>(null);
   const draft = useRef<ImageData | null>(null);
@@ -110,16 +111,20 @@ function SignatureEditor({ tool, stampTool, initialMode = 'create' }: SignatureE
   }
 
   useEffect(() => {
-    const request = new AbortController();
-    void signatureAccess(request.signal).then(data => {
-      if (!request.signal.aborted) setAccess(data);
-    }).catch(reason => { if (!request.signal.aborted) setError(reason.message); });
     return () => {
-      request.abort();
       stampReload.current?.abort();
       operation.current?.abort();
     };
   }, []);
+
+  useEffect(() => {
+    if (inStampView) return;
+    const request = new AbortController();
+    void signatureAccess(request.signal).then(data => {
+      if (!request.signal.aborted) setAccess(data);
+    }).catch(reason => { if (!request.signal.aborted) setError(reason.message); });
+    return () => request.abort();
+  }, [inStampView]);
 
   useEffect(() => () => { if (source) disposeSignatureSource(source); }, [source]);
   useEffect(() => {
@@ -473,19 +478,19 @@ function SignatureEditor({ tool, stampTool, initialMode = 'create' }: SignatureE
         setSelectedAssetKey(signingAssetKey({ asset: 'stamp', signatureId: id }));
         if (useInDocument) setNotice('新印章已加入素材列表');
       }
-    }).catch(reason => { if (!request.signal.aborted) setError(reason.message); });
+    }).catch(reason => { if (!request.signal.aborted && (!inStampView || useInDocument)) setError(reason.message); });
   }
 
   const priceNote = (action: SignatureAction) => <span className="ds-cost">
     {access?.hasMembership ? t('有效套餐优先使用') : <><b>{estimate(action)}</b> {t('积分 / 次')}</>}
   </span>;
-  const signIn = <a className="ds-primary" href={accountLoginHref(tool.slug === 'handprint-maker' ? '/tools/handprint-maker.html' : signaturePage)}>{t('登录后使用')}</a>;
+  const signIn = <a className="ds-primary" href={accountLoginHref(tool.slug === 'handprint-maker' ? '/tools/handprint-maker.html' : tool.slug === 'stamp-maker' ? '/tools/stamp-maker.html' : signaturePage)}>{t('登录后使用')}</a>;
 
   return <div className="ds-workspace">
     <aside className="ds-sidebar">
       <div className="ds-brand">
         <DocumentCheckIcon aria-hidden="true" />
-        <h1>{t(tool.slug === 'handprint-maker' ? '手印制作' : '文件在线签名')}</h1>
+        <h1>{t(tool.slug === 'handprint-maker' || tool.slug === 'stamp-maker' ? tool.name : '文件在线签名')}</h1>
       </div>
       <nav className="ds-modes" aria-label={t('文件签名功能')}>
         {(['create', 'sign'] as const).map(action => <button type="button" key={action} aria-pressed={mode === action}
