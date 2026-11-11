@@ -9,6 +9,7 @@ import {
 import type { RenderTask } from 'pdfjs-dist';
 import { useI18n } from './language-provider';
 import { StampMaker } from './stamp-maker';
+import { SignatureViewport } from './signature-viewport';
 import { notifyAccountChanged, useAccount } from '../lib/account-client';
 import { accountLoginHref } from '../lib/account';
 import {
@@ -77,6 +78,8 @@ function SignatureEditor({ tool, stampTool }: SignatureEditorProps) {
   const [source, setSource] = useState<SignatureSource | null>(null);
   const [page, setPage] = useState(1);
   const [pdfSize, setPdfSize] = useState<PageSize | null>(null);
+  const [previewZoom, setPreviewZoom] = useState(1);
+  const [renderZoom, setRenderZoom] = useState(1);
   const [assetType, setAssetType] = useState<'signature' | 'stamp'>('signature');
   const [selectedAssetKey, setSelectedAssetKey] = useState('');
   const [placements, setPlacements] = useState<Placement[]>([]);
@@ -120,27 +123,42 @@ function SignatureEditor({ tool, stampTool }: SignatureEditorProps) {
   }, [mode]);
 
   useEffect(() => {
+    const timer = setTimeout(() => setRenderZoom(previewZoom), 150);
+    return () => clearTimeout(timer);
+  }, [previewZoom]);
+
+  useEffect(() => {
     if (source?.kind !== 'pdf' || mode !== 'sign') return;
     let active = true;
     let rendering: RenderTask | undefined;
     void (async () => {
+      let buffer: HTMLCanvasElement | undefined;
       try {
         const pdfPage = await source.pdf.getPage(page);
         const canvas = preview.current;
         if (!active || !canvas) return;
         const original = pdfPage.getViewport({ scale: 1 });
-        const viewport = pdfPage.getViewport({ scale: Math.min(2, 1400 / original.width, 1600 / original.height) });
-        canvas.width = Math.max(1, Math.ceil(viewport.width));
-        canvas.height = Math.max(1, Math.ceil(viewport.height));
-        rendering = pdfPage.render({ canvas, viewport, background: '#ffffff' });
+        const viewport = pdfPage.getViewport({ scale: Math.min(2 * renderZoom, 3000 / original.width,
+          4000 / original.height, Math.sqrt(6_000_000 / (original.width * original.height))) });
+        buffer = document.createElement('canvas');
+        buffer.width = Math.max(1, Math.ceil(viewport.width));
+        buffer.height = Math.max(1, Math.ceil(viewport.height));
+        rendering = pdfPage.render({ canvas: buffer, viewport, background: '#ffffff' });
         await rendering.promise;
-        if (active) setPdfSize({ page, width: viewport.width, height: viewport.height });
+        if (active && preview.current === canvas) {
+          canvas.width = buffer.width;
+          canvas.height = buffer.height;
+          canvas.getContext('2d')?.drawImage(buffer, 0, 0);
+          setPdfSize({ page, width: viewport.width, height: viewport.height });
+        }
       } catch {
         if (active) setError('PDF 页面预览失败，请切换页面或重新上传');
+      } finally {
+        if (buffer) { buffer.width = 0; buffer.height = 0; }
       }
     })();
     return () => { active = false; rendering?.cancel(); };
-  }, [mode, page, source]);
+  }, [mode, page, source, renderZoom]);
 
   const signatures = access?.signatures ?? [];
   const stamps: SigningChoice[] = (access?.stamps ?? []).map(stamp => ({
@@ -269,6 +287,8 @@ function SignatureEditor({ tool, stampTool }: SignatureEditorProps) {
         setSource(loaded);
         setPage(1);
         setPdfSize(null);
+        setPreviewZoom(1);
+        setRenderZoom(1);
         setPlacements([]);
         setActiveKey('');
         resetResult();
@@ -503,14 +523,8 @@ function SignatureEditor({ tool, stampTool }: SignatureEditorProps) {
                     onClick={() => { setPage(page + 1); setActiveKey(''); }}><ChevronRightIcon /></button>
                 </div> : <div>{source.width} × {source.height}</div>}
               </div>
-              <div className="ds-preview-surface">
-                <div ref={stage} tabIndex={-1} className="ds-page" style={{ aspectRatio: aspect, width: `min(100%, calc(var(--ds-preview-height) * ${aspect}))` }}
-                  onClick={event => {
-                    if (event.button !== 0) return;
-                    event.currentTarget.focus({ preventScroll: true });
-                    const bounds = event.currentTarget.getBoundingClientRect();
-                    place((event.clientX - bounds.left) / bounds.width, (event.clientY - bounds.top) / bounds.height);
-                  }}
+              <SignatureViewport aspect={aspect} zoom={previewZoom} onZoom={setPreviewZoom} pageRef={stage}
+                  onPlace={place} onGestureStart={() => { drag.current = null; }}
                   onDragOver={event => {
                     if (busy || !pageSize || placements.length >= signatureLimits.placements || !event.dataTransfer.types.includes(assetDragType)) return;
                     event.preventDefault();
@@ -531,8 +545,7 @@ function SignatureEditor({ tool, stampTool }: SignatureEditorProps) {
                       <img src={asset.previewUrl} alt="" draggable={false} />
                     </button>;
                   })}
-                </div>
-              </div>
+              </SignatureViewport>
             </> : <button type="button" className="ds-file-empty" disabled={busy} onClick={() => documentUpload.current?.click()}>
               <DocumentTextIcon aria-hidden="true" />
               <strong>{t('选择要签署的文件')}</strong>
