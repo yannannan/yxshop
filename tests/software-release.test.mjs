@@ -58,19 +58,32 @@ function fixture() {
 test('软件介绍只接受本地截图、有限长度与完整功能，EXE名称不能包含路径或控制字符', () => {
   const page = { ...spec.defaultSoftwarePage, features: [{ title: '清理', detail: '实际功能介绍', titleEn: '', detailEn: '' }], screenshots: [{ url: '/api/product-images?key=products%2Fphoto.png', caption: '首页', captionEn: '' }] };
   assert.equal(spec.parseSoftwarePage(page).features[0].title, '清理');
-  for (const url of ['https://example.com/a.png', 'javascript:alert(1)', '/api/product-images?key=products%2F..%2Fsecret.png']) assert.throws(() => spec.parseSoftwarePage({ ...page, screenshots: [{ ...page.screenshots[0], url }] }), /截图/);
+  assert.equal(spec.parseSoftwarePage(spec.defaultSoftwarePage).screenshots.length, 8);
+  for (const url of ['https://example.com/a.png', 'javascript:alert(1)', '/api/product-images?key=products%2F..%2Fsecret.png', '/software/c-drive-cleaner/../secret.png', '/software/c-drive-cleaner/unknown.png', '/software/c-drive-cleaner/overview.png?secret=1']) assert.throws(() => spec.parseSoftwarePage({ ...page, screenshots: [{ ...page.screenshots[0], url }] }), /截图/);
   assert.throws(() => spec.parseSoftwarePage({ ...page, features: [{ title: '', detail: '', titleEn: '', detailEn: '' }] }), /标题和说明/);
   for (const name of ['../app.exe', 'folder\\app.exe', 'app\r\n.exe', 'app.js']) assert.throws(() => spec.installerName(name));
   assert.equal(spec.installerName('宇星清理 (1).exe'), '宇星清理 (1).exe');
 });
 
+test('预置8个截图地址均指向项目内真实PNG资源，不依赖Temp目录或本机绝对路径', () => {
+  const urls = spec.defaultSoftwarePage.screenshots.map(shot => shot.url); assert.equal(new Set(urls).size, 8);
+  for (const url of urls) { assert.match(url, /^\/software\/c-drive-cleaner\/[a-z-]+\.png$/); const bytes = readFileSync(new URL('../public' + url, import.meta.url)); assert.ok(bytes.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10]))); assert.equal(bytes.readUInt32BE(16), 1920); assert.equal(bytes.readUInt32BE(20), 1009); }
+});
+
 test('未发布和缺表时宣传页可展示，草稿信息与云对象不会暴露给公开页面', async () => {
   const f = fixture(), id = await f.create('1.0'); await f.upload(id);
-  const view = await f.service.publicSoftware(77, true); assert.equal(view.release, null); assert.equal(view.versions.length, 0);
+  const view = await f.service.publicSoftware(77, true); assert.equal(view.release, null); assert.equal(view.versions.length, 0); assert.equal(view.page.screenshots.length, 8); assert.match(view.page.features[1].title, /磁盘分析/);
   const admin = await f.service.softwareAdmin(77); assert.equal(admin.releases.length, 1); assert.equal(admin.releases[0].status, 'draft'); assert.equal(JSON.stringify(admin).includes('object_json'), false);
   const missingDB = { prepare() { return { bind() { return this; }, async first() { throw Object.assign(Error('missing'), { code: 'ER_NO_SUCH_TABLE' }); } }; } };
   const service = load('../lib/software-release-service.ts', { '@/db/mysql-runtime': { env: { DB: missingDB } }, './software-storage.mjs': { softwareStorage: { ready: () => false } }, './software-release': spec });
   assert.equal((await service.publicSoftware(77, true)).release, null);
+});
+
+test('产品默认介绍按请求复制，保存自定义内容后不会被新预置资料覆盖', async () => {
+  const f = fixture(), first = await f.service.publicSoftware(77, true); first.page.features[0].title = '临时修改'; first.page.screenshots.pop();
+  const second = await f.service.publicSoftware(77, true); assert.equal(second.page.screenshots.length, 8); assert.notEqual(second.page.features[0].title, '临时修改');
+  const page = { ...spec.defaultSoftwarePage, headline: '定制标题', summary: '定制介绍', features: [], screenshots: [] }; await f.service.saveSoftwarePage(77, page);
+  const saved = await f.service.publicSoftware(77, true); assert.equal(saved.page.headline, '定制标题'); assert.deepEqual(Array.from(saved.page.screenshots), []); assert.equal((await f.service.softwareAdmin(77)).page.summary, '定制介绍');
 });
 
 test('创建、上传、发布分开执行；免费匿名下载签发有效地址并只增加请求量，不写积分', async () => {
@@ -206,6 +219,18 @@ function hooks() { const slots = []; let cursor = 0; return { slots, reset() { c
   useState(initial) { const i = cursor++; if (!(i in slots)) slots[i] = typeof initial === 'function' ? initial() : initial; return [slots[i], next => { slots[i] = typeof next === 'function' ? next(slots[i]) : next; }]; },
   useRef(initial) { const i = cursor++; return slots[i] ??= { current: initial }; }, useId: () => 'test-dialog', useCallback: fn => fn, useEffect() {},
 } }; }
+
+test('8张截图支持点击及方向键切换，完整图入口跟随当前图片与英文说明', () => {
+  const state = hooks(), component = load('../components/software-showcase.tsx', { react: state.react, './language-provider': { useI18n: () => ({ locale: 'en', t: value => softwareEnglish[value] || value }) } }); let tree, focused = -1;
+  function render() { state.reset(); tree = component.SoftwareShowcase({ screenshots: spec.defaultSoftwarePage.screenshots }); }
+  const tabs = () => nodes(tree).filter(node => node.props.role === 'tab');
+  render(); assert.equal(tabs().length, 8); assert.equal(tabs()[0].props.tabIndex, 0);
+  tabs()[4].props.onClick(); render(); assert.ok(nodes(tree).some(node => node.type === 'a' && node.props.href.endsWith('/cleanup.png')));
+  const key = value => ({ key: value, preventDefault() {}, currentTarget: { parentElement: { querySelectorAll: () => Array.from({ length: 8 }, (_, i) => ({ focus() { focused = i; } })) } } });
+  tabs()[4].props.onKeyDown(key('End')); render(); assert.equal(focused, 7); assert.equal(tabs()[7].props['aria-selected'], true);
+  tabs()[7].props.onKeyDown(key('ArrowRight')); render(); assert.equal(focused, 0); assert.equal(tabs()[0].props['aria-selected'], true);
+  tabs()[0].props.onKeyDown(key('ArrowLeft')); render(); assert.equal(focused, 7); assert.ok(nodes(tree).some(node => node.type === 'img' && node.props.alt === 'Tool service shortcuts'));
+});
 test('管理界面可创建草稿、上传中文文件名EXE并独立发布，上传前发布按钮禁用', async () => {
   const f = fixture(), state = hooks(); let tree, filePicker = 0;
   class Upload {
@@ -236,6 +261,11 @@ test('管理界面可创建草稿、上传中文文件名EXE并独立发布，�
   assert.equal(f.sqlite.prepare('SELECT status FROM tool_software_releases').get().status, 'draft', 'upload must not publish automatically');
   await button('发布').props.onClick(); for (let i = 0; i < 3; i++) await new Promise(resolve => setImmediate(resolve)); render();
   assert.equal(f.sqlite.prepare('SELECT status FROM tool_software_releases').get().status, 'published'); assert.ok(button('下架'));
+  await f.service.saveSoftwarePage(77, { ...spec.defaultSoftwarePage, headline: '已保存的定制标题', screenshots: [] });
+  button('宣传内容与截图').props.onClick(); render(); button('恢复预置内容').props.onClick(); render();
+  assert.equal((await f.service.softwareAdmin(77)).page.headline, '已保存的定制标题', 'loading defaults must not save without a separate click');
+  await button('保存产品介绍与截图').props.onClick(); for (let i = 0; i < 3; i++) await new Promise(resolve => setImmediate(resolve));
+  assert.equal((await f.service.softwareAdmin(77)).page.screenshots.length, 8);
 });
 
 test('下载按钮保留原生下载地址，正常点击先核验再转云附件；失败留在原页并显示回执', async () => {

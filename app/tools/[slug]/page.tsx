@@ -19,8 +19,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const slug = normalizedSlug(rawSlug);
   const tool = isToolSlug(slug) ? await getPublishedTool(slug) : null;
   if (!tool) return localizeMetadata({ title: '工具不存在｜宇星脉通', robots: { index: false, follow: false } });
-  const title = tool.seoTitle || (slug === 'c-drive-cleaner' ? 'C盘清理工具免费下载｜宇星脉通' : `${tool.name}｜宇星脉通`);
-  const description = tool.seoDescription || (slug === 'c-drive-cleaner' ? '软件产品介绍、界面预览与版本更新，免费获取最新发布的 Windows 安装包。' : slug === 'stamp-maker' ? '在线设计圆形、椭圆形、方形及姓名印章，实时预览，支持 256 至 4096 像素，可导出 PNG、JPG 及 SVG。支持按次、包月及包年套餐。' : slug === 'video-extractor' ? '解析抖音、快手、小红书、B站、Facebook 等公开视频分享链接及网页视频源，选择画质并提取下载。解析免费，生成文件成功后使用积分或套餐权益。' : tool.description || tool.detail.slice(0, 160));
+  const title = tool.seoTitle || (slug === 'c-drive-cleaner' ? '宇星磁盘管家｜免费C盘清理工具 - 宇星脉通' : `${tool.name}｜宇星脉通`);
+  const description = tool.seoDescription || (slug === 'c-drive-cleaner' ? '磁盘空间分析、C盘清理与残留项目扫描，了解宇星磁盘管家的功能和界面，免费下载安装包，无需登录商城。' : slug === 'stamp-maker' ? '在线设计圆形、椭圆形、方形及姓名印章，实时预览，支持 256 至 4096 像素，可导出 PNG、JPG 及 SVG。支持按次、包月及包年套餐。' : slug === 'video-extractor' ? '解析抖音、快手、小红书、B站、Facebook 等公开视频分享链接及网页视频源，选择画质并提取下载。解析免费，生成文件成功后使用积分或套餐权益。' : tool.description || tool.detail.slice(0, 160));
   const url = `${siteOrigin()}${toolPagePath(tool.slug)}`;
   return localizeMetadata({ title, description, alternates: { canonical: url }, openGraph: { title, description, url, type: 'website', images: tool.logo ? [tool.logo] : [] } });
 }

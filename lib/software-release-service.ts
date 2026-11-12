@@ -9,7 +9,7 @@ type Row = { id: string; product_id: number; version: string; supported_systems:
 const missing = (error: unknown) => (error as { code?: string })?.code === 'ER_NO_SUCH_TABLE';
 const activeUpload = (row: Row) => Boolean(row.upload_token && Date.parse(row.upload_started_at) > Date.now() - 1800000);
 function publicRelease(row: Row): SoftwareRelease { return { id: row.id, version: row.version, systems: row.supported_systems, notes: row.release_notes, status: row.status, fileName: row.file_name, fileSize: Number(row.file_size), sha256: row.sha256, createdAt: row.created_at, publishedAt: row.published_at, downloads: Number(row.download_requests), uploading: activeUpload(row) }; }
-function content(value: string | undefined): SoftwarePage { return value ? parseSoftwarePage(JSON.parse(value)) : { ...defaultSoftwarePage, features: [], screenshots: [] }; }
+function content(value: string | undefined): SoftwarePage { return parseSoftwarePage(value ? JSON.parse(value) : defaultSoftwarePage); }
 async function tool(db: PointsDatabase, id: number, lock = false) {
   const row = await db.prepare("SELECT id,name,status,tool_charge_type FROM products WHERE id=? AND product_type='tool' AND tool_slug=?" + (lock ? ' FOR UPDATE' : '')).bind(id, softwareToolSlug).first<Tool>();
   if (!row) throw new SoftwareError('软件工具不存在', 404); return row;
