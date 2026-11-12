@@ -184,7 +184,7 @@ test('管理界面显示手印、上下移动与全量排序保存，手印价�
   const hooks = { ...React, useState(initial) { const i = cursor++; if (!(i in slots)) slots[i] = typeof initial === 'function' ? initial() : initial; return [slots[i], next => { slots[i] = typeof next === 'function' ? next(slots[i]) : next; }]; }, useEffect() {}, useCallback: fn => fn };
   function Prices() {}
   const f = fixture(), tools = entries.toolEntryRows(rows, [], 7);
-  const component = load('../components/admin-tool-management.tsx', { react: hooks, 'next/image': () => null, 'next/link': () => null, '../lib/tool-services': toolServices, './admin-tool-payment': { ToolPaymentConfig() {} }, './tool-points-editor': { ToolPointsEditor: Prices }, './admin-tool-statistics': { ToolStatistics() {} } }, {
+  const component = load('../components/admin-tool-management.tsx', { react: hooks, 'next/image': () => null, 'next/link': () => null, '../lib/tool-services': toolServices, './admin-tool-payment': { ToolPaymentConfig() {} }, './tool-points-editor': { ToolPointsEditor: Prices }, './admin-tool-statistics': { ToolStatistics() {} }, './admin-software-publishing': { SoftwarePublishing() {} } }, {
     fetch: async (url, options) => { if (options?.method === 'POST') { requests.push(JSON.parse(options.body)); return f.entryRoute().POST(post(url, requests.at(-1))); } return f.entryRoute().GET(new Request('http://localhost' + url)); },
   });
   function render() { cursor = 0; tree = component.ToolManagement({ onCreateClose() {} }); }

@@ -1,6 +1,7 @@
 import { imageActions } from './image-tool';
 import { isWebsiteAnalysis } from './tool-services';
 export function toolFeatures(slug: string): Record<string, string> {
+  if (slug === 'c-drive-cleaner') return { download: '软件下载' };
   if (slug === 'image-processor') return imageActions;
   if (slug === 'document-signature') return { create: '制作签名', sign: '签署文件' };
   if (slug === 'handprint-maker') return { handprint: '手印制作' };

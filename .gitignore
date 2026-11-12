@@ -13,5 +13,6 @@
 *.pem
 /vendor/video-engine/
 /uploads/video-extractions/
+/uploads/software-staging/
 /.site-analysis-worker.pid
 /site-analysis-worker.log

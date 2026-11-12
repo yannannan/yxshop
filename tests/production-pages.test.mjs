@@ -43,6 +43,7 @@ const rows = [
   { id: 35, name: '链接视频提取工具', tool_slug: 'video-extractor' },
   { id: 37, name: '印章在线制作', tool_slug: 'stamp-maker' },
   { id: 50, name: '站长分析工具', tool_slug: 'webmaster-tools' },
+  { id: 77, name: '免费C盘清理工具', tool_slug: 'c-drive-cleaner' },
   { id: 80, name: '图片在线处理', tool_slug: 'image-processor' },
   { id: 91, name: '文件在线签名', tool_slug: 'document-signature' },
 ].map(row => ({ ...row, description: '公开工具介绍', detail: '使用说明', tool_charge_type: 'free', entry_configured: 1, updated_at: '2026-10-24T00:00:00Z' }));
@@ -50,6 +51,7 @@ let queries = 0;
 // 只允许页面读取模拟的公开工具数据；没有真实连接或写业务数据库。
 mysql.createPool = () => ({ async execute(sql, values = []) {
   if (sql.startsWith('SELECT tool_slug,sort_order,enabled FROM tool_entry_settings')) return [[]];
+  if (sql.startsWith('SELECT ') && (sql.includes('FROM tool_software_pages') || sql.includes('FROM tool_software_releases'))) return [[]];
   if (sql.startsWith('SELECT ') && sql.includes('FROM site_analysis_integrations i')) { queries++; return [[{ site_id: '22222222-2222-4222-8222-222222222222', script_token: 'a'.repeat(64), user_id: 1, verified_at: '2026-10-26', host: 'example.org' }]]; }
   const publicTool = sql.includes("FROM products WHERE product_type='tool' AND status='active'") ||
     sql.includes("WHERE tool_slug=? AND product_type='tool' AND status='active'");
@@ -88,6 +90,7 @@ for (const spec of ${JSON.stringify(paths)}) {
   const trackerSource = 'https://www.yxstar.shop/s/RDYfVdtkRd-iXLHGxvrdEA';
   const trackerTags = [...html.matchAll(/<script[^>]*>/g)].filter(match => match[0].includes('src="' + trackerSource + '"'));
   pages.push({ path, script: (path.startsWith('/api/site-tracker/') || path.startsWith('/s/')) && response.status === 200 ? html : undefined, siteTrackerCount: trackerTags.length, siteTrackerInHead: trackerTags.every(match => match.index < html.indexOf('</head>')), siteTrackerSkipsAdmin: trackerTags.every(match => match[0].includes('data-exclude-path="/admin"')), status: response.status, failed: html.includes('This page couldn'), hasBrand: html.includes('宇星脉通'), hasVideoForm: html.includes('粘贴视频链接'), hasStampPreview: html.includes('效果预览'), language: /<html[^>]*lang="([^"]+)"/.exec(html)?.[1], hasImageWorkspace: html.includes('ip-workspace'), englishImage: html.includes('Online Image Editor'), englishNav: html.includes('AI Digital Services'), englishPoints: html.includes('One balance. Many possibilities.'), englishStamp: html.includes('Design Your Stamp'), englishVideo: html.includes('Paste a Video Link'), chineseAdmin: html.includes('正在验证管理权限'), wordReady: html.includes('"wordReady":true') });
+  if (path.startsWith('/tools/c-drive-cleaner.html')) Object.assign(pages.at(-1), { cleaner: html.includes('class="cleaner-site"'), pending: html.includes('版本即将发布'), englishCleaner: html.includes('Coming soon') && html.includes('A little more room. A lighter C: drive.'), genericLaunch: html.includes('进入工具'), unsafeClaim: html.includes('100%释放'), disabledDownload: html.includes('class="cleaner-download" disabled=""'), canonical: html.includes('https://www.yxstar.shop/tools/c-drive-cleaner.html') });
   if (stampSidebar) Object.assign(pages.at(-1), { menu: stampMenu, stampActive: /id="ds-stamp-maker" aria-labelledby/.test(html), structuredData: html.includes('application/ld+json'), embeddedStamp: html.includes('stamp-signature-view') });
 }
 console.log(JSON.stringify({ pages, errors, queries }));
@@ -97,6 +100,13 @@ console.log(JSON.stringify({ pages, errors, queries }));
 }
 
 const needsBuild = !existsSync(entry) ? '请先执行 pnpm build 生成生产包' : false;
+
+test('C盘清理独立软件页生产中英文渲染，待发布不可下载，发布接口仅管理员访问', { skip: needsBuild }, async () => {
+  const result = await renderPages(['/tools/c-drive-cleaner.html', { path: '/tools/c-drive-cleaner.html', locale: 'en' }, '/api/admin/software?tool=77', { path: '/api/admin/software/upload?tool=77', method: 'POST' }, '/api/tools/software/download?release=bad', '/api/tools/software/download?release=11111111-1111-4111-8111-111111111111', { path: '/api/tools/software/download', method: 'HEAD' }]);
+  assert.deepEqual(result.errors, []); assert.deepEqual(result.pages.map(page => page.status), [200,200,403,403,404,404,405]);
+  for (const page of result.pages.slice(0, 2)) { assert.equal(page.cleaner, true); assert.equal(page.genericLaunch, false); assert.equal(page.unsafeClaim, false); assert.equal(page.disabledDownload, true); assert.equal(page.canonical, true); }
+  assert.equal(result.pages[0].pending, true); assert.equal(result.pages[1].englishCleaner, true); assert.equal(result.pages[1].language, 'en');
+});
 
 test('生产长短接入脚本可独立运行并去重，不依赖构建闭包、商城登录或内部HTTP地址', { skip: needsBuild }, async () => {
   const paths=['/s/IiIiIiIiQiKCIiIiIiIiIg','/api/site-tracker/'+'a'.repeat(64)],result=await renderPages(paths);

@@ -7,6 +7,7 @@ import { builtInToolEntry, readToolPlans, toolBillingLabels, toolPlanKey, toolPl
 import { ToolPaymentConfig } from './admin-tool-payment';
 import { ToolPointsEditor } from './tool-points-editor';
 import { ToolStatistics } from './admin-tool-statistics';
+import { SoftwarePublishing } from './admin-software-publishing';
 
 type Row = Record<string, string | number | null>;
 type Form = { id?: number; name: string; slug: string; description: string; detail: string; logo: string; entryUrl: string; chargeType: ToolChargeType; price: string; pointsCost: string; plans: { cycle: ToolBillingCycle; price: string; key?: string; name?: string }[]; seoTitle: string; seoDescription: string; status: string };
@@ -31,6 +32,7 @@ export function ToolManagement({ autoCreate = false, initialDraft, onCreateClose
   const [sorts, setSorts] = useState<Record<string, string>>({});
   const [sorting, setSorting] = useState(false);
   const [sortingReady, setSortingReady] = useState(true);
+  const [softwareId, setSoftwareId] = useState(0);
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -109,11 +111,12 @@ export function ToolManagement({ autoCreate = false, initialDraft, onCreateClose
       <td>{builtInToolEntry(value(tool.tool_slug)) ? '内置功能' : tool.tool_url ? '已配置' : '待配置'}</td>
       <td><span className={`status ${tool.status === 'active' ? 'active' : 'inactive'}`}>{tool.module_key === 'handprint' && tool.owner_status !== 'active' ? '主工具已停用' : tool.status === 'active' ? '已启用' : '已停用'}</span></td>
       <td><div className="tool-admin-actions">{tool.module_key === 'handprint' ? <button className="text-action" onClick={() => { const owner = tools.find(row => row.tool_slug === 'document-signature'); if (owner) edit(owner); }}>所属工具配置</button> : <button className="text-action" onClick={() => edit(tool)}>编辑 / 收款配置</button>}
-        <button className="text-action" onClick={() => { setPricingModule(value(tool.module_key)); setPricingId(Number(tool.id)); }}>积分配置</button><button className="text-action" onClick={() => void changeStatus(tool)}>{tool.module_key === 'handprint' ? tool.entry_enabled ? '停用入口' : '启用入口' : tool.status === 'active' ? '停用' : '启用'}</button></div></td>
+        {tool.tool_slug === 'c-drive-cleaner' && <button className="text-action" onClick={() => setSoftwareId(Number(tool.id))}>软件发布</button>}<button className="text-action" onClick={() => { setPricingModule(value(tool.module_key)); setPricingId(Number(tool.id)); }}>积分配置</button><button className="text-action" onClick={() => void changeStatus(tool)}>{tool.module_key === 'handprint' ? tool.entry_enabled ? '停用入口' : '启用入口' : tool.status === 'active' ? '停用' : '启用'}</button></div></td>
     </tr>)}</tbody></table>{!loading && !visible.length && <p className="tool-directory-empty">暂无工具，请添加或执行初始化 SQL。</p>}</div>
     </section>
     {tab === 'statistics' && <section id="tools-stats-panel" role="tabpanel" aria-labelledby="tools-stats-tab"><ToolStatistics /></section>}
     {pricingId > 0 && <ToolPointsEditor id={pricingId} moduleKey={pricingModule} onClose={() => setPricingId(0)} onSaved={() => { setNotice('积分配置已保存'); void load(); }} />}
+    {softwareId > 0 && <SoftwarePublishing id={softwareId} onClose={() => setSoftwareId(0)} />}
     {form && <div className="admin-modal-mask"><section className="admin-modal tool-editor-modal product-editor-modal" role="dialog" aria-modal="true" aria-labelledby="tool-editor-title"><div className="editor-head"><div><span className="section-kicker">TOOL SERVICE</span><b id="tool-editor-title">{form.id ? '编辑工具' : '添加工具'}</b></div><button className="modal-close" disabled={saving || uploading} onClick={close} aria-label="关闭工具编辑">×</button></div>
       <div className="tool-editor-section"><h3>入口展示</h3><div className="tool-editor-grid">
         <label>工具名称<input autoFocus value={form.name} onChange={event => setForm({ ...form, name: event.target.value })} /></label>

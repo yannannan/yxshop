@@ -6,6 +6,12 @@ export const toolEntrySettings = sqliteTable('tool_entry_settings', {
   toolSlug: text('tool_slug').primaryKey(), sortOrder: integer('sort_order').notNull().default(0),
   enabled: integer('enabled').notNull().default(1), updatedAt: text('updated_at').notNull(),
 });
+export const toolSoftwarePages = sqliteTable('tool_software_pages', { productId: integer('product_id').primaryKey(), contentJson: text('content_json').notNull(), updatedAt: text('updated_at').notNull() });
+export const toolSoftwareReleases = sqliteTable('tool_software_releases', {
+  id: text('id').primaryKey(), productId: integer('product_id').notNull(), version: text('version').notNull(), supportedSystems: text('supported_systems').notNull(), releaseNotes: text('release_notes').notNull(),
+  status: text('status').notNull().default('draft'), fileName: text('file_name').notNull().default(''), fileSize: integer('file_size').notNull().default(0), sha256: text('sha256').notNull().default(''), objectJson: text('object_json').notNull(),
+  uploadToken: text('upload_token').notNull().default(''), uploadStartedAt: text('upload_started_at').notNull().default(''), createdBy: integer('created_by').notNull(), createdAt: text('created_at').notNull(), updatedAt: text('updated_at').notNull(), publishedAt: text('published_at').notNull().default(''), downloadRequests: integer('download_requests').notNull().default(0),
+}, table => [uniqueIndex('uk_software_version').on(table.productId, table.version), index('idx_software_product').on(table.productId, table.status, table.publishedAt)]);
 export const toolActivityEvents = sqliteTable('tool_activity_events', {
   id: text('id').primaryKey(), toolSlug: text('tool_slug').notNull(), moduleKey: text('module_key').notNull().default(''),
   eventType: text('event_type').notNull(), userId: integer('user_id'), sessionHash: text('session_hash').notNull(), createdAt: text('created_at').notNull(),
