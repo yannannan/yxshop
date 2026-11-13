@@ -16,11 +16,16 @@ export async function DiskCleanerLanding({ tool }: { tool: ToolService }) {
   const summary = business(page.summary, page.summaryEn) || business(defaultSoftwarePage.summary, defaultSoftwarePage.summaryEn);
   const features = (page.features.length ? page.features : defaultSoftwarePage.features).map(row => ({ title: business(row.title, row.titleEn), detail: business(row.detail, row.detailEn) }));
   const icons = [ComputerDesktopIcon, MagnifyingGlassIcon, SparklesIcon, ShieldCheckIcon];
-  const stories = [
+  const interfaceDetails = [
+    { image: 'overview', title: t('系统状态与清理进展，集中掌握。'), detail: t('系统与设备信息、C盘释放记录，以及各块磁盘的容量概况集中展示。'), points: [t('查看系统与设备摘要'), t('了解近期C盘释放记录'), t('从总览切换到磁盘分析')] },
+    { image: 'disks', title: t('各块磁盘的使用情况，一眼可比。'), detail: t('用容量卡片和环形图，直观对比已用空间与剩余空间。'), points: [t('查看每块磁盘的总容量'), t('对比已用与剩余空间'), t('选择需要进一步分析的磁盘')] },
     { image: 'analysis', label: t('磁盘分析'), title: t('空间用在哪里，一眼看明白。'), detail: t('从整块磁盘到具体文件，用分类图表和列表梳理空间占用。'), points: [t('按空间分类与文件类型查看占用'), t('选择大文件阈值，定位需要关注的文件'), t('扫描结果可导出为 HTML 报告')] },
+    { image: 'file-report', title: t('从文件类型，找到需要关注的大文件。'), detail: t('结合文件类型排行与大文件列表，进一步了解磁盘占用来源。'), points: [t('查看文件类型占用排行'), t('按阈值列出大文件'), t('核对文件路径、大小与修改时间')] },
     { image: 'cleanup', label: t('C盘清理'), title: t('先分析，再决定清理哪些。'), detail: t('临时文件、应用缓存与需要确认的项目分开展示，把整理的选择留给你。'), points: [t('先查看分析结果，再勾选清理项目'), t('区分可清理缓存与需要确认的内容'), t('查看项目路径，了解文件来自哪里')] },
     { image: 'residuals', label: t('残留清理'), title: t('整理安装与卸载后留下的痕迹。'), detail: t('扫描更新、安装和应用使用留下的残留项目，逐项确认后再处理。'), points: [t('残留项目默认不勾选，按需选择'), t('查看项目说明、占用大小与所在位置'), t('已选残留项目按软件提示移入回收站')] },
-  ].map(row => ({ ...row, shot: page.screenshots.find(shot => shot.url === `/software/c-drive-cleaner/${row.image}.png`) })).filter(row => row.shot);
+    { image: 'ai-mall', title: t('磁盘整理之外，服务一处直达。'), detail: t('在软件内浏览宇星脉通的数字服务与实用工具，也可切换到浏览器查看。'), points: [t('软件内浏览商城内容'), t('查找数字服务与实用工具'), t('支持在浏览器中打开')] },
+    { image: 'ai-tools', title: t('常用工具入口，随时发现。'), detail: t('在工具服务中查看清理、视频提取、文件签名等工具介绍，按需进入对应服务。'), points: [t('查看工具简介与使用方式'), t('按需进入工具服务'), t('各工具详情独立展示')] },
+  ].map(({ image, title, detail, points }) => ({ url: `/software/c-drive-cleaner/${image}.png`, title, detail, points })).filter(row => page.screenshots.some(shot => shot.url === row.url));
   const schema = { '@context': 'https://schema.org', '@type': 'SoftwareApplication', name: t('宇星磁盘管家'), applicationCategory: 'UtilitiesApplication', url: `${siteOrigin()}${toolPagePath(tool.slug)}`, description: summary,
     ...(release ? { softwareVersion: release.version, operatingSystem: release.systems, ...(downloadReady ? { downloadUrl: `${siteOrigin()}${softwareDownloadPath(release.id)}` } : {}) } : {}),
     ...(tool.chargeType === 'free' ? { offers: { '@type': 'Offer', price: 0, priceCurrency: 'CNY' } } : {}), publisher: { '@type': 'Organization', name: '宇星脉通' } };
@@ -39,9 +44,8 @@ export async function DiskCleanerLanding({ tool }: { tool: ToolService }) {
       </div></div></section>
       <div className="cleaner-product-strip"><span><MagnifyingGlassIcon aria-hidden="true" />{t('磁盘分析')}</span><span><SparklesIcon aria-hidden="true" />{t('C盘清理')}</span><span><ShieldCheckIcon aria-hidden="true" />{t('残留清理')}</span><span><ComputerDesktopIcon aria-hidden="true" />Windows EXE</span></div>
       <section className="cleaner-section" id="features"><div className="cleaner-section-heading"><span>{t('产品功能')}</span><h2>{t('磁盘整理，从看清占用开始。')}</h2><p>{t('分析、查看、选择、清理，每一步都有依据。')}</p></div><div className="cleaner-feature-grid">{features.map((row, index) => { const Icon = icons[index % icons.length]; return <article key={index}><span className="cleaner-feature-icon"><Icon aria-hidden="true" /></span><h3>{row.title}</h3><p>{row.detail}</p></article>; })}</div></section>
-      {stories.length > 0 && <section className="cleaner-stories" aria-label={t('功能详解')}>{stories.map((row, index) => <article className="cleaner-story" key={row.image}><div className="cleaner-story-copy"><span className="cleaner-story-label"><b>0{index + 1}</b>{row.label}</span><h2>{row.title}</h2><p>{row.detail}</p><ul>{row.points.map(point => <li key={point}><CheckIcon aria-hidden="true" />{point}</li>)}</ul></div><figure><img src={row.shot!.url} alt={business(row.shot!.caption, row.shot!.captionEn)} width="1920" height="1009" loading="lazy" /><figcaption>{business(row.shot!.caption, row.shot!.captionEn)}</figcaption></figure></article>)}</section>}
       <section className="cleaner-preview-section" id="screenshots"><div className="cleaner-section-heading"><span>{t('界面预览')}</span><h2>{t('真实界面，提前了解。')}</h2><p>{t('从首页到清理项目，查看宇星磁盘管家的实际功能。')}</p></div>
-        {page.screenshots.length ? <SoftwareShowcase screenshots={page.screenshots} /> : <div className="cleaner-preview-pending"><img src="/tool-logos/c-drive-cleaner-sky.svg" width="80" height="80" alt="" /><strong>{t('软件界面截图即将上线')}</strong><p>{t('产品截图将在这里展示。')}</p></div>}
+        {page.screenshots.length ? <SoftwareShowcase screenshots={page.screenshots} details={interfaceDetails} /> : <div className="cleaner-preview-pending"><img src="/tool-logos/c-drive-cleaner-sky.svg" width="80" height="80" alt="" /><strong>{t('软件界面截图即将上线')}</strong><p>{t('产品截图将在这里展示。')}</p></div>}
       </section>
       <section className="cleaner-section cleaner-get-started"><div className="cleaner-section-heading"><span>{t('开始使用')}</span><h2>{t('三步，开始磁盘整理。')}</h2></div><div className="cleaner-steps">{[[t('获取安装包'), t('免费下载安装包，无需登录商城。')], [t('选择磁盘分析'), t('在软件中选择磁盘，查看空间分布与扫描结果。')], [t('确认后再清理'), t('查看项目说明与路径，勾选需要整理的项目。')]].map(([title, detail], index) => <article key={title}><b>0{index + 1}</b><div><h3>{title}</h3><p>{detail}</p></div></article>)}</div></section>
       <section className="cleaner-section cleaner-versions" id="versions"><div className="cleaner-section-heading cleaner-heading-inline"><div><span>{t('版本更新')}</span><h2>{t('每一次更新，都在这里。')}</h2></div><span className="cleaner-version-caption">{t('宇星磁盘管家')}</span></div>
