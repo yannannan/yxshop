@@ -410,21 +410,18 @@ test('首页有有效管理员 Cookie 保留角色和页脚管理入口；全部
   assert.ok(html.includes('管理后台'));assert.equal(elements(host.render()).find(node => node.type === storefrontHeader.StorefrontHeader).props.isAdmin,true);assert.equal((html.match(/class="product-card refined-card"/g)||[]).length,24);assert.equal((html.match(/class="tool-entry-card"/g)||[]).length, 8);
 });
 
-test('手机访问二维码使用固定商城地址并默认展开，打开客服暂时避让，关闭客服恢复', () => {
+test('首页不再重复渲染手机二维码，独立的客服面板仍可打开和关闭', () => {
   const host = storefrontHost();
   let tree = host.render();
-  const qr = elements(tree).find(node => node.type === 'details' && node.props.className === 'mobile-access-floating');
-  assert.equal(qr.props.open, true);
-  const link = elements(qr).find(node => node.type === 'a');
-  assert.equal(link.props.href, 'https://www.yxstar.shop'); assert.equal(link.props.rel, 'noopener noreferrer');
-  const image = elements(qr).find(node => node.props.src === '/mobile-access-qr.png');
-  assert.equal(image.props.width, 148); assert.equal(image.props.height, 148); assert.ok(markup(qr).includes('扫码手机端访问'));
+  assert.ok(!markup(tree).includes('/mobile-access-qr.png'));
   elements(tree).find(node => node.type === 'button' && node.props.className === 'service-float').props.onClick();
   tree = host.render();
   assert.ok(!elements(tree).some(node => node.props.className === 'mobile-access-floating'));
   assert.ok(markup(tree).includes('/customer-service-wechat.png'));
   elements(tree).find(node => node.type === 'button' && node.props.className === 'service-float').props.onClick();
-  assert.ok(elements(host.render()).some(node => node.props.className === 'mobile-access-floating'));
+  tree = host.render();
+  assert.ok(!markup(tree).includes('/customer-service-wechat.png'));
+  assert.ok(!markup(tree).includes('/mobile-access-qr.png'));
 });
 test('商品接口 HTTP 500 时首页明确提示读取失败，不能静默显示成只有工具',async()=>{
   const host=storefrontHost({window:{localStorage:{getItem:()=>null},location:{search:'',hash:''}},fetch:async url=>url==='/api/products'?new Response('server error',{status:500}):Response.json(url==='/api/tools'?tools:url==='/api/auth/session'?{authenticated:false}:[])});

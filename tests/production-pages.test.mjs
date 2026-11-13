@@ -79,17 +79,18 @@ for (const spec of ${JSON.stringify(paths)}) {
     continue;
   }
   const html = await response.text();
+  const mobileAccessCount = (html.match(/data-mobile-access="true"/g) || []).length;
   const stampSidebar = path.startsWith('/tools/stamp-maker.html') ? html.match(/<aside class="ds-sidebar">.*?<\\/aside>/s)?.[0] || '' : '';
   const stampMenu = [...stampSidebar.matchAll(/<button[^>]*aria-pressed="(true|false)"[^>]*>.*?<span>([^<]+)<\\/span><\\/button>/gs)].map(match => match.slice(1));
   if (path === '/tools/document-signature.html' || path === '/tools/handprint-maker.html') {
     const sidebar = html.match(/<aside class="ds-sidebar">.*?<\\/aside>/s)?.[0] || '';
     const menu = [...sidebar.matchAll(/<button[^>]*aria-pressed="(true|false)"[^>]*>.*?<span>([^<]+)<\\/span><\\/button>/gs)];
-    pages.push({ status: response.status, menu: menu.map(match => match.slice(1)), sidebarBeforeMain: !!sidebar && html.indexOf(sidebar) < html.indexOf('<main class="ds-main"'), hasCanvas: html.includes('id="ds-draw-heading"'), stampInactive: html.includes('id="ds-stamp-maker" hidden=""') });
+    pages.push({ path, mobileAccessCount, status: response.status, menu: menu.map(match => match.slice(1)), sidebarBeforeMain: !!sidebar && html.indexOf(sidebar) < html.indexOf('<main class="ds-main"'), hasCanvas: html.includes('id="ds-draw-heading"'), stampInactive: html.includes('id="ds-stamp-maker" hidden=""') });
     continue;
   }
   const trackerSource = 'https://www.yxstar.shop/s/RDYfVdtkRd-iXLHGxvrdEA';
   const trackerTags = [...html.matchAll(/<script[^>]*>/g)].filter(match => match[0].includes('src="' + trackerSource + '"'));
-  pages.push({ path, script: (path.startsWith('/api/site-tracker/') || path.startsWith('/s/')) && response.status === 200 ? html : undefined, siteTrackerCount: trackerTags.length, siteTrackerInHead: trackerTags.every(match => match.index < html.indexOf('</head>')), siteTrackerSkipsAdmin: trackerTags.every(match => match[0].includes('data-exclude-path="/admin"')), status: response.status, failed: html.includes('This page couldn'), hasBrand: html.includes('宇星脉通'), hasVideoForm: html.includes('粘贴视频链接'), hasStampPreview: html.includes('效果预览'), language: /<html[^>]*lang="([^"]+)"/.exec(html)?.[1], hasImageWorkspace: html.includes('ip-workspace'), englishImage: html.includes('Online Image Editor'), englishNav: html.includes('AI Digital Services'), englishPoints: html.includes('One balance. Many possibilities.'), englishStamp: html.includes('Design Your Stamp'), englishVideo: html.includes('Paste a Video Link'), chineseAdmin: html.includes('正在验证管理权限'), wordReady: html.includes('"wordReady":true') });
+  pages.push({ path, mobileAccessCount, script: (path.startsWith('/api/site-tracker/') || path.startsWith('/s/')) && response.status === 200 ? html : undefined, siteTrackerCount: trackerTags.length, siteTrackerInHead: trackerTags.every(match => match.index < html.indexOf('</head>')), siteTrackerSkipsAdmin: trackerTags.every(match => match[0].includes('data-exclude-path="/admin"')), status: response.status, failed: html.includes('This page couldn'), hasBrand: html.includes('宇星脉通'), hasVideoForm: html.includes('粘贴视频链接'), hasStampPreview: html.includes('效果预览'), language: /<html[^>]*lang="([^"]+)"/.exec(html)?.[1], hasImageWorkspace: html.includes('ip-workspace'), englishImage: html.includes('Online Image Editor'), englishNav: html.includes('AI Digital Services'), englishPoints: html.includes('One balance. Many possibilities.'), englishStamp: html.includes('Design Your Stamp'), englishVideo: html.includes('Paste a Video Link'), chineseAdmin: html.includes('正在验证管理权限'), wordReady: html.includes('"wordReady":true') });
   if (path.startsWith('/tools/c-drive-cleaner.html')) Object.assign(pages.at(-1), { cleaner: html.includes('class="cleaner-site"'), pending: html.includes('版本即将发布'), englishCleaner: html.includes('Coming soon') && html.includes('Free C: drive cleanup') && html.includes('Yuxing Disk Manager'), genericLaunch: html.includes('class="tool-detail"'), requestedHero: html.includes('class="cleaner-hero-title"') && html.includes('class="cleaner-hero-tagline"') && (html.includes('免费C盘清理100%释放') || html.includes('Free C: drive cleanup · 100% space release')), sharedNav: html.includes('unified-topbar') && html.includes('href="/ai-leads"') && html.includes('href="/?channel=technical#channel-content"') && html.includes('storefront-account-actions') && !html.includes('class="cleaner-header"'), disabledDownload: html.includes('class="cleaner-download" disabled=""'), canonical: html.includes('https://www.yxstar.shop/tools/c-drive-cleaner.html'), screenshots: (html.match(/role="tab"[^>]*aria-selected=/g) || []).length, heroCarousel: html.includes('cleaner-showcase cleaner-showcase-hero'), hasDetails: html.includes('class="cleaner-carousel-detail"'), hasCarousel: html.includes('class="cleaner-carousel-viewport"') && (html.includes('暂停轮播') || html.includes('Pause slideshow')), stackedStories: html.includes('class="cleaner-story"'), loginFree: html.includes('免登录下载') || html.includes('No login to download') });
   if (stampSidebar) Object.assign(pages.at(-1), { menu: stampMenu, stampActive: /id="ds-stamp-maker" aria-labelledby/.test(html), structuredData: html.includes('application/ld+json'), embeddedStamp: html.includes('stamp-signature-view') });
 }
@@ -100,6 +101,15 @@ console.log(JSON.stringify({ pages, errors, queries }));
 }
 
 const needsBuild = !existsSync(entry) ? '请先执行 pnpm build 生成生产包' : false;
+
+test('全局手机入口在首页、目录、账户和独立工具只显示一次，后台不展示', { skip: needsBuild }, async () => {
+  const result = await renderPages(['/', '/tools', '/account', '/checkout/test-order', '/tools/image-processor.html', '/tools/document-signature.html', '/tools/handprint-maker.html', '/tools/c-drive-cleaner.html', '/admin']);
+  assert.deepEqual(result.errors, []);
+  for (const page of result.pages) {
+    assert.equal(page.status, 200, page.path);
+    assert.equal(page.mobileAccessCount, page.path === '/admin' ? 0 : 1, page.path);
+  }
+});
 
 test('生产聊天附件与发送接口可加载，匿名客户/技术人员/管理员均不能读取或发送', { skip: needsBuild }, async () => {
   const result=await renderPages(['/api/technical-chat/attachment?audience=customer&message=1&file=test','/api/technical-chat/attachment?audience=admin&message=1&file=test','/api/technical-chat/attachment?audience=technician&message=1&file=test',{path:'/api/technical-chat/messages?audience=customer',method:'POST'},{path:'/api/technical-chat/messages?audience=admin',method:'POST'}]);

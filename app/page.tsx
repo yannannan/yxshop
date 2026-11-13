@@ -657,19 +657,6 @@ export default function StorePage() {
       />
 
       <div className="service-widget">
-        {!serviceOpen && <details className="mobile-access-floating" open>
-          <summary title={t("展开或收起手机访问二维码")}>
-            <Image unoptimized src="/tool-icons/mobile-access.svg" alt="" width={20} height={20} />
-            <b>{t("扫码手机端访问")}</b>
-            <Image unoptimized className="mobile-access-toggle" src="/tool-icons/chevron-down.svg" alt="" width={13} height={13} />
-          </summary>
-          <div className="mobile-access-code">
-            <a href="https://www.yxstar.shop" target="_blank" rel="noopener noreferrer" aria-label={t("打开宇星脉通首页")}>
-              <Image unoptimized src="/mobile-access-qr.png" alt={t("扫码访问宇星脉通手机端")} width={148} height={148} />
-            </a>
-            <span>www.yxstar.shop</span>
-          </div>
-        </details>}
         {serviceOpen && (
           <section
             className="service-panel"
