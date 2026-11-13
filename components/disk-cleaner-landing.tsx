@@ -37,8 +37,9 @@ export async function DiskCleanerLanding({ tool }: { tool: ToolService }) {
         <div className="cleaner-release-meta">{release ? <><span>v{release.version}</span><i /><span>{softwareSize(release.fileSize)}</span><i /><span>{release.systems}</span></> : <span>{t('首个版本正在准备中，发布后即可下载。')}</span>}</div>
         <div className="cleaner-hero-badges">{[t('免登录下载'), t('Windows应用'), t('不扣商城积分')].map(label => <span key={label}><CheckIcon aria-hidden="true" />{label}</span>)}</div>
       </div><div className="cleaner-hero-visual">{heroScreenshots.length ? <SoftwareShowcase screenshots={heroScreenshots} variant="hero" /> : <DiskIllustration label={t('C盘空间整理')} />}
-      </div></div></section>
+      </div>
       <div className="cleaner-product-strip"><span><MagnifyingGlassIcon aria-hidden="true" />{t('磁盘分析')}</span><span><SparklesIcon aria-hidden="true" />{t('C盘清理')}</span><span><ShieldCheckIcon aria-hidden="true" />{t('残留清理')}</span><span><ComputerDesktopIcon aria-hidden="true" />Windows EXE</span></div>
+      </div></section>
       <section className="cleaner-section" id="features"><div className="cleaner-section-heading"><span>{t('产品功能')}</span><h2>{t('磁盘整理，从看清占用开始。')}</h2><p>{t('分析、查看、选择、清理，每一步都有依据。')}</p></div><div className="cleaner-feature-grid">{features.map((row, index) => { const Icon = icons[index % icons.length]; return <article key={index}><span className="cleaner-feature-icon"><Icon aria-hidden="true" /></span><h3>{row.title}</h3><p>{row.detail}</p></article>; })}</div></section>
       <section className="cleaner-preview-section" id="screenshots"><div className="cleaner-section-heading"><span>{t('界面预览')}</span><h2>{t('真实界面，提前了解。')}</h2><p>{t('从首页到清理项目，查看宇星磁盘管家的实际功能。')}</p></div>
         {page.screenshots.length ? <SoftwareShowcase screenshots={page.screenshots} details={interfaceDetails} /> : <div className="cleaner-preview-pending"><img src="/tool-logos/c-drive-cleaner-sky.svg" width="80" height="80" alt="" /><strong>{t('软件界面截图即将上线')}</strong><p>{t('产品截图将在这里展示。')}</p></div>}
