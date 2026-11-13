@@ -279,7 +279,7 @@ test('轮播定时推进并循环，悬停、焦点、后台与屏幕外暂停�
   const h = carouselHarness(); h.flushInitial(); assert.equal(h.active(), 0); assert.equal(h.intervals(), 1);
   h.tick(); assert.equal(h.active(), 1); assert.ok(nodes(h.root()).some(node => node.type === 'h4' && node.props.children === 'Detail 1'));
   h.root().props.onPointerEnter({ pointerType: 'mouse' }); h.render(); assert.equal(h.intervals(), 0); h.tick(); assert.equal(h.active(), 1);
-  h.root().props.onPointerLeave(); h.render(); h.root().props.onFocusCapture(); h.render(); assert.equal(h.intervals(), 0);
+  h.root().props.onPointerLeave(); h.render(); h.root().props.onFocusCapture({ target: { matches: () => true } }); h.render(); assert.equal(h.intervals(), 0);
   h.root().props.onBlurCapture({ currentTarget: { contains: () => true }, relatedTarget: {} }); h.render(); assert.equal(h.intervals(), 0);
   h.root().props.onBlurCapture({ currentTarget: { contains: () => false }, relatedTarget: null }); h.render(); assert.equal(h.intervals(), 1);
   h.document.visibilityState = 'hidden'; h.tick(); assert.equal(h.active(), 1); h.document.visibilityState = 'visible';
@@ -307,6 +307,23 @@ test('低动态偏好默认不自动播放，用户可主动开始；偏好变�
   const h = carouselHarness(undefined, true); h.tick(); assert.equal(h.active(), 0); h.flushInitial(); assert.equal(h.intervals(), 0);
   h.button('Start slideshow').props.onClick(); h.render(); h.tick(); assert.equal(h.active(), 1);
   h.changeMotion(true); h.tick(); assert.equal(h.active(), 1); assert.equal(h.intervals(), 0); h.close();
+});
+
+test('首屏与完整图库点击后移开鼠标恢复自动轮播，键盘操作及手动暂停仍受尊重', () => {
+  for (const variant of ['hero', 'full']) {
+    const h = carouselHarness(spec.defaultSoftwarePage.screenshots.slice(0, 3), false, variant); h.flushInitial();
+    h.root().props.onPointerEnter({ pointerType: 'mouse' }); h.render(); assert.equal(h.intervals(), 0);
+    h.root().props.onPointerDownCapture(); h.root().props.onFocusCapture({ target: { matches: selector => { assert.equal(selector, ':focus-visible'); return false; } } });
+    h.tabs()[1].props.onClick(); h.render(); h.tick(); assert.equal(h.active(), 1);
+    h.root().props.onPointerLeave(); h.render(); assert.equal(h.intervals(), 1); h.tick(); assert.equal(h.active(), 2); h.tick(); assert.equal(h.active(), 0);
+    // Keyboard interaction on an already pointer-focused button must pause as well.
+    h.root().props.onKeyDownCapture(); h.render(); assert.equal(h.intervals(), 0); h.tick(); assert.equal(h.active(), 0);
+    h.root().props.onPointerEnter({ pointerType: 'mouse' }); h.root().props.onPointerDownCapture(); h.render(); assert.equal(h.intervals(), 0);
+    h.root().props.onPointerLeave(); h.render(); h.tick(); assert.equal(h.active(), 1);
+    h.root().props.onPointerEnter({ pointerType: 'mouse' }); h.root().props.onPointerDownCapture(); h.button('Pause slideshow').props.onClick(); h.render();
+    h.root().props.onPointerLeave(); h.render(); h.tick(); assert.equal(h.active(), 1); assert.equal(h.intervals(), 0);
+    h.button('Start slideshow').props.onClick(); h.render(); h.tick(); assert.equal(h.active(), 2); h.close();
+  }
 });
 test('管理界面可创建草稿、上传中文文件名EXE并独立发布，上传前发布按钮禁用', async () => {
   const f = fixture(), state = hooks(); let tree, filePicker = 0;

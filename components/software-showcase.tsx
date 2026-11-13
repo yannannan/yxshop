@@ -47,7 +47,8 @@ export function SoftwareShowcase({ screenshots, details = [], variant = 'full' }
   if (!current) return null;
   return <section className={`cleaner-showcase${variant==='hero'?' cleaner-showcase-hero':''}`} ref={region} aria-roledescription={t('轮播图')} aria-label={t(variant==='hero'?'首屏软件预览':'软件界面预览')}
     onPointerEnter={event => { if (event.pointerType === 'mouse' || event.pointerType === 'pen') setHovered(true); }} onPointerLeave={() => setHovered(false)}
-    onFocusCapture={() => setFocused(true)} onBlurCapture={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setFocused(false); }}>
+    onPointerDownCapture={() => setFocused(false)} onKeyDownCapture={() => setFocused(true)}
+    onFocusCapture={event => setFocused(event.target.matches(':focus-visible'))} onBlurCapture={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setFocused(false); }}>
     {variant==='hero'&&<div className="cleaner-window-bar"><span/><span/><span/><small>YX DISK</small></div>}
     <div className="cleaner-carousel-toolbar"><div><span className="cleaner-carousel-kicker">YX DISK</span><h3>{caption(current)}</h3></div><div className="cleaner-carousel-actions">
       <span className="cleaner-carousel-count"><b>{String(activeIndex + 1).padStart(2, '0')}</b> / {String(count).padStart(2, '0')}</span>
