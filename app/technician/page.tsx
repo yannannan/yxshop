@@ -8,6 +8,9 @@ import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { ChatComposer, ChatMessages } from '../../components/consultation-chat';
+import type { ChatRow } from '../../lib/consultation-message.mjs';
+
 type Row = Record<string, string | number | null>;
 type Provider = {
   id: number; providerCode: string; name: string; avatar: string; city: string; experience: string;
@@ -21,7 +24,7 @@ type Dashboard = {
   logs: Row[];
   reviews: Row[];
   consultations: Row[];
-  messages: Row[];
+  messages: ChatRow[];
   stats: { total: number; waiting: number; inService: number; awaitingAcceptance: number; completed: number; rating: number };
   message?: string;
 };
@@ -43,12 +46,11 @@ export default function TechnicianPage() {
   const [logText,setLogText]=useState("");
   const [finishText,setFinishText]=useState("");
   const [consultationView,setConsultationView]=useState<Row|null>(null);
-  const [consultationReply,setConsultationReply]=useState("");
   const [saving,setSaving]=useState(false);
   const [profile,setProfile]=useState({city:"",experience:"",roleName:"",intro:"",skillsText:"",onlineStatus:"online"});
 
-  const load=useCallback(async()=>{
-    setLoading(true);
+  const load=useCallback(async(quiet=false)=>{
+    if(!quiet)setLoading(true);
     try{
       const response=await fetch(`/api/technician?refresh=${Date.now()}`,{cache:"no-store"});
       const result=await response.json() as Dashboard;
@@ -59,10 +61,11 @@ export default function TechnicianPage() {
         intro:result.provider.intro||"",skillsText:(result.provider.skills||[]).join("、"),onlineStatus:result.provider.onlineStatus||"online"
       });
     }catch{ setMessage("技术人员工作台读取失败，请稍后重试"); }
-    finally{ setLoading(false); }
+    finally{ if(!quiet)setLoading(false); }
   },[]);
 
-  useEffect(()=>{ void load(); },[load]);
+  useEffect(()=>{ const timer=window.setTimeout(()=>void load(),0); return ()=>window.clearTimeout(timer); },[load]);
+  useEffect(()=>{if(!consultationView)return;const timer=window.setInterval(()=>void load(true),5000);return ()=>window.clearInterval(timer);},[consultationView,load]);
 
   async function action(body:Record<string,string|number>){
     setSaving(true); setMessage("");
@@ -136,7 +139,7 @@ export default function TechnicianPage() {
       </>}
 
       {tab==="consultations"&&<section className="technician-panel"><div className="technician-panel-title"><div><h2>{t("在线咨询")}</h2><p>{t("只显示当前技术人员自己的服务咨询，可直接回复客户。")}</p></div><button disabled={loading} onClick={()=>void load()}>{t(loading?"刷新中…":"↻ 刷新")}</button></div>
-        <div className="technician-consultation-list">{data.consultations.map((item)=>{const count=data.messages.filter((m)=>Number(m.consultation_id)===Number(item.id)).length;return <article key={text(item.id)}><div><b>{text(item.service_title)}</b><small>{t("会话 #")}{text(item.id)} · {t(text(item.customer_phone))}</small></div><p>{t(text(item.last_message_at).replace("T"," ").slice(0,16))} · {t(count)}{t(" 条消息")}</p><button onClick={()=>{setConsultationView(item);setConsultationReply("");}}>{t("查看 / 回复")}</button></article>})}{!data.consultations.length&&<div className="technician-empty">{t("暂无在线咨询。")}</div>}</div>
+        <div className="technician-consultation-list">{data.consultations.map((item)=>{const count=data.messages.filter((m)=>Number(m.consultation_id)===Number(item.id)).length;return <article key={text(item.id)}><div><b>{text(item.service_title)}</b><small>{t("会话 #")}{text(item.id)} · {t(text(item.customer_phone))}</small></div><p>{t(text(item.last_message_at).replace("T"," ").slice(0,16))} · {t(count)}{t(" 条消息")}</p><button onClick={()=>{setConsultationView(item);}}>{t("查看 / 回复")}</button></article>})}{!data.consultations.length&&<div className="technician-empty">{t("暂无在线咨询。")}</div>}</div>
       </section>}
 
       {tab==="profile"&&<section className="technician-panel technician-profile-form"><div className="technician-panel-title"><div><h2>{t("我的服务资料")}</h2><p>{t("姓名、认证状态和账号绑定由管理员维护；服务资料可自行更新。")}</p></div></div>
@@ -152,8 +155,8 @@ export default function TechnicianPage() {
     </section>
 
     {consultationView&&<div className="technician-modal-mask"><section className="technician-modal"><header><div><span>ONLINE SUPPORT</span><h2>{text(consultationView.service_title)}</h2><small>{t("会话 #")}{text(consultationView.id)}</small></div><button onClick={()=>setConsultationView(null)}>×</button></header>
-      <div className="technician-chat-thread">{data.messages.filter((item)=>Number(item.consultation_id)===Number(consultationView.id)).map((item)=><article key={text(item.id)} className={text(item.sender_type)==="provider"?"mine":""}><b>{t(text(item.sender_type)==="provider"?"我":"客户")}</b><p>{text(item.content)}</p><small>{t(text(item.created_at).replace("T"," ").slice(0,16))}</small></article>)}</div>
-      <div className="technician-chat-reply"><textarea value={consultationReply} onChange={e=>setConsultationReply(e.target.value)} placeholder={t("回复客户咨询内容")}/><button className="primary" disabled={saving||!consultationReply.trim()} onClick={async()=>{if(await action({action:"consultation-reply",consultationId:Number(consultationView.id),content:consultationReply}))setConsultationReply("");}}>{t("发送回复")}</button></div>
+      <ChatMessages key={String(consultationView.id)} audience="technician" messages={data.messages.filter(item=>Number(item.consultation_id)===Number(consultationView.id))}/>
+      <ChatComposer key={String(consultationView.id)+'-composer'} audience="technician" consultationId={Number(consultationView.id)} onSent={load}/>
     </section></div>}
 
     {orderView&&<div className="technician-modal-mask"><section className="technician-modal">

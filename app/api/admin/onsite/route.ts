@@ -1,3 +1,4 @@
+import { encodeChatMessage, publicChatMessage } from '@/lib/consultation-message.mjs';
 import { env } from '@/db/mysql-runtime';
 import { ensureDatabase } from '../../../../db/setup';
 import { type AdminContext, adminDenied, getAdminContext, hasAdminPermission } from '../../../../lib/admin-auth';
@@ -61,7 +62,7 @@ async function readData() {
     orders: orders.results,
     appointments: appointments.results,
     consultations: consultations.results,
-    messages: messages.results,
+    messages: messages.results.map(publicChatMessage),
     contactRequests: contactRequests.results,
     applications: applications.results,
     reviews: reviews.results,
@@ -300,7 +301,7 @@ export async function POST(request: Request) {
         const consultation = await env.DB.prepare('SELECT id FROM technical_consultations WHERE id=?').bind(consultationId).first();
         if (!consultation) return Response.json({ message: '咨询会话不存在' }, { status: 404 });
         await env.DB.batch([
-          env.DB.prepare("INSERT INTO technical_consultation_messages (consultation_id,sender_type,sender_id,content,read_at,created_at) VALUES (?,?,?,?,?,?)").bind(consultationId, 'provider', null, content, null, now),
+          env.DB.prepare("INSERT INTO technical_consultation_messages (consultation_id,sender_type,sender_id,content,read_at,created_at) VALUES (?,?,?,?,?,?)").bind(consultationId, 'provider', null, encodeChatMessage(content), null, now),
           env.DB.prepare("UPDATE technical_consultations SET status='open',last_message_at=?,updated_at=? WHERE id=?").bind(now, now, consultationId),
         ]);
         break;

@@ -1,3 +1,4 @@
+import { encodeChatMessage, publicChatMessage } from '@/lib/consultation-message.mjs';
 import { env } from '@/db/mysql-runtime';
 import { ensureDatabase, getSessionPhone } from '../../../db/setup';
 
@@ -29,7 +30,7 @@ export async function GET(request: Request) {
       env.DB.prepare('SELECT * FROM technical_contact_requests WHERE consultation_id=? ORDER BY id DESC LIMIT 1').bind(consultation.id).first(),
     ]);
     await env.DB.prepare("UPDATE technical_consultation_messages SET read_at=? WHERE consultation_id=? AND sender_type='provider' AND read_at IS NULL").bind(new Date().toISOString(), consultation.id).run();
-    return Response.json({ consultation, messages: messages.results, contactRequest }, { headers: { 'Cache-Control': 'no-store' } });
+    return Response.json({ consultation, messages: messages.results.map(publicChatMessage), contactRequest }, { headers: { 'Cache-Control': 'no-store' } });
   }
 
   const { results } = await env.DB.prepare("SELECT c.*,s.title AS service_title,s.slug AS service_slug,p.name AS provider_name FROM technical_consultations c JOIN technical_services s ON s.id=c.service_id JOIN technical_providers p ON p.id=c.provider_id WHERE c.user_id=? ORDER BY c.last_message_at DESC,c.id DESC").bind(user.id).all();
@@ -71,7 +72,7 @@ export async function POST(request: Request) {
   if (!content) return Response.json({ message: '请输入咨询内容' }, { status: 400 });
   await env.DB.batch([
     env.DB.prepare('INSERT INTO technical_consultation_messages (consultation_id,sender_type,sender_id,content,read_at,created_at) VALUES (?,?,?,?,?,?)')
-      .bind(consultation.id, 'customer', user.id, content, null, now),
+      .bind(consultation.id, 'customer', user.id, encodeChatMessage(content), null, now),
     env.DB.prepare("UPDATE technical_consultations SET status='open',last_message_at=?,updated_at=? WHERE id=?").bind(now, now, consultation.id),
   ]);
   return Response.json({ ok: true, consultationId: consultation.id });

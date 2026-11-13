@@ -222,7 +222,7 @@ test('独立产品页可中英文渲染，未发布按钮禁用，真实截图�
       '../lib/tool-services': { siteOrigin: () => 'https://www.yxstar.shop', toolPagePath: slug => '/tools/' + slug + '.html' }, './storefront-header': sharedHeader, './software-showcase': gallery, './software-download-button': button });
     return renderToStaticMarkup(await component.DiskCleanerLanding({ tool: { id: 77, slug: 'c-drive-cleaner', chargeType: 'free' } }));
   };
-  const pending = await render('zh-CN'); assert.match(pending, /版本即将发布/); assert.doesNotMatch(pending, /href="\/api\/tools\/software\/download/); assert.match(pending, /真实软件截图/);
+  const pending = await render('zh-CN'); const heroBlock = pending.match(/<section class="cleaner-showcase cleaner-showcase-hero"[\s\S]*?<\/section>/)?.[0] || ''; assert.ok(heroBlock.indexOf('/overview.png') < heroBlock.indexOf('/cleanup.png')); assert.ok(heroBlock.indexOf('/cleanup.png') < heroBlock.indexOf('/analysis.png')); assert.match(heroBlock, /overview.png/); assert.match(pending, /版本即将发布/); assert.doesNotMatch(pending, /href="\/api\/tools\/software\/download/); assert.match(pending, /真实软件截图/);
   const schema = JSON.parse(/<script type="application\/ld\+json">([^]*?)<\/script>/.exec(pending)[1]); assert.equal(schema.description, page.summary); assert.doesNotMatch(pending, /<script>bad/);
   const id = await f.create('1.2'); await f.upload(id); await f.service.publishSoftwareRelease(77, id);
   const ready = await render('en'); assert.match(ready, /Our cleaner/); assert.match(ready, /Free download for Windows/); assert.match(ready, /release=/); assert.match(ready, /Windows 10/); assert.match(ready, /SHA256/);
@@ -252,7 +252,7 @@ test('8张截图支持点击及方向键切换，完整图入口跟随当前图�
   arrow('Previous screenshot').props.onClick(); render(); assert.equal(tabs()[7].props['aria-selected'], true);
 });
 
-function carouselHarness(initialShots = spec.defaultSoftwarePage.screenshots, reduced = false) {
+function carouselHarness(initialShots = spec.defaultSoftwarePage.screenshots, reduced = false, variant = 'full') {
   const state = hooks(), effects = [], timers = new Map(), mediaListeners = new Set(), scrolls = [];
   let pendingEffects, sequence = 0, tree, shots = initialShots, observerEvent, observerDisconnected = false;
   const document = { visibilityState: 'visible' }, media = { matches: reduced, addEventListener: (kind, fn) => mediaListeners.add(fn), removeEventListener: (kind, fn) => mediaListeners.delete(fn) };
@@ -264,7 +264,7 @@ function carouselHarness(initialShots = spec.defaultSoftwarePage.screenshots, re
   const tabs = () => nodes(tree).filter(node => node.props.role === 'tab');
   const active = () => tabs().findIndex(node => node.props['aria-selected']);
   function render() {
-    pendingEffects = []; state.reset(); tree = component.SoftwareShowcase({ screenshots: shots, details: shots.map((shot, i) => ({ url: shot.url, title: 'Detail ' + i, detail: 'Description ' + i, points: ['Point ' + i] })) });
+    pendingEffects = []; state.reset(); tree = component.SoftwareShowcase({ screenshots: shots, variant, details: shots.map((shot, i) => ({ url: shot.url, title: 'Detail ' + i, detail: 'Description ' + i, points: ['Point ' + i] })) });
     if (tree) tree.props.ref.current = element;
     pendingEffects.forEach(({ fn, deps }, i) => { const previous = effects[i]; if (!previous || deps.some((value, index) => value !== previous.deps[index])) { previous?.cleanup?.(); effects[i] = { deps, cleanup: fn() }; } });
     return tree;
@@ -358,4 +358,15 @@ test('下载按钮保留原生下载地址，正常点击先核验再转云附�
   await anchor().props.onClick({ button: 0, preventDefault() { prevented++; } }); render(); assert.equal(prevented, 1); assert.equal(links.length, 1); assert.match(links[0], /^https:/);
   fail = true; await anchor().props.onClick({ button: 0, preventDefault() {} }); render();
   assert.equal(links.length, 1); assert.ok(nodes(tree).some(node => node.props.role === 'alert' && node.props.children.includes('稍后重试')));
+});
+
+
+test('首屏独立三图依次为首页/C盘清理/磁盘分析，自动轮播及点击切换不影响下方完整图库', () => {
+  const shots = ['overview', 'cleanup', 'analysis'].map(name => spec.defaultSoftwarePage.screenshots.find(shot => shot.url.endsWith('/' + name + '.png')));
+  const hero = carouselHarness(shots, false, 'hero'), full = carouselHarness(); hero.flushInitial(); full.flushInitial();
+  assert.ok(hero.root().props.className.includes('cleaner-showcase-hero')); assert.equal(hero.tabs().length, 3); assert.equal(full.tabs().length, 8);
+  assert.equal(hero.active(), 0); hero.tick(); assert.equal(hero.active(), 1); hero.tick(); assert.equal(hero.active(), 2); hero.tick(); assert.equal(hero.active(), 0);
+  hero.tabs()[2].props.onClick(); hero.render(); assert.equal(hero.active(), 2); assert.equal(full.active(), 0);
+  assert.equal(nodes(hero.root()).some(node => node.props.className === 'cleaner-carousel-detail'), false);
+  hero.close(); full.close();
 });

@@ -1,3 +1,4 @@
+import { encodeChatMessage, publicChatMessage } from '@/lib/consultation-message.mjs';
 import { env } from '@/db/mysql-runtime';
 import { ensureDatabase } from '../../../db/setup';
 import { getTechnicianContext, technicianDenied } from '../../../lib/technician-auth';
@@ -48,7 +49,7 @@ async function readDashboard(providerId: number) {
        ORDER BY m.created_at,m.id`
     ).bind(providerId).all(),
   ]);
-  return { orders: orders.results, logs: logs.results, reviews: reviews.results, consultations: consultations.results, messages: messages.results };
+  return { orders: orders.results, logs: logs.results, reviews: reviews.results, consultations: consultations.results, messages: messages.results.map(publicChatMessage) };
 }
 
 export async function GET(request: Request) {
@@ -112,7 +113,7 @@ export async function POST(request: Request) {
       const consultation = await env.DB.prepare('SELECT id FROM technical_consultations WHERE id=? AND provider_id=?').bind(consultationId, context.provider.id).first();
       if (!consultation) return Response.json({ message: '咨询会话不存在或不属于当前技术人员' }, { status: 404 });
       await env.DB.batch([
-        env.DB.prepare("INSERT INTO technical_consultation_messages (consultation_id,sender_type,sender_id,content,read_at,created_at) VALUES (?,?,?,?,?,?)").bind(consultationId, 'provider', context.user.id, content, null, now),
+        env.DB.prepare("INSERT INTO technical_consultation_messages (consultation_id,sender_type,sender_id,content,read_at,created_at) VALUES (?,?,?,?,?,?)").bind(consultationId, 'provider', context.user.id, encodeChatMessage(content), null, now),
         env.DB.prepare("UPDATE technical_consultations SET status='open',last_message_at=?,updated_at=? WHERE id=? AND provider_id=?").bind(now, now, consultationId, context.provider.id),
       ]);
       return Response.json({ ok: true, message: '回复已发送' });

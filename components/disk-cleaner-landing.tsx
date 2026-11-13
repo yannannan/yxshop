@@ -1,6 +1,6 @@
 /* eslint-disable @next/next/no-img-element -- Software images are uploaded by administrators. */
 /* eslint-disable @next/next/no-html-link-for-pages -- Product download navigation uses native links. */
-import { ArrowRightIcon, CheckIcon, CircleStackIcon, ComputerDesktopIcon, MagnifyingGlassIcon, ShieldCheckIcon, SparklesIcon } from '@heroicons/react/24/outline';
+import { ArrowRightIcon, CheckIcon, ComputerDesktopIcon, MagnifyingGlassIcon, ShieldCheckIcon, SparklesIcon } from '@heroicons/react/24/outline';
 import { getI18n } from '../lib/i18n-server';
 import { publicSoftware } from '../lib/software-release-service';
 import { defaultSoftwarePage, softwareDownloadPath, softwareSize } from '../lib/software-release';
@@ -26,6 +26,7 @@ export async function DiskCleanerLanding({ tool }: { tool: ToolService }) {
     { image: 'ai-mall', title: t('磁盘整理之外，服务一处直达。'), detail: t('在软件内浏览宇星脉通的数字服务与实用工具，也可切换到浏览器查看。'), points: [t('软件内浏览商城内容'), t('查找数字服务与实用工具'), t('支持在浏览器中打开')] },
     { image: 'ai-tools', title: t('常用工具入口，随时发现。'), detail: t('在工具服务中查看清理、视频提取、文件签名等工具介绍，按需进入对应服务。'), points: [t('查看工具简介与使用方式'), t('按需进入工具服务'), t('各工具详情独立展示')] },
   ].map(({ image, title, detail, points }) => ({ url: `/software/c-drive-cleaner/${image}.png`, title, detail, points })).filter(row => page.screenshots.some(shot => shot.url === row.url));
+  const heroScreenshots = ['overview', 'cleanup', 'analysis'].map(name => defaultSoftwarePage.screenshots.find(shot => shot.url === `/software/c-drive-cleaner/${name}.png`)!).filter(Boolean);
   const schema = { '@context': 'https://schema.org', '@type': 'SoftwareApplication', name: t('宇星磁盘管家'), applicationCategory: 'UtilitiesApplication', url: `${siteOrigin()}${toolPagePath(tool.slug)}`, description: summary,
     ...(release ? { softwareVersion: release.version, operatingSystem: release.systems, ...(downloadReady ? { downloadUrl: `${siteOrigin()}${softwareDownloadPath(release.id)}` } : {}) } : {}),
     ...(tool.chargeType === 'free' ? { offers: { '@type': 'Offer', price: 0, priceCurrency: 'CNY' } } : {}), publisher: { '@type': 'Organization', name: '宇星脉通' } };
@@ -35,8 +36,7 @@ export async function DiskCleanerLanding({ tool }: { tool: ToolService }) {
         <div className="cleaner-hero-actions"><SoftwareDownloadButton id={release?.id} name={release?.fileName} ready={downloadReady} /><a href="#features" className="cleaner-secondary">{t('了解产品')}<ArrowRightIcon aria-hidden="true" /></a></div>
         <div className="cleaner-release-meta">{release ? <><span>v{release.version}</span><i /><span>{softwareSize(release.fileSize)}</span><i /><span>{release.systems}</span></> : <span>{t('首个版本正在准备中，发布后即可下载。')}</span>}</div>
         <div className="cleaner-hero-badges">{[t('免登录下载'), t('Windows应用'), t('不扣商城积分')].map(label => <span key={label}><CheckIcon aria-hidden="true" />{label}</span>)}</div>
-      </div><div className="cleaner-hero-visual">{page.screenshots[0] ? <figure className="cleaner-hero-screenshot"><div className="cleaner-window-bar"><span /><span /><span /><small>YX DISK</small></div><img src={page.screenshots[0].url} alt={business(page.screenshots[0].caption, page.screenshots[0].captionEn) || t('软件界面')} width="1920" height="1009" fetchPriority="high" /></figure> : <DiskIllustration label={t('C盘空间整理')} />}
-        <span className="cleaner-floating-label"><CircleStackIcon aria-hidden="true" />{t('先看清占用，再释放空间')}</span>
+      </div><div className="cleaner-hero-visual">{heroScreenshots.length ? <SoftwareShowcase screenshots={heroScreenshots} variant="hero" /> : <DiskIllustration label={t('C盘空间整理')} />}
       </div></div></section>
       <div className="cleaner-product-strip"><span><MagnifyingGlassIcon aria-hidden="true" />{t('磁盘分析')}</span><span><SparklesIcon aria-hidden="true" />{t('C盘清理')}</span><span><ShieldCheckIcon aria-hidden="true" />{t('残留清理')}</span><span><ComputerDesktopIcon aria-hidden="true" />Windows EXE</span></div>
       <section className="cleaner-section" id="features"><div className="cleaner-section-heading"><span>{t('产品功能')}</span><h2>{t('磁盘整理，从看清占用开始。')}</h2><p>{t('分析、查看、选择、清理，每一步都有依据。')}</p></div><div className="cleaner-feature-grid">{features.map((row, index) => { const Icon = icons[index % icons.length]; return <article key={index}><span className="cleaner-feature-icon"><Icon aria-hidden="true" /></span><h3>{row.title}</h3><p>{row.detail}</p></article>; })}</div></section>

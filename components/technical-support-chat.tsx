@@ -3,14 +3,11 @@ import { useI18n } from '@/components/language-provider';
 
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { ChatComposer, ChatMessages } from './consultation-chat';
+import type { ChatRow } from '../lib/consultation-message.mjs';
 import type { TechnicalService } from "../lib/technical-services";
 
-type ChatMessage = {
-  id: string;
-  from: "provider" | "customer";
-  content: string;
-  time: string;
-};
+type ChatMessage = ChatRow;
 
 type ContactRequestState = "idle" | "requested" | "approved";
 
@@ -24,17 +21,12 @@ type TechnicalSupportChatProps = {
 function initialMessages(service: TechnicalService): ChatMessage[] {
   return [{
     id: `${service.slug}-welcome`,
-    from: "provider",
+    sender_type: "provider",
     content: `您好，我是${service.provider}。请说明您的需求、使用场景和期望服务时间。`,
-    time: "刚刚",
+    created_at: "",
   }];
 }
 
-function formatMessageTime(value: unknown) {
-  const date = new Date(String(value || ""));
-  if (Number.isNaN(date.getTime())) return "刚刚";
-  return date.toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false });
-}
 
 export function TechnicalSupportChat({ activeService, open, services, onClose }: TechnicalSupportChatProps) {
   const { t } = useI18n();
@@ -42,15 +34,15 @@ export function TechnicalSupportChat({ activeService, open, services, onClose }:
   const [activeSlug, setActiveSlug] = useState<string | null>(null);
   const [messagesBySlug, setMessagesBySlug] = useState<Record<string, ChatMessage[]>>({});
   const [contactRequestStates, setContactRequestStates] = useState<Record<string, ContactRequestState>>({});
-  const [draft, setDraft] = useState("");
-  const [sending, setSending] = useState(false);
   const [notice, setNotice] = useState("");
 
   useEffect(() => {
     if (!activeService) return;
+    const timer=window.setTimeout(()=>{
     setThreadSlugs((current) => current.includes(activeService.slug) ? current : [...current, activeService.slug]);
     setActiveSlug(activeService.slug);
     setMessagesBySlug((current) => current[activeService.slug] ? current : { ...current, [activeService.slug]: initialMessages(activeService) });
+    },0);return ()=>window.clearTimeout(timer);
   }, [activeService]);
 
   const threads = useMemo(
@@ -70,18 +62,13 @@ export function TechnicalSupportChat({ activeService, open, services, onClose }:
       }
       if (!response.ok) return;
       const result = await response.json() as {
-        messages?: Array<{ id: number; sender_type: string; content: string; created_at: string }>;
+        messages?: ChatRow[];
         contactRequest?: { status?: string } | null;
       };
       if (Array.isArray(result.messages) && result.messages.length) {
         setMessagesBySlug((current) => ({
           ...current,
-          [service.slug]: result.messages!.map((message) => ({
-            id: String(message.id),
-            from: message.sender_type === "customer" ? "customer" : "provider",
-            content: String(message.content || ""),
-            time: formatMessageTime(message.created_at),
-          })),
+          [service.slug]: result.messages!,
         }));
       }
       const status = result.contactRequest?.status;
@@ -97,39 +84,15 @@ export function TechnicalSupportChat({ activeService, open, services, onClose }:
 
   useEffect(() => {
     if (!open || !currentService) return;
-    void loadThread(currentService);
+    const initial=window.setTimeout(()=>void loadThread(currentService),0);
     const timer = window.setInterval(() => void loadThread(currentService), 5000);
-    return () => window.clearInterval(timer);
+    return () => {window.clearTimeout(initial);window.clearInterval(timer);};
   }, [currentService, loadThread, open]);
 
   if (!open || !currentService) return null;
 
-  async function sendMessage() {
-    const content = draft.trim();
-    if (!content || sending) return;
-    setSending(true);
-    setNotice("");
-    try {
-      const response = await fetch("/api/technical-consultations", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: "send", serviceSlug: currentService.slug, content }),
-      });
-      const result = await response.json() as { message?: string };
-      if (!response.ok) {
-        setNotice(result.message || "消息发送失败");
-        return;
-      }
-      setDraft("");
-      await loadThread(currentService);
-    } catch {
-      setNotice("消息发送失败，请稍后重试。");
-    } finally {
-      setSending(false);
-    }
-  }
-
   async function requestContact() {
+    if (!currentService) return;
     setNotice("");
     try {
       const response = await fetch("/api/technical-consultations", {
@@ -161,7 +124,7 @@ export function TechnicalSupportChat({ activeService, open, services, onClose }:
               const lastMessage = messagesBySlug[thread.slug]?.at(-1);
               return <button type="button" className={thread.slug === currentService.slug ? "active" : ""} key={thread.slug} onClick={() => setActiveSlug(thread.slug)}>
                 <span className="technical-avatar" aria-hidden="true">{t(thread.initials)}</span>
-                <span><b>{t(thread.provider)}</b><small>{lastMessage?.content || t("开始技术咨询")}</small></span>
+                <span><b>{t(thread.provider)}</b><small>{lastMessage?.content || (lastMessage?.attachments?.length ? t("文件") : t("开始技术咨询"))}</small></span>
               </button>;
             })}
           </div>
@@ -172,15 +135,8 @@ export function TechnicalSupportChat({ activeService, open, services, onClose }:
             <div><b>{t(currentService.provider)}</b><span>{t("已认证技术服务者 · 在线沟通")}</span><small>{t("咨询服务：")}{currentService.title}</small></div>
             <button type="button" className="modal-close" aria-label={t("关闭在线技术支持")} onClick={onClose}>×</button>
           </header>
-          <div className="technical-chat-messages" aria-live="polite">
-            <div className="technical-chat-notice">{t("本次沟通用于确认服务范围、交付方式与价格；请勿发送账号密码等敏感信息。")}</div>
-            {notice && <div className="technical-chat-notice technical-chat-error">{t(notice)}</div>}
-            {messages.map((message) => <div className={`technical-chat-message ${message.from === "customer" ? "mine" : ""}`} key={message.id}><span>{message.content}</span><small>{t(message.time)}</small></div>)}
-          </div>
-          <div className="technical-chat-composer">
-            <input value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => event.key === "Enter" && void sendMessage()} placeholder={t("请输入咨询内容")} />
-            <button type="button" disabled={sending || !draft.trim()} onClick={() => void sendMessage()}>{t(sending ? "发送中…" : "发送")}</button>
-          </div>
+          <ChatMessages key={currentService.slug} messages={messages} audience="customer" notice={<><div className="technical-chat-notice">{t("本次沟通用于确认服务范围、交付方式与价格；请勿发送账号密码等敏感信息。")}</div>{notice&&<div className="technical-chat-notice technical-chat-error">{t(notice)}</div>}</>}/>
+          <ChatComposer key={currentService.slug+'-composer'} audience="customer" serviceSlug={currentService.slug} onSent={()=>loadThread(currentService)}/>
         </div>
 
         <aside className="technical-contact-protection" aria-label={t("联系方式保护")}>

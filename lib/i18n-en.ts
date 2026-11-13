@@ -2,12 +2,14 @@ import { siteAnalysisEnglish } from './site-analysis-en.mjs';
 import { imageToolEnglish } from './image-tool-en.mjs';
 import { signatureEnglish } from './signature-en.mjs';
 import { softwareEnglish } from './software-en.mjs';
+import { consultationEnglish } from './consultation-en.mjs';
 // Interface copy only. User-authored business content is preserved.
 export const english: Record<string, string> = {
   ...siteAnalysisEnglish,
   ...imageToolEnglish,
   ...signatureEnglish,
   ...softwareEnglish,
+  ...consultationEnglish,
   "宇星脉通": "Yuxing Maitong",
   "宇星脉通首页": "Yuxing Maitong home",
   "宇星脉通 Logo": "Yuxing Maitong logo",

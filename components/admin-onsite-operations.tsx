@@ -2,13 +2,16 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { ChatComposer, ChatMessages } from './consultation-chat';
+import type { ChatRow } from '../lib/consultation-message.mjs';
+
 type Row = Record<string, string | number | null>;
 type Data = {
   initialized: boolean;
   orders: Row[];
   appointments: Row[];
   consultations: Row[];
-  messages: Row[];
+  messages: ChatRow[];
   contactRequests: Row[];
   applications: Row[];
   reviews: Row[];
@@ -22,8 +25,8 @@ function useOperations() {
   const [data, setData] = useState<Data>(emptyData);
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState("");
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (quiet = false) => {
+    if (!quiet) setLoading(true);
     try {
       const response = await fetch(`/api/admin/onsite?refresh=${Date.now()}`, { cache: "no-store" });
       const result = await response.json() as Partial<Data>;
@@ -42,10 +45,10 @@ function useOperations() {
     } catch {
       setData({ ...emptyData, message: "上门服务后台数据读取失败" });
     } finally {
-      setLoading(false);
+      if (!quiet) setLoading(false);
     }
   }, []);
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { const timer=window.setTimeout(()=>void load(),0); return ()=>window.clearTimeout(timer); }, [load]);
   const action = useCallback(async (body: Record<string, string | number>) => {
     setNotice("");
     const response = await fetch("/api/admin/onsite", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
@@ -105,12 +108,12 @@ export function OnsiteAppointmentManagement() {
 export function OnsiteConsultationManagement() {
   const { data, loading, notice, load, action } = useOperations();
   const [thread, setThread] = useState<Row | null>(null);
-  const [reply, setReply] = useState("");
+  useEffect(()=>{ if(!thread) return; const timer=window.setInterval(()=>void load(true),5000); return ()=>window.clearInterval(timer); },[thread,load]);
   const currentMessages = useMemo(() => thread ? data.messages.filter((item) => Number(item.consultation_id) === Number(thread.id)) : [], [data.messages, thread]);
   const currentRequests = useMemo(() => thread ? data.contactRequests.filter((item) => Number(item.consultation_id) === Number(thread.id)) : [], [data.contactRequests, thread]);
   return <>{notice && <div className="admin-message">{notice}</div>}<Header title="在线咨询" description="查看用户与技术服务者沟通记录、后台回复并审核联系方式申请" loading={loading} onRefresh={() => void load()} />
-    {!data.initialized ? <InitRequired message={data.message} /> : <div className="table-wrap onsite-admin-table"><table><thead><tr><th>会话</th><th>服务</th><th>技术人员</th><th>客户</th><th>最后沟通</th><th>消息</th><th>联系方式申请</th><th>状态</th><th>操作</th></tr></thead><tbody>{data.consultations.map((item) => { const count=data.messages.filter((m)=>Number(m.consultation_id)===Number(item.id)).length; const request=data.contactRequests.find((r)=>Number(r.consultation_id)===Number(item.id)); return <tr key={text(item.id)}><td>#{text(item.id)}</td><td>{text(item.service_title)}</td><td>{text(item.provider_name)}</td><td>{text(item.customer_phone)}<small>{text(item.customer_email)}</small></td><td>{text(item.last_message_at).replace("T"," ").slice(0,16)}</td><td>{count} 条</td><td>{request ? <Status value={text(request.status)} /> : "—"}</td><td><Status value={text(item.status)} /></td><td><button className="text-action" onClick={() => { setThread(item); setReply(""); }}>查看 / 回复</button><button className="text-action" onClick={() => void action({ action:"consultation-status", id:Number(item.id), status:text(item.status)==="open"?"closed":"open" })}>{text(item.status)==="open"?"关闭":"重新打开"}</button></td></tr>; })}</tbody></table>{!data.consultations.length && <div className="table-empty"><span>◇</span><p>暂无在线咨询</p></div>}</div>}
-    {thread && <Modal title={`咨询会话 #${text(thread.id)}`} onClose={() => setThread(null)}><div className="admin-consultation-thread">{currentMessages.map((message) => <div className={`admin-chat-message ${text(message.sender_type)}`} key={text(message.id)}><b>{text(message.sender_type)==="customer"?"客户":"技术人员 / 平台"}</b><p>{text(message.content)}</p><small>{text(message.created_at).replace("T"," ").slice(0,16)}</small></div>)}</div>{currentRequests.map((request) => <div className="admin-contact-request" key={text(request.id)}><div><b>联系方式申请</b><span><Status value={text(request.status)} /></span></div>{text(request.status)==="pending" && <div className="admin-form-actions"><button className="ghost-button" onClick={() => void action({ action:"contact-request-review", id:Number(request.id), status:"rejected" })}>驳回</button><button onClick={() => void action({ action:"contact-request-review", id:Number(request.id), status:"approved" })}>通过申请</button></div>}</div>)}<div className="admin-reply-box"><textarea value={reply} onChange={(e)=>setReply(e.target.value)} placeholder="回复用户咨询内容" /><button disabled={!reply.trim()} onClick={async()=>{ if(await action({ action:"consultation-reply", consultationId:Number(thread.id), content:reply })){ setReply(""); } }}>发送回复</button></div></Modal>}
+    {!data.initialized ? <InitRequired message={data.message} /> : <div className="table-wrap onsite-admin-table"><table><thead><tr><th>会话</th><th>服务</th><th>技术人员</th><th>客户</th><th>最后沟通</th><th>消息</th><th>联系方式申请</th><th>状态</th><th>操作</th></tr></thead><tbody>{data.consultations.map((item) => { const count=data.messages.filter((m)=>Number(m.consultation_id)===Number(item.id)).length; const request=data.contactRequests.find((r)=>Number(r.consultation_id)===Number(item.id)); return <tr key={text(item.id)}><td>#{text(item.id)}</td><td>{text(item.service_title)}</td><td>{text(item.provider_name)}</td><td>{text(item.customer_phone)}<small>{text(item.customer_email)}</small></td><td>{text(item.last_message_at).replace("T"," ").slice(0,16)}</td><td>{count} 条</td><td>{request ? <Status value={text(request.status)} /> : "—"}</td><td><Status value={text(item.status)} /></td><td><button className="text-action" onClick={() => { setThread(item); }}>查看 / 回复</button><button className="text-action" onClick={() => void action({ action:"consultation-status", id:Number(item.id), status:text(item.status)==="open"?"closed":"open" })}>{text(item.status)==="open"?"关闭":"重新打开"}</button></td></tr>; })}</tbody></table>{!data.consultations.length && <div className="table-empty"><span>◇</span><p>暂无在线咨询</p></div>}</div>}
+    {thread && <Modal title={`咨询会话 #${text(thread.id)}`} onClose={() => setThread(null)}><ChatMessages key={String(thread.id)} messages={currentMessages} audience="admin"/>{currentRequests.map((request) => <div className="admin-contact-request" key={text(request.id)}><div><b>联系方式申请</b><span><Status value={text(request.status)} /></span></div>{text(request.status)==="pending" && <div className="admin-form-actions"><button className="ghost-button" onClick={() => void action({ action:"contact-request-review", id:Number(request.id), status:"rejected" })}>驳回</button><button onClick={() => void action({ action:"contact-request-review", id:Number(request.id), status:"approved" })}>通过申请</button></div>}</div>)}<ChatComposer key={String(thread.id)+"-composer"} audience="admin" consultationId={Number(thread.id)} onSent={load}/></Modal>}
   </>;
 }
 
