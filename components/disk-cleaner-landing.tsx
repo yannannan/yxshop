@@ -1,11 +1,11 @@
 /* eslint-disable @next/next/no-img-element -- Software images are uploaded by administrators. */
 /* eslint-disable @next/next/no-html-link-for-pages -- Product download navigation uses native links. */
-import { ArrowDownTrayIcon, ArrowRightIcon, CheckIcon, CircleStackIcon, ComputerDesktopIcon, MagnifyingGlassIcon, ShieldCheckIcon, SparklesIcon } from '@heroicons/react/24/outline';
+import { ArrowRightIcon, CheckIcon, CircleStackIcon, ComputerDesktopIcon, MagnifyingGlassIcon, ShieldCheckIcon, SparklesIcon } from '@heroicons/react/24/outline';
 import { getI18n } from '../lib/i18n-server';
 import { publicSoftware } from '../lib/software-release-service';
 import { defaultSoftwarePage, softwareDownloadPath, softwareSize } from '../lib/software-release';
 import { siteOrigin, toolPagePath, type ToolService } from '../lib/tool-services';
-import { LanguageSwitcher } from './language-switcher';
+import { StorefrontHeader } from './storefront-header';
 import { SoftwareShowcase } from './software-showcase';
 import { SoftwareDownloadButton } from './software-download-button';
 
@@ -29,13 +29,9 @@ export async function DiskCleanerLanding({ tool }: { tool: ToolService }) {
   const schema = { '@context': 'https://schema.org', '@type': 'SoftwareApplication', name: t('宇星磁盘管家'), applicationCategory: 'UtilitiesApplication', url: `${siteOrigin()}${toolPagePath(tool.slug)}`, description: summary,
     ...(release ? { softwareVersion: release.version, operatingSystem: release.systems, ...(downloadReady ? { downloadUrl: `${siteOrigin()}${softwareDownloadPath(release.id)}` } : {}) } : {}),
     ...(tool.chargeType === 'free' ? { offers: { '@type': 'Offer', price: 0, priceCurrency: 'CNY' } } : {}), publisher: { '@type': 'Organization', name: '宇星脉通' } };
-  return <div className="cleaner-site">
-    <header className="cleaner-header"><a href="/tools/c-drive-cleaner.html" className="cleaner-brand"><img src="/tool-logos/c-drive-cleaner-sky.svg" width="42" height="42" alt="" /><div><strong>{t('宇星磁盘管家')}</strong><small>{t('免费C盘清理工具')}</small></div></a>
-      <nav aria-label={t('产品导航')}><a href="#features">{t('产品功能')}</a><a href="#screenshots">{t('界面预览')}</a><a href="#versions">{t('版本更新')}</a></nav>
-      <div className="cleaner-header-actions"><LanguageSwitcher /><a className="cleaner-nav-download" href="#download" aria-label={t('免费下载')}><ArrowDownTrayIcon aria-hidden="true" />{t('免费下载')}</a></div>
-    </header>
+  return <><StorefrontHeader channel="mall" /><div className="cleaner-site">
     <main>
-      <section className="cleaner-hero"><div className="cleaner-hero-inner"><div className="cleaner-hero-copy"><span className="cleaner-eyebrow"><i />YX DISK · {t('宇星磁盘管家')}</span><h1>{headline}</h1><p>{summary}</p>
+      <section className="cleaner-hero"><div className="cleaner-hero-inner"><div className="cleaner-hero-copy"><span className="cleaner-eyebrow"><i />{t('宇星脉通 · Windows桌面工具')}</span><h1>{headline.split(/\r?\n/).map((line, index) => <span className={index === 0 ? 'cleaner-hero-title' : 'cleaner-hero-tagline'} key={index}>{line}</span>)}</h1><p>{summary}</p>
         <div className="cleaner-hero-actions"><SoftwareDownloadButton id={release?.id} name={release?.fileName} ready={downloadReady} /><a href="#features" className="cleaner-secondary">{t('了解产品')}<ArrowRightIcon aria-hidden="true" /></a></div>
         <div className="cleaner-release-meta">{release ? <><span>v{release.version}</span><i /><span>{softwareSize(release.fileSize)}</span><i /><span>{release.systems}</span></> : <span>{t('首个版本正在准备中，发布后即可下载。')}</span>}</div>
         <div className="cleaner-hero-badges">{[t('免登录下载'), t('Windows应用'), t('不扣商城积分')].map(label => <span key={label}><CheckIcon aria-hidden="true" />{label}</span>)}</div>
@@ -58,7 +54,7 @@ export async function DiskCleanerLanding({ tool }: { tool: ToolService }) {
     </main>
     <footer className="cleaner-footer"><a href="/">{t('宇星脉通')}</a><span>{t('免费C盘清理工具')}</span><a href="/tools">{t('返回工具服务')} ↗</a></footer>
     <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(schema).replace(/</g, '\\u003c') }} />
-  </div>;
+  </div></>;
 }
 function DiskIllustration({ label }: { label: string }) {
   return <div className="cleaner-disk-art" role="img" aria-label={label}><div className="cleaner-orbit orbit-one" /><div className="cleaner-orbit orbit-two" /><span className="cleaner-art-spark spark-one">✦</span><span className="cleaner-art-spark spark-two">✦</span>

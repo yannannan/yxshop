@@ -10,7 +10,7 @@ export type SoftwareAdmin = { initialized: boolean; storageReady: boolean; tool:
 export const softwareScreenshotNames = ['overview', 'disks', 'analysis', 'file-report', 'cleanup', 'residuals', 'ai-mall', 'ai-tools'] as const;
 const bundledScreenshot = (name: typeof softwareScreenshotNames[number]) => `/software/c-drive-cleaner/${name}.png`;
 export const defaultSoftwarePage: SoftwarePage = {
-  headline: '看清磁盘占用，\n让 C 盘轻装上阵。', headlineEn: 'Understand your disk.\nMake room for what matters.',
+  headline: '宇星磁盘管家\n免费C盘清理100%释放', headlineEn: 'Yuxing Disk Manager\nFree C: drive cleanup · 100% space release',
   summary: '宇星磁盘管家，将磁盘分析、C盘清理与残留扫描放在一起。从空间分布到具体文件，先看清占用，再选择需要整理的项目。',
   summaryEn: 'Yuxing Disk Manager brings disk analysis, C: drive cleanup and residual scans together. Understand where space goes, then choose what to clean.',
   features: [

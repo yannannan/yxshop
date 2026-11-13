@@ -86,6 +86,19 @@ test('产品默认介绍按请求复制，保存自定义内容后不会被新�
   const saved = await f.service.publicSoftware(77, true); assert.equal(saved.page.headline, '定制标题'); assert.deepEqual(Array.from(saved.page.screenshots), []); assert.equal((await f.service.softwareAdmin(77)).page.summary, '定制介绍');
 });
 
+test('旧默认主标题按最新要求展示且不写业务数据，保留自定义标题与两行文案', async () => {
+  const f = fixture();
+  for (const headline of ['看清磁盘占用，\n让 C 盘轻装上阵。', '看清磁盘占用，让 C 盘轻装上阵。', '让 C 盘，轻松一点。']) {
+    await f.service.saveSoftwarePage(77, { ...spec.defaultSoftwarePage, headline, headlineEn: 'Understand your disk.Make room for what matters.' });
+    const before = f.sqlite.prepare('SELECT content_json FROM tool_software_pages').get().content_json, writes = f.writes.length;
+    const page = (await f.service.publicSoftware(77, true)).page;
+    assert.equal(page.headline, '宇星磁盘管家\n免费C盘清理100%释放'); assert.equal(page.headlineEn, spec.defaultSoftwarePage.headlineEn);
+    assert.equal((await f.service.softwareAdmin(77)).page.headline, page.headline); assert.equal(f.writes.length, writes); assert.equal(f.sqlite.prepare('SELECT content_json FROM tool_software_pages').get().content_json, before);
+  }
+  await f.service.saveSoftwarePage(77, { ...spec.defaultSoftwarePage, headline: '自定义第一行\n自定义第二行' });
+  assert.equal((await f.service.publicSoftware(77, true)).page.headline, '自定义第一行\n自定义第二行');
+});
+
 test('创建、上传、发布分开执行；免费匿名下载签发有效地址并只增加请求量，不写积分', async () => {
   const f = fixture(), id = await f.create('1.0');
   await assert.rejects(f.service.publishSoftwareRelease(77, id), /先完成EXE/);
@@ -204,14 +217,18 @@ test('独立产品页可中英文渲染，未发布按钮禁用，真实截图�
     const i18n = { useI18n: () => ({ locale, t: value => locale === 'en' ? softwareEnglish[value] || value : value }) };
     const button = load('../components/software-download-button.tsx', { './language-provider': i18n, '../lib/software-release': spec });
     const gallery = load('../components/software-showcase.tsx', { './language-provider': i18n });
+    const sharedHeader = load('../components/storefront-header.tsx', { '@/components/language-provider': i18n, 'next/image': () => null, './account-menu': { AccountMenu: () => null }, './language-switcher': { LanguageSwitcher: () => null } });
     const component = load('../components/disk-cleaner-landing.tsx', { '../lib/i18n-server': { getI18n: async () => i18n.useI18n() }, '../lib/software-release-service': f.service, '../lib/software-release': spec,
-      '../lib/tool-services': { siteOrigin: () => 'https://www.yxstar.shop', toolPagePath: slug => '/tools/' + slug + '.html' }, './language-switcher': { LanguageSwitcher: () => null }, './software-showcase': gallery, './software-download-button': button });
+      '../lib/tool-services': { siteOrigin: () => 'https://www.yxstar.shop', toolPagePath: slug => '/tools/' + slug + '.html' }, './storefront-header': sharedHeader, './software-showcase': gallery, './software-download-button': button });
     return renderToStaticMarkup(await component.DiskCleanerLanding({ tool: { id: 77, slug: 'c-drive-cleaner', chargeType: 'free' } }));
   };
   const pending = await render('zh-CN'); assert.match(pending, /版本即将发布/); assert.doesNotMatch(pending, /href="\/api\/tools\/software\/download/); assert.match(pending, /真实软件截图/);
   const schema = JSON.parse(/<script type="application\/ld\+json">([^]*?)<\/script>/.exec(pending)[1]); assert.equal(schema.description, page.summary); assert.doesNotMatch(pending, /<script>bad/);
   const id = await f.create('1.2'); await f.upload(id); await f.service.publishSoftwareRelease(77, id);
   const ready = await render('en'); assert.match(ready, /Our cleaner/); assert.match(ready, /Free download for Windows/); assert.match(ready, /release=/); assert.match(ready, /Windows 10/); assert.match(ready, /SHA256/);
+  await f.service.saveSoftwarePage(77, spec.defaultSoftwarePage);
+  const standard = await render('zh-CN'); assert.match(standard, /class="cleaner-hero-title">宇星磁盘管家/); assert.match(standard, /class="cleaner-hero-tagline">免费C盘清理100%释放/);
+  for (const label of ['AI数字服务','上门技术服务','AI智能获客']) assert.ok(standard.includes(label)); assert.match(standard, /unified-topbar/); assert.doesNotMatch(standard, /class="cleaner-header"/);
 });
 
 const nodes = node => Array.isArray(node) ? node.flatMap(nodes) : React.isValidElement(node) ? [node, ...nodes(node.props.children)] : [];
