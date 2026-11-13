@@ -63,7 +63,7 @@ test('商品和模块排序保存相对顺序，新建条目稳定追加，不�
   assert.deepEqual(helpers.homepageSections(['会员', '短信'], 'flat').map(item => item.key), ['tools', 'products']);
 });
 
-for (const size of [6, 12]) test(`每页 ${size} 个：全量翻页无遗漏或重复，越界、非数字及空列表安全处理`, () => {
+for (const size of [8, 12]) test(`每页 ${size} 个：全量翻页无遗漏或重复，越界、非数字及空列表安全处理`, () => {
   const source = Array.from({ length: 31 }, (_, i) => i + 1);
   const pages = Math.ceil(source.length / size);
   assert.deepEqual(Array.from({ length: pages }, (_, i) => helpers.paginate(source, i + 1, size).items).flat(), source);
@@ -140,9 +140,9 @@ test('公开配置接口禁用缓存并返回已保存的排序', async () => {
   assert.equal(response.headers.get('cache-control'), 'no-store');
 });
 
-test('首页工具最多 6 个，独立页每页 12 个，末页及空列表显示正确', () => {
+test('首页工具最多 8 个，独立页每页 12 个，末页及空列表显示正确', () => {
   const home = markup(React.createElement(directory.ToolDirectory, { tools }));
-  assert.equal((home.match(/class="tool-entry-card"/g) || []).length, 6);
+  assert.equal((home.match(/class="tool-entry-card"/g) || []).length, 8);
   assert.ok(home.includes('href="/tools"'));
   for (const [page, count] of [[1, 12], [2, 12], [3, 1], [999, 1]]) {
     const html = markup(React.createElement(directory.ToolDirectory, { tools, pageSize: 12, page, moreHref: null }));
@@ -154,11 +154,11 @@ test('首页工具最多 6 个，独立页每页 12 个，末页及空列表显�
   assert.ok(empty.includes('暂无已启用')); assert.ok(!empty.includes('catalog-pagination'));
 });
 
-test('按类型展示每区 12 件商品，工具 6 个，自定义模块顺序且更多链接可进入分类', () => {
+test('按类型展示每区 12 件商品，工具 8 个，自定义模块顺序且更多链接可进入分类', () => {
   const component = load('../components/homepage-catalog.tsx', { 'next/link': Link, '../lib/homepage-display': helpers, './tool-directory': directory, './catalog-pagination': pagination });
   const html = markup(React.createElement(component.HomepageCatalog, { products, tools, settings: { mode: 'grouped', sectionOrder: ['category:短信', 'tools', 'category:会员'], itemOrder: [30, 105, 1] }, query: '商品', loading: false, error: '', renderProduct }));
   assert.equal((html.match(/data-product=/g) || []).length, 24);
-  assert.equal((html.match(/class="tool-entry-card"/g) || []).length, 6);
+  assert.equal((html.match(/class="tool-entry-card"/g) || []).length, 8);
   assert.ok(html.indexOf('data-product="30"') < html.indexOf('tool-entry-grid'));
   assert.ok(html.indexOf('tool-entry-grid') < html.indexOf('data-product="1"'));
   assert.ok(html.includes(`/products?category=${encodeURIComponent('短信')}&amp;q=${encodeURIComponent('商品')}`));
@@ -174,7 +174,7 @@ test('直接展示共用 12 件商品一页，工具仍独立分页；没有商�
   assert.equal((html.match(/class="product-category-section"/g) || []).length, 1);
   const empty = markup(React.createElement(component.HomepageCatalog, { ...props, products: [] }));
   assert.ok(!empty.includes('product-category-section'));
-  assert.equal((empty.match(/class="tool-entry-card"/g) || []).length, 6);
+  assert.equal((empty.match(/class="tool-entry-card"/g) || []).length, 8);
 });
 
 test('链接分页保留筛选条件，边界按钮不可点击，单页不显示无效翻页', () => {
@@ -248,7 +248,7 @@ test('商品数据库失败返回明确非成功状态与 JSON，不能被当成
 test('只保存工具模块顺序时仍追加所有普通商品分类，维持各区分页和更多入口',()=>{
   const component=load('../components/homepage-catalog.tsx',{'next/link':Link,'../lib/homepage-display':helpers,'./tool-directory':directory,'./catalog-pagination':pagination});
   const html=markup(React.createElement(component.HomepageCatalog,{products,tools,settings:{mode:'grouped',sectionOrder:['tools'],itemOrder:[]},query:'',renderProduct}));
-  assert.equal((html.match(/data-product=/g)||[]).length,24);assert.equal((html.match(/class="tool-entry-card"/g)||[]).length,6);assert.ok(html.includes('会员'));assert.ok(html.includes('短信'));assert.equal((html.match(/更多商品 →/g)||[]).length,2);assert.ok(html.indexOf('工具服务')<html.indexOf('共 15 件商品'));
+  assert.equal((html.match(/data-product=/g)||[]).length,24);assert.equal((html.match(/class="tool-entry-card"/g)||[]).length, 8);assert.ok(html.includes('会员'));assert.ok(html.includes('短信'));assert.equal((html.match(/更多商品 →/g)||[]).length,2);assert.ok(html.indexOf('工具服务')<html.indexOf('共 15 件商品'));
 });
 test('导航身份接口只使用签名会话，支持数字和字符串管理员权限，停用账号不显示管理入口',async()=>{
   for(const setup of [{phone:null},{permission:'10001'},{permission:10002},{permission:'10002'},{permission:'10003'},{permission:'10002',status:'disabled'}]){
@@ -341,16 +341,35 @@ test('订单、地址、后台、技术人员和工具介绍等页面的商城Lo
   }
 });
 
-test('首页工具翻页按钮确实切换到后 6 个工具，数据缩减不会停留在空页', () => {
+test('首页工具翻页按钮确实切换到后 8 个工具，数据缩减不会停留在空页', () => {
   const host = hookHost('../components/tool-directory.tsx', 'ToolDirectory', directoryMocks);
   let tree = host.render({ tools });
   elements(tree).find(element => element.type === pagination.CatalogPagination).props.onChange(2);
   let html = markup(host.render({ tools }));
-  assert.ok(html.includes('/tools/tool-7.html')); assert.ok(!html.includes('/tools/tool-1.html'));
-  assert.equal((html.match(/class="tool-entry-card"/g) || []).length, 6);
+  assert.ok(html.includes('/tools/tool-9.html')); assert.ok(!html.includes('/tools/tool-1.html'));
+  assert.equal((html.match(/class="tool-entry-card"/g) || []).length, 8);
   html = markup(host.render({ tools: tools.slice(0, 2) }));
   assert.equal((html.match(/class="tool-entry-card"/g) || []).length, 2);
   assert.ok(html.includes('/tools/tool-1.html'));
+});
+
+test('四列首页的7或8个工具一次显示且无分页，9个才翻页，旧第二页状态可正确回退', () => {
+  const host = hookHost('../components/tool-directory.tsx', 'ToolDirectory', directoryMocks);
+  for (const count of [7, 8]) {
+    const html = markup(host.render({ tools: tools.slice(0, count) }));
+    assert.equal((html.match(/class="tool-entry-card"/g) || []).length, count);
+    assert.ok(!html.includes('class="catalog-pagination"'));
+    for (let i = 1; i <= count; i++) assert.ok(html.includes(`/tools/tool-${i}.html`));
+  }
+  const tree = host.render({ tools: tools.slice(0, 9) });
+  const pager = elements(tree).find(element => element.type === pagination.CatalogPagination);
+  assert.equal(pager.props.totalPages, 2); pager.props.onChange(2);
+  const second = markup(host.render({ tools: tools.slice(0, 9) }));
+  assert.equal((second.match(/class="tool-entry-card"/g) || []).length, 1);
+  assert.ok(second.includes('/tools/tool-9.html')); assert.ok(!second.includes('/tools/tool-1.html'));
+  const reduced = markup(host.render({ tools: tools.slice(0, 7) }));
+  assert.equal((reduced.match(/class="tool-entry-card"/g) || []).length, 7);
+  assert.ok(!reduced.includes('class="catalog-pagination"')); assert.ok(reduced.includes('/tools/tool-1.html'));
 });
 
 function storefrontHost(globals = {}, mocks = {}) {
@@ -388,11 +407,28 @@ test('首页页脚的工具入口不依赖客户端路由，工具分类仍可�
 test('首页有有效管理员 Cookie 保留角色和页脚管理入口；全部同时保留工具和普通商品',async()=>{
   const host=storefrontHost({window:{localStorage:{getItem:()=>null},location:{search:'',hash:''}},fetch:async url=>Response.json(url==='/api/auth/session'?{authenticated:true,phone:'13800000000',isAdmin:true,isTechnician:false}:url==='/api/products'?products:url==='/api/tools'?tools:url==='/api/homepage-display'?{mode:'grouped',sectionOrder:['tools'],itemOrder:[]}:[])});
   host.render();host.mountEffects();await new Promise(resolve=>setImmediate(resolve));const html=markup(host.render());
-  assert.ok(html.includes('管理后台'));assert.equal(elements(host.render()).find(node => node.type === storefrontHeader.StorefrontHeader).props.isAdmin,true);assert.equal((html.match(/class="product-card refined-card"/g)||[]).length,24);assert.equal((html.match(/class="tool-entry-card"/g)||[]).length,6);
+  assert.ok(html.includes('管理后台'));assert.equal(elements(host.render()).find(node => node.type === storefrontHeader.StorefrontHeader).props.isAdmin,true);assert.equal((html.match(/class="product-card refined-card"/g)||[]).length,24);assert.equal((html.match(/class="tool-entry-card"/g)||[]).length, 8);
+});
+
+test('手机访问二维码使用固定商城地址并默认展开，打开客服暂时避让，关闭客服恢复', () => {
+  const host = storefrontHost();
+  let tree = host.render();
+  const qr = elements(tree).find(node => node.type === 'details' && node.props.className === 'mobile-access-floating');
+  assert.equal(qr.props.open, true);
+  const link = elements(qr).find(node => node.type === 'a');
+  assert.equal(link.props.href, 'https://www.yxstar.shop'); assert.equal(link.props.rel, 'noopener noreferrer');
+  const image = elements(qr).find(node => node.props.src === '/mobile-access-qr.png');
+  assert.equal(image.props.width, 148); assert.equal(image.props.height, 148); assert.ok(markup(qr).includes('扫码手机端访问'));
+  elements(tree).find(node => node.type === 'button' && node.props.className === 'service-float').props.onClick();
+  tree = host.render();
+  assert.ok(!elements(tree).some(node => node.props.className === 'mobile-access-floating'));
+  assert.ok(markup(tree).includes('/customer-service-wechat.png'));
+  elements(tree).find(node => node.type === 'button' && node.props.className === 'service-float').props.onClick();
+  assert.ok(elements(host.render()).some(node => node.props.className === 'mobile-access-floating'));
 });
 test('商品接口 HTTP 500 时首页明确提示读取失败，不能静默显示成只有工具',async()=>{
   const host=storefrontHost({window:{localStorage:{getItem:()=>null},location:{search:'',hash:''}},fetch:async url=>url==='/api/products'?new Response('server error',{status:500}):Response.json(url==='/api/tools'?tools:url==='/api/auth/session'?{authenticated:false}:[])});
-  host.render();host.mountEffects();await new Promise(resolve=>setImmediate(resolve));const html=markup(host.render());assert.ok(html.includes('商品列表暂不可用'));assert.ok(html.includes('role="alert"'));assert.equal((html.match(/class="tool-entry-card"/g)||[]).length,6);assert.equal((html.match(/class="product-card refined-card"/g)||[]).length,0);
+  host.render();host.mountEffects();await new Promise(resolve=>setImmediate(resolve));const html=markup(host.render());assert.ok(html.includes('商品列表暂不可用'));assert.ok(html.includes('role="alert"'));assert.equal((html.match(/class="tool-entry-card"/g)||[]).length, 8);assert.equal((html.match(/class="product-card refined-card"/g)||[]).length,0);
 });
 
 test('首页分类列表每页 12 件，点击翻页换商品，切换分类重置页码且含更多入口', () => {

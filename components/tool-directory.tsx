@@ -15,7 +15,7 @@ const toolCardIcons: Record<string, string> = {
   'site-analysis': 'webmaster-tools', 'site-analyzer': 'webmaster-tools', 'website-analysis': 'webmaster-tools',
 };
 
-export function ToolDirectory({ tools, loading = false, error = '', title = '让日常工作，更简单一点', pageSize = 6, page, moreHref = '/tools' }: { tools: ToolService[]; loading?: boolean; error?: string; title?: string; pageSize?: 6 | 12; page?: number; moreHref?: string | null }) {
+export function ToolDirectory({ tools, loading = false, error = '', title = '让日常工作，更简单一点', pageSize = 8, page, moreHref = '/tools' }: { tools: ToolService[]; loading?: boolean; error?: string; title?: string; pageSize?: 8 | 12; page?: number; moreHref?: string | null }) {
   const { t } = useI18n();
   const [localPage, setLocalPage] = useState(1);
   const result = paginate(tools, page ?? localPage, pageSize);
