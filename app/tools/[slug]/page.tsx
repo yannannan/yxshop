@@ -30,6 +30,7 @@ export default async function ToolPage({ params }: Props) {
   const { slug: rawSlug } = await params;
   const slug = normalizedSlug(rawSlug);
   if (!isToolSlug(slug)) notFound();
+  if (slug === 'ai-leads') permanentRedirect('/ai-leads');
   const tool = await getPublishedTool(slug);
   if (!tool) notFound();
   if (rawSlug !== `${slug}.html`) permanentRedirect(toolPagePath(slug));

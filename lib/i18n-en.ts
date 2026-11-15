@@ -5,6 +5,7 @@ import { softwareEnglish } from './software-en.mjs';
 import { consultationEnglish } from './consultation-en.mjs';
 // Interface copy only. User-authored business content is preserved.
 export const english: Record<string, string> = {
+  "面向国内与海外的获客场景，预览关键词检索、线索分析与客户管理工作台。": "Explore domestic and international prospecting with keyword search, lead analysis and a customer management workspace preview.",
   ...siteAnalysisEnglish,
   ...imageToolEnglish,
   ...signatureEnglish,

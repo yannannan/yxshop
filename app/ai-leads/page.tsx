@@ -1,13 +1,11 @@
-import { localizeMetadata } from '@/lib/i18n-server';
-
 import { getI18n } from '@/lib/i18n-server';
 import type { Metadata } from 'next';
-import { StorefrontHeader } from '@/components/storefront-header';
-const pageMetadata: Metadata = { title: 'AI智能获客｜宇星脉通' };
-export default async function AiLeadsPage() {
-  const { t } = await getI18n();
-  /* eslint-disable @next/next/no-html-link-for-pages -- 新频道入口使用原生链接。 */
-  return <><StorefrontHeader channel="ai-leads" /><main className="ai-channel-page"><span className="section-kicker">YXSTAR AI</span><h1>{t("AI智能获客")}</h1><p>{t("获客相关服务正在规划中。")}</p><div className="ai-channel-note"><h2>{t("功能筹备中")}</h2><p>{t("具体功能与支持范围将在需求确认、开发和验收后开放。")}</p><a className="account-secondary" href="/tools">{t("查看已开放工具")}</a></div></main></>;
+import { siteOrigin } from '@/lib/tool-services';
+import { AiLeadsLanding } from '@/components/ai-leads-landing';
+export async function generateMetadata(): Promise<Metadata> {
+  const { locale } = await getI18n();
+  return { title: locale === 'en' ? 'AI Lead Intelligence | Yuxing Maitong' : 'AI智能获客｜宇星脉通',
+    description: locale === 'en' ? 'Explore a workspace for domestic and international prospecting, keyword search, lead analysis and customer profiles. UI preview.' : '面向国内与海外的AI获客工作空间，体验关键词检索、数据筛选、客户画像与线索管理。当前为界面预览版。',
+    alternates: { canonical: `${siteOrigin()}/ai-leads` } };
 }
-
-export async function generateMetadata() { return localizeMetadata(pageMetadata); }
+export default function AiLeadsPage() { return <AiLeadsLanding />; }

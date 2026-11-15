@@ -134,14 +134,14 @@ test('手印在公开工具列表和独立页面中展示，复用原手印模�
     './tool-entries': load('../lib/tool-entries.ts', { './tool-services': helpers }),
     './tool-module-pricing': { readModulePrices: async (id, slug) => { assert.equal(id, 91); assert.equal(slug, 'document-signature'); return { handprint: 7 }; } },
   });
-  const tools = await data.getPublishedTools(); assert.deepEqual([...tools.map(tool => tool.slug)], ['document-signature', 'handprint-maker']);
+  const tools = await data.getPublishedTools(); assert.deepEqual([...tools.map(tool => tool.slug)], ['document-signature', 'handprint-maker', 'ai-leads']);
   const entry = await data.getPublishedTool('handprint-maker');
   assert.equal(entry.id, 91); assert.equal(entry.pointsCost, 7); assert.equal(entry.name, '手印制作');
   assert.equal(entry.logo, '/tool-logos/handprint-maker.svg'); assert.equal(entry.entryConfigured, true);
   assert.equal(helpers.builtInToolEntry(entry.slug), '/tools/handprint-maker.html');
   assert.deepEqual(reads, ['document-signature']);
   active = false;
-  assert.equal((await data.getPublishedTools()).length, 0); assert.equal(await data.getPublishedTool('handprint-maker'), null);
+  assert.deepEqual([...(await data.getPublishedTools()).map(tool => tool.slug)], ['ai-leads']); assert.equal(await data.getPublishedTool('handprint-maker'), null);
 });
 
 test('手印独立入口按模块价格检查余额，进入和刷新均不结算积分', async () => {
@@ -197,8 +197,8 @@ test('独立 HTML 页面提供服务端正文、标题、描述、canonical 和�
 });
 
 test('sitemap 与 robots 路由包含独立工具页面并返回正确类型', async () => {
-  const sitemap = load('../app/sitemap.xml/route.ts', { '@/lib/tool-service-data': data, '@/lib/tool-services': helpers });
-  const response = await sitemap.GET(); assert.match(response.headers.get('content-type'), /application\/xml/); assert.ok((await response.text()).includes('/tools/sample-tool.html'));
+  const sitemap = load('../app/sitemap.xml/route.ts', { '@/lib/tool-service-data': { ...data, getPublishedTools: async () => [...await data.getPublishedTools(), helpers.aiLeadsPreviewTool] }, '@/lib/tool-services': helpers });
+  const response = await sitemap.GET(); assert.match(response.headers.get('content-type'), /application\/xml/); const xml = await response.text(); assert.ok(xml.includes('/tools/sample-tool.html')); assert.equal(xml.split('/ai-leads</loc>').length - 1, 1);
   const robots = load('../app/robots.txt/route.ts', { '@/lib/tool-services': helpers });
   const text = await robots.GET().text(); assert.ok(text.includes('Sitemap:')); assert.ok(text.includes('/sitemap.xml')); assert.ok(text.includes('Disallow: /api/'));
 });

@@ -55,10 +55,20 @@ export type ToolService = {
   seoTitle: string; seoDescription: string; updatedAt: string;
 };
 
+// A built-in UI preview has no backing product, paid entitlement or collection job.
+export const aiLeadsPreviewTool: ToolService = {
+  id: 0, slug: 'ai-leads', name: 'AI智能获客', logo: '/tool-icons/ai-leads.svg',
+  description: '面向国内与海外的获客场景，预览关键词检索、线索分析与客户管理工作台。',
+  detail: '当前为界面体验版，未接入采集服务，不采集真实数据、不扣积分。',
+  chargeType: 'free', pointsCost: 0, price: 0, plans: [], entryConfigured: true,
+  seoTitle: 'AI智能获客｜宇星脉通', seoDescription: '', updatedAt: '',
+};
+
 export const toolChargeLabels: Record<ToolChargeType, string> = { free: '免费使用', paid: '付费使用', pending: '收费待确认', points: '通用积分' };
-export const toolPagePath = (slug: string) => `/tools/${encodeURIComponent(slug)}.html`;
-export const isWebsiteAnalysis = (slug: string | undefined, name = '') => ['webmaster-tools','webmaster-analysis','webmaster','site-analysis','site-analyzer','website-analysis'].includes(slug || '') || name === '站长分析工具';
-export const builtInToolEntry = (slug: string | undefined) => slug && (slug === 'c-drive-cleaner' || slug === 'stamp-maker' || slug === 'video-extractor' || slug === 'image-processor' || slug === 'document-signature' || slug === 'handprint-maker' || isWebsiteAnalysis(slug)) ? toolPagePath(slug) : '';
+export const toolPagePath = (slug: string) => slug === 'ai-leads' ? '/ai-leads' : `/tools/${encodeURIComponent(slug)}.html`;
+export const siteAnalysisSlugs = ['webmaster-tools','webmaster-analysis','webmaster','site-analysis','site-analyzer','website-analysis','yxstar-site-tool'];
+export const isWebsiteAnalysis = (slug: string | undefined, name = '') => siteAnalysisSlugs.includes(slug || '') || ['站长分析工具','站长运营工具'].includes(name.trim());
+export const builtInToolEntry = (slug: string | undefined, name = '') => slug && (slug === 'ai-leads' || slug === 'c-drive-cleaner' || slug === 'stamp-maker' || slug === 'video-extractor' || slug === 'image-processor' || slug === 'document-signature' || slug === 'handprint-maker' || isWebsiteAnalysis(slug, name)) ? toolPagePath(slug) : '';
 export function handprintToolEntry(owner: ToolService, pointsCost = owner.pointsCost): ToolService {
   return { ...owner, slug: 'handprint-maker', name: '手印制作', logo: '/tool-logos/handprint-maker.svg',
     description: '上传或拍摄手印照片，提取透明手印，也可随机生成指印图案。',

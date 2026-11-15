@@ -7,14 +7,15 @@ import { analysisOptions, compareReports, SiteAnalysisError, type AnalysisSite, 
 import { normalizeSite } from './site-analysis-network';
 import { collectSiteReport } from './site-analysis-collector';
 import { listAnalysisSites, requireVerifiedSite } from './site-management-service';
+import { isWebsiteAnalysis } from './tool-services';
+export { siteAnalysisSlugs } from './tool-services';
 
 type Tool = { id: number; name: string; tool_slug: string; tool_charge_type: string; tool_points_cost: number };
 type RunRow = { id: string; site_id: string; user_id: number; product_id: number; host: string; source_url: string; request_hash: string; options_json: string; billing_mode: string; points_cost: number; status: SiteRun['status']; progress: number; stage: string; attempts: number; claim_token: string; lease_until: string; draft_json: string; error_message: string; charged: number; points_spent: number; created_at: string; updated_at: string; completed_at: string };
 const validId = (id: unknown): id is string => typeof id === 'string' && /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i.test(id);
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
 const now = () => new Date().toISOString();
-export const siteAnalysisSlugs = ['webmaster-tools','webmaster-analysis','webmaster','site-analysis','site-analyzer','website-analysis'];
-export const isSiteAnalysisTool = (tool: { slug?: string; tool_slug?: string; name: string }) => siteAnalysisSlugs.includes(tool.slug || tool.tool_slug || '') || tool.name === '站长分析工具';
+export const isSiteAnalysisTool = (tool: { slug?: string; tool_slug?: string; name: string }) => isWebsiteAnalysis(tool.slug || tool.tool_slug, tool.name);
 function publicRun(row: RunRow, includeReport = true): SiteRun {
   return { id: row.id, siteId: row.site_id, host: row.host, status: row.status, progress: Number(row.progress), stage: row.stage, error: row.error_message, createdAt: row.created_at, updatedAt: row.updated_at, completedAt: row.completed_at, charged: Boolean(row.charged), pointsSpent: Number(row.points_spent), report: includeReport && row.draft_json ? JSON.parse(row.draft_json) : null };
 }

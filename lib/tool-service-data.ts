@@ -1,5 +1,5 @@
 import { env } from '@/db/mysql-runtime';
-import { handprintToolEntry, mapTool, type ToolService } from './tool-services';
+import { aiLeadsPreviewTool, handprintToolEntry, mapTool, type ToolService } from './tool-services';
 import { readModulePrices } from './tool-module-pricing';
 import { readToolEntrySettings } from './tool-entry-settings';
 import { publicToolOrder } from './tool-entries';
@@ -20,10 +20,12 @@ export async function getPublishedTools() {
   const tools = results.map(mapTool).filter(tool => tool.slug !== 'handprint-maker');
   const index = tools.findIndex(tool => tool.slug === 'document-signature');
   if (index >= 0) tools.splice(index + 1, 0, await handprintEntry(tools[index]));
-  return publicToolOrder(tools, (await readToolEntrySettings()).settings);
+  const ordered = publicToolOrder(tools, (await readToolEntrySettings()).settings);
+  return tools.some(tool => tool.slug === 'ai-leads') ? ordered : [...ordered, aiLeadsPreviewTool];
 }
 
 export async function getPublishedTool(slug: string) {
+  if (slug === 'ai-leads') return aiLeadsPreviewTool;
   const config = await readToolEntrySettings();
   if (config.settings.some(row => row.tool_slug === slug && !Number(row.enabled))) return null;
   const row = await env.DB.prepare(`SELECT ${columns} FROM products WHERE product_type='tool' AND status='active' AND tool_slug=? LIMIT 1`)

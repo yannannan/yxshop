@@ -43,6 +43,7 @@ const rows = [
   { id: 35, name: '链接视频提取工具', tool_slug: 'video-extractor' },
   { id: 37, name: '印章在线制作', tool_slug: 'stamp-maker' },
   { id: 50, name: '站长分析工具', tool_slug: 'webmaster-tools' },
+  { id: 51, name: '站长运营工具', tool_slug: 'yxstar-site-tool' },
   { id: 77, name: '免费C盘清理工具', tool_slug: 'c-drive-cleaner' },
   { id: 80, name: '图片在线处理', tool_slug: 'image-processor' },
   { id: 91, name: '文件在线签名', tool_slug: 'document-signature' },
@@ -90,7 +91,7 @@ for (const spec of ${JSON.stringify(paths)}) {
   }
   const trackerSource = 'https://www.yxstar.shop/s/RDYfVdtkRd-iXLHGxvrdEA';
   const trackerTags = [...html.matchAll(/<script[^>]*>/g)].filter(match => match[0].includes('src="' + trackerSource + '"'));
-  pages.push({ path, mobileAccessCount, script: (path.startsWith('/api/site-tracker/') || path.startsWith('/s/')) && response.status === 200 ? html : undefined, siteTrackerCount: trackerTags.length, siteTrackerInHead: trackerTags.every(match => match.index < html.indexOf('</head>')), siteTrackerSkipsAdmin: trackerTags.every(match => match[0].includes('data-exclude-path="/admin"')), status: response.status, failed: html.includes('This page couldn'), hasBrand: html.includes('宇星脉通'), hasVideoForm: html.includes('粘贴视频链接'), hasStampPreview: html.includes('效果预览'), language: /<html[^>]*lang="([^"]+)"/.exec(html)?.[1], hasImageWorkspace: html.includes('ip-workspace'), englishImage: html.includes('Online Image Editor'), englishNav: html.includes('AI Digital Services'), englishPoints: html.includes('One balance. Many possibilities.'), englishStamp: html.includes('Design Your Stamp'), englishVideo: html.includes('Paste a Video Link'), chineseAdmin: html.includes('正在验证管理权限'), wordReady: html.includes('"wordReady":true') });
+  pages.push({ path, mobileAccessCount, siteWorkspace: html.includes("seo-workspace"), leadsLanding: html.includes("al-hero-copy"), leadsWorkspace: html.includes("al-workspace-shell"), leadStart: html.includes('href="/ai-leads/workspace"'), leadPreview: html.includes("当前为交互演示") || html.includes("Interactive preview: no real collection"), sharedLeadHeader: (html.match(/<header class="topbar refined-topbar compact-topbar unified-topbar"/g) || []).length === 1 && html.includes("storefront-account-actions"), location: response.headers.get("location"), script: (path.startsWith('/api/site-tracker/') || path.startsWith('/s/')) && response.status === 200 ? html : undefined, siteTrackerCount: trackerTags.length, siteTrackerInHead: trackerTags.every(match => match.index < html.indexOf('</head>')), siteTrackerSkipsAdmin: trackerTags.every(match => match[0].includes('data-exclude-path="/admin"')), status: response.status, failed: html.includes('This page couldn'), hasBrand: html.includes('宇星脉通'), hasVideoForm: html.includes('粘贴视频链接'), hasStampPreview: html.includes('效果预览'), language: /<html[^>]*lang="([^"]+)"/.exec(html)?.[1], hasImageWorkspace: html.includes('ip-workspace'), englishImage: html.includes('Online Image Editor'), englishNav: html.includes('AI Digital Services'), englishPoints: html.includes('One balance. Many possibilities.'), englishStamp: html.includes('Design Your Stamp'), englishVideo: html.includes('Paste a Video Link'), chineseAdmin: html.includes('正在验证管理权限'), wordReady: html.includes('"wordReady":true') });
   if (path.startsWith('/tools/c-drive-cleaner.html')) Object.assign(pages.at(-1), { cleaner: html.includes('class="cleaner-site"'), pending: html.includes('版本即将发布'), englishCleaner: html.includes('Coming soon') && html.includes('Free C: drive cleanup') && html.includes('Yuxing Disk Manager'), genericLaunch: html.includes('class="tool-detail"'), requestedHero: html.includes('class="cleaner-hero-title"') && html.includes('class="cleaner-hero-tagline"') && (html.includes('免费C盘清理100%释放') || html.includes('Free C: drive cleanup · 100% space release')), sharedNav: html.includes('unified-topbar') && html.includes('href="/ai-leads"') && html.includes('href="/?channel=technical#channel-content"') && html.includes('storefront-account-actions') && !html.includes('class="cleaner-header"'), disabledDownload: html.includes('class="cleaner-download" disabled=""'), canonical: html.includes('https://www.yxstar.shop/tools/c-drive-cleaner.html'), screenshots: (html.match(/role="tab"[^>]*aria-selected=/g) || []).length, heroCarousel: html.includes('cleaner-showcase cleaner-showcase-hero'), hasDetails: html.includes('class="cleaner-carousel-detail"'), hasCarousel: html.includes('class="cleaner-carousel-viewport"') && (html.includes('暂停轮播') || html.includes('Pause slideshow')), stackedStories: html.includes('class="cleaner-story"'), loginFree: html.includes('免登录下载') || html.includes('No login to download') });
   if (stampSidebar) Object.assign(pages.at(-1), { menu: stampMenu, stampActive: /id="ds-stamp-maker" aria-labelledby/.test(html), structuredData: html.includes('application/ld+json'), embeddedStamp: html.includes('stamp-signature-view') });
 }
@@ -101,6 +102,20 @@ console.log(JSON.stringify({ pages, errors, queries }));
 }
 
 const needsBuild = !existsSync(entry) ? '请先执行 pnpm build 生成生产包' : false;
+
+test('站长旧链接实际生产渲染工作区，获客宣传及工作台中英文保留统一导航且只有预览', { skip: needsBuild }, async () => {
+  const result = await renderPages(['/tools/yxstar-site-tool.html', '/ai-leads', { path: '/ai-leads', locale: 'en' }, '/ai-leads/workspace', { path: '/ai-leads/workspace', locale: 'en' }]);
+  assert.deepEqual(result.errors, [], JSON.stringify(result.pages.map(page => ({ path: page.path, status: page.status, landing: page.leadsLanding, workspace: page.leadsWorkspace, location: page.location }))));
+  assert.deepEqual(result.pages.map(page => page.status), [200,200,200,200,200]);
+  assert.equal(result.pages[0].siteWorkspace, true);
+  for (const page of result.pages.slice(1, 5)) { assert.equal(page.sharedLeadHeader, true); assert.equal(page.mobileAccessCount, 1); }
+  for (const page of result.pages.slice(1, 3)) { assert.equal(page.leadsLanding, true); assert.equal(page.leadStart, true); }
+  for (const page of result.pages.slice(3, 5)) { assert.equal(page.leadsWorkspace, true); assert.equal(page.leadPreview, true); }
+  assert.equal(result.pages[2].englishNav, true); assert.equal(result.pages[4].language, 'en');
+  // permanentRedirect is intentional RSC control flow; verify the actual HTTP response separately.
+  const redirect = await renderPages(['/tools/ai-leads.html']);
+  assert.equal(redirect.pages[0].status, 308); assert.equal(redirect.pages[0].location, '/ai-leads');
+});
 
 test('全局手机入口在首页、目录、账户和独立工具只显示一次，后台不展示', { skip: needsBuild }, async () => {
   const result = await renderPages(['/', '/tools', '/account', '/checkout/test-order', '/tools/image-processor.html', '/tools/document-signature.html', '/tools/handprint-maker.html', '/tools/c-drive-cleaner.html', '/admin']);

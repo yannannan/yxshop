@@ -406,6 +406,18 @@ function fixture({chargeType='free',balance=300,failTable='',registered=true,ver
   const shortRoute=modules('app/s/[token]/route.ts');
   return{service,management,tracking,trackerRoute,shortRoute,route,request,body,queries,state:()=>state,collect};
 }
+test('站长旧标识和运营名称可读取同一工作区，前后端识别一致且不改账户或积分', async()=>{
+  const f=fixture();
+  for(const identity of [{tool_slug:'yxstar-site-tool',name:'站长运营工具'},{tool_slug:'custom-site-service',name:'站长运营工具'},{tool_slug:'webmaster-tools',name:'站长分析工具'}]){
+    Object.assign(f.state().products[0],identity);
+    assert.equal(f.service.isSiteAnalysisTool(identity),true);
+    assert.equal((await f.service.siteAnalysisTool(50)).id,50);
+    const response=await f.route.GET(f.request());assert.equal(response.status,200);assert.equal((await response.json()).authenticated,true);
+  }
+  assert.equal(f.service.isSiteAnalysisTool({tool_slug:'other',name:'其他工具'}),false);
+  assert.equal(f.state().points_ledger.length,0);assert.equal(f.state().site_analysis_runs.length,0);
+});
+
 test('匿名、伪造 Cookie 和停用用户不能创建或读取个人任务', async()=>{
   const f=fixture();assert.equal((await f.route.GET(f.request({user:0}))).status,200);assert.equal((await(await f.route.GET(f.request({user:0}))).json()).authenticated,false);
   assert.equal((await f.route.POST(f.request({user:0,body:f.body()}))).status,401);assert.equal((await f.route.POST(f.request({body:f.body(),headers:{cookie:'mall_session=fake'}}))).status,401);

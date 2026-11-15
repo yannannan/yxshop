@@ -25,6 +25,7 @@ import './tool-admin.css';
 import './disk-cleaner.css';
 import './consultation-chat.css';
 import './mobile-access.css';
+import './ai-leads.css';
 const pageMetadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'https://www.yxstar.shop'),
   title: '宇星脉通｜精选数字商品',

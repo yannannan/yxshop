@@ -90,7 +90,7 @@ test('管理员排序事务保存全部入口，手印状态独立；拒绝缺�
   assert.equal((await route.POST(post(url, { action: 'sort', entries: order }))).status, 200);
   assert.equal((await (await route.GET(new Request('http://localhost' + url))).json()).tools[0].tool_slug, order.at(-1).slug);
   const published = load('../lib/tool-service-data.ts', { '@/db/mysql-runtime': { env: { DB: { prepare() { return { bind() { return this; }, async all() { return { results: rows }; }, async first() { return rows.find(row => row.id === 91); } }; } } } }, './tool-services': toolServices, './tool-module-pricing': { readModulePrices: async () => ({ handprint: 7 }) }, './tool-entry-settings': f.settings, './tool-entries': entries });
-  assert.deepEqual([...((await published.getPublishedTools()).map(row => row.slug))], [...order].sort((a, b) => a.sort - b.sort).map(row => row.slug), 'saved admin order must reach the public directory');
+  assert.deepEqual([...((await published.getPublishedTools()).map(row => row.slug))], [...[...order].sort((a, b) => a.sort - b.sort).map(row => row.slug), 'ai-leads'], 'saved admin order must reach the public directory; built-in UI preview follows configured tools');
   assert.equal((await route.POST(post(url, { action: 'visibility', slug: 'handprint-maker', enabled: false }))).status, 200);
   assert.equal(f.sqlite.prepare("SELECT enabled FROM tool_entry_settings WHERE tool_slug='handprint-maker'").get().enabled, 0);
   assert.equal(await published.getPublishedTool('handprint-maker'), null);
