@@ -12,11 +12,11 @@ import * as tools from '../lib/tool-services.ts';
 import * as homepage from '../lib/homepage-display.ts';
 
 const require = createRequire(import.meta.url);
-function load(file, mocks = {}) {
+function load(file, mocks = {}, globals = {}) {
   const exports = {}, code = ts.transpileModule(readFileSync(new URL(file, import.meta.url), 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true },
   }).outputText;
-  vm.runInNewContext(code, { exports, Response, Request, URL, Date, console,
+  vm.runInNewContext(code, { exports, Response, Request, URL, Date, console, ...globals,
     fetch() { throw Error('UI preview must not send collection requests'); },
     require(name) { if (name in mocks) return mocks[name];
       if (['react', 'react/jsx-runtime', '@heroicons/react/24/outline'].includes(name)) return require(name);
@@ -28,16 +28,17 @@ function load(file, mocks = {}) {
 function elements(tree) { return React.isValidElement(tree) ? [tree, ...React.Children.toArray(tree.props.children).flatMap(elements)] : []; }
 const text = tree => React.Children.toArray(tree?.props?.children).map(child => React.isValidElement(child) ? text(child) : String(child)).join('');
 const markup = tree => renderToStaticMarkup(tree);
-function host(name = 'workspace', locale = 'zh-CN') {
+function host(name = 'workspace', locale = 'zh-CN', globals = {}) {
   let cursor = 0; const slots = [];
-  const react = { ...React, useId() { cursor++; return 'leads-ui'; },
+  let effect;
+  const react = { ...React, useId() { cursor++; return 'leads-ui'; }, useEffect(callback) { effect = callback; },
     useState(value) { const index = cursor++; if (!(index in slots)) slots[index] = value;
       return [slots[index], next => { slots[index] = typeof next === 'function' ? next(slots[index]) : next; }]; },
   };
   const exported = load(`../components/ai-leads-${name}.tsx`, { react,
-    './language-provider': { useI18n: () => ({ locale }) }, '../lib/ai-leads-design': design });
+    './language-provider': { useI18n: () => ({ locale }) }, '../lib/ai-leads-design': design }, globals);
   const Component = exported[name === 'workspace' ? 'AiLeadsWorkspace' : 'AiLeadsLanding'];
-  return { render() { cursor = 0; return Component(); } };
+  return { render() { cursor = 0; return Component(); }, mountEffect() { return effect?.(); } };
 }
 const findButton = (tree, label) => elements(tree).find(node => node.type === 'button' && text(node) === label);
 const change = (tree, name, value) => elements(tree).find(node => node.type === 'input' && node.props.name === name).props.onChange({ target: { value } });
@@ -66,7 +67,7 @@ test('获客目录和导航共用同一个宣传入口，预览入口无真实�
 
 test('目录预览卡片提供原生导航及预览标识，不向真实工具统计上报虚拟商品', () => {
   const directory = load('../components/tool-directory.tsx', { '@/components/language-provider': { useI18n: () => ({ t: text => text }) },
-    'next/image': ({ unoptimized: _, ...props }) => React.createElement('img', props), '../lib/tool-services': tools,
+    'next/image': props => { const attributes = { ...props }; delete attributes.unoptimized; return React.createElement('img', attributes); }, '../lib/tool-services': tools,
     '../lib/homepage-display': homepage, './catalog-pagination': { CatalogPagination: () => null } });
   const html = markup(React.createElement(directory.ToolDirectory, { tools: [tools.aiLeadsPreviewTool] }));
   assert.ok(html.includes('href="/ai-leads"')); assert.ok(html.includes('界面预览')); assert.ok(html.includes('/tool-icons/ai-leads.svg'));
@@ -94,33 +95,79 @@ test('宣传页中英文提供明显开始入口，平台区域筛选可用，�
   }
 });
 
-test('浅色宣传页实际使用本地摄影图片，首屏优先加载、其余懒加载，不用矢量插画或外链图片占位', () => {
+test('宣传页仅保留共用导航，检索、分析和管理板块使用对应功能位图且清楚标为示意', () => {
   for (const locale of ['zh-CN', 'en']) {
-    const html = markup(host('landing', locale).render());
+    const tree = host('landing', locale).render(), html = markup(tree);
     assert.ok(html.includes('class="al-site al-landing"')); assert.ok(!html.includes('<svg'));
-    const images = html.match(/<img\b[^>]*>/g) || []; assert.equal(images.length, 6);
+    assert.equal(elements(tree).filter(node => node.type === 'nav').length, 0, 'no second product navigation');
+    assert.ok(!html.includes('al-product-nav'));
+    const images = html.match(/<img\b[^>]*>/g) || []; assert.equal(images.length, 5);
     for (const tag of images) assert.match(tag, /src="\/media\/ai-leads\/[a-z-]+\.webp"/);
-    const hero = images.find(tag => tag.includes('hero-collaboration.webp'));
+    const hero = images.find(tag => tag.includes('keyword-discovery.webp'));
     assert.match(hero, /loading="eager"/); assert.match(hero, /fetchpriority="high"/i);
-    assert.ok(hero.includes('hero-collaboration-small.webp 900w')); assert.equal(images.filter(tag => tag.includes('loading="lazy"')).length, 5);
+    assert.ok(hero.includes('keyword-discovery-small.webp 900w')); assert.equal(images.filter(tag => tag.includes('loading="lazy"')).length, 4);
     assert.ok(html.includes('id="capabilities"')); assert.ok(html.includes(locale === 'en' ? 'Can I collect real prospects now?' : '现在可以直接采集真实客户吗？'));
-    assert.ok(html.includes('https://unsplash.com/license')); assert.ok(!html.includes('al-orbit-art'));
+    assert.ok(html.includes(locale === 'en' ? 'AI-generated feature concepts' : 'AI生成的功能场景示意'));
+    for (const [id, image] of [['al-analysis-title', 'precision-analysis'], ['al-profiles-title', 'lead-profiles']]) {
+      const section = elements(tree).find(node => node.props['aria-labelledby'] === id);
+      assert.ok(markup(section).includes('/media/ai-leads/' + image + '.webp'));
+    }
+    for (const name of ['hero-collaboration', 'global-trade', 'china-market-sky', 'customer-research', 'team-growth']) assert.ok(!html.includes(name));
   }
 });
 
-test('摄影素材为真实WebP字节，六组来源与署名完整，响应式版本可独立发布', () => {
-  const manifest = JSON.parse(readFileSync(new URL('../public/media/ai-leads/photos.json', import.meta.url), 'utf8'));
-  assert.equal(manifest.photos.length, 8); assert.equal(new Set(manifest.photos.map(photo => photo.sourcePage)).size, 6);
+test('三组功能位图及响应式版本为真实WebP文件，生成来源与提示词可追溯', () => {
+  const manifest = JSON.parse(readFileSync(new URL('../public/media/ai-leads/assets.json', import.meta.url), 'utf8'));
+  assert.equal(manifest.assets.length, 6); assert.equal(new Set(manifest.assets.map(asset => asset.scene)).size, 3);
+  assert.equal(manifest.generator, 'Built-in image_gen');
+  const provenance = readFileSync(new URL('../public/media/ai-leads/ASSETS.md', import.meta.url), 'utf8');
   let total = 0;
-  for (const photo of manifest.photos) {
-    assert.match(photo.file, /^[a-z-]+\.webp$/); assert.ok(photo.author);
-    assert.equal(new URL(photo.sourcePage).hostname, 'unsplash.com'); assert.equal(photo.license, 'https://unsplash.com/license');
-    const bytes = readFileSync(new URL('../public/media/ai-leads/' + photo.file, import.meta.url));
+  for (const asset of manifest.assets) {
+    assert.match(asset.file, /^[a-z-]+\.webp$/); assert.ok(provenance.includes(asset.scene));
+    const bytes = readFileSync(new URL('../public/media/ai-leads/' + asset.file, import.meta.url));
     assert.equal(bytes.toString('ascii', 0, 4), 'RIFF'); assert.equal(bytes.toString('ascii', 8, 12), 'WEBP');
-    assert.equal(bytes.length, photo.bytes); assert.equal(createHash('sha256').update(bytes).digest('hex'), photo.sha256);
-    assert.ok(photo.width >= 900 && photo.height >= 600); total += bytes.length;
+    assert.equal(bytes.length, asset.bytes); assert.equal(createHash('sha256').update(bytes).digest('hex'), asset.sha256);
+    assert.ok(asset.width >= 900 && asset.height >= 600); total += bytes.length;
   }
-  assert.ok(total < 2000000, 'all eight photographic files together should stay below 2MB');
+  assert.ok(total < 1000000, 'three concepts and responsive versions together should stay below 1MB');
+});
+
+test('轮播支持手动切换、回绕与暂停，不自动打断手动浏览', () => {
+  for (const locale of ['zh-CN', 'en']) {
+    const h = host('landing', locale);
+    const current = tree => elements(tree).find(node => node.type === 'figure' && node.props.hidden === false);
+    const arrow = (tree, label) => elements(tree).find(node => node.type === 'button' && node.props['aria-label'] === label);
+    let tree = h.render(); assert.ok(markup(current(tree)).includes('keyword-discovery.webp'));
+    arrow(tree, locale === 'en' ? 'Previous scene' : '上一张').props.onClick(); tree = h.render();
+    assert.ok(markup(current(tree)).includes('lead-profiles.webp'));
+    assert.ok(findButton(tree, locale === 'en' ? 'Play' : '播放'));
+    arrow(tree, locale === 'en' ? 'Next scene' : '下一张').props.onClick(); tree = h.render();
+    assert.ok(markup(current(tree)).includes('keyword-discovery.webp'));
+    arrow(tree, locale === 'en' ? 'Analysis & precise filtering' : '数据分析与精度筛选').props.onClick(); tree = h.render();
+    assert.ok(markup(current(tree)).includes('precision-analysis.webp'));
+  }
+});
+
+test('自动轮播六秒切换，悬停、焦点、隐藏页面和减少动态效果均暂停，卸载清理定时器', () => {
+  const timers = new Map(), listeners = {}, motionListeners = {};
+  let sequence = 0;
+  const media = { matches: false, addEventListener(name, fn) { motionListeners[name] = fn; }, removeEventListener(name) { delete motionListeners[name]; } };
+  const doc = { hidden: false, addEventListener(name, fn) { listeners[name] = fn; }, removeEventListener(name) { delete listeners[name]; } };
+  const h = host('landing', 'zh-CN', { window: { matchMedia: () => media }, document: doc,
+    setInterval(fn, delay) { assert.equal(delay, 6000); const id = ++sequence; timers.set(id, fn); return id; }, clearInterval(id) { timers.delete(id); } });
+  let tree = h.render(), cleanup = h.mountEffect(); assert.equal(timers.size, 1);
+  [...timers.values()][0](); tree = h.render();
+  assert.ok(markup(elements(tree).find(node => node.type === 'figure' && node.props.hidden === false)).includes('precision-analysis.webp'));
+  doc.hidden = true; listeners.visibilitychange(); assert.equal(timers.size, 0);
+  doc.hidden = false; listeners.visibilitychange(); assert.equal(timers.size, 1);
+  media.matches = true; motionListeners.change(); assert.equal(timers.size, 0);
+  media.matches = false; motionListeners.change(); assert.equal(timers.size, 1);
+  const carousel = () => elements(tree).find(node => node.props.className === 'al-launch-carousel');
+  carousel().props.onMouseEnter(); cleanup(); tree = h.render(); assert.equal(h.mountEffect(), undefined); assert.equal(timers.size, 0);
+  carousel().props.onMouseLeave(); tree = h.render(); cleanup = h.mountEffect(); assert.equal(timers.size, 1);
+  carousel().props.onFocusCapture(); cleanup(); tree = h.render(); assert.equal(h.mountEffect(), undefined); assert.equal(timers.size, 0);
+  carousel().props.onBlurCapture({ currentTarget: { contains: () => false }, relatedTarget: null }); tree = h.render(); cleanup = h.mountEffect(); assert.equal(timers.size, 1);
+  cleanup(); assert.equal(timers.size, 0); assert.deepEqual(Object.keys(listeners), []); assert.deepEqual(Object.keys(motionListeners), []);
 });
 
 test('工作台默认头像与名称、数量选择与营销条件均可用，预览不请求网络或扣费', () => {

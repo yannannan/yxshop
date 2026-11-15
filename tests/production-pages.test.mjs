@@ -109,7 +109,7 @@ test('站长旧链接实际生产渲染工作区，获客宣传及工作台中�
   assert.deepEqual(result.pages.map(page => page.status), [200,200,200,200,200]);
   assert.equal(result.pages[0].siteWorkspace, true);
   for (const page of result.pages.slice(1, 5)) { assert.equal(page.sharedLeadHeader, true); assert.equal(page.mobileAccessCount, 1); }
-  for (const page of result.pages.slice(1, 3)) { assert.equal(page.leadsLanding, true); assert.equal(page.leadStart, true); assert.equal(page.leadPhotoCount, 6); }
+  for (const page of result.pages.slice(1, 3)) { assert.equal(page.leadsLanding, true); assert.equal(page.leadStart, true); assert.equal(page.leadPhotoCount, 5); }
   for (const page of result.pages.slice(3, 5)) { assert.equal(page.leadsWorkspace, true); assert.equal(page.leadPreview, true); }
   assert.equal(result.pages[2].englishNav, true); assert.equal(result.pages[4].language, 'en');
   // permanentRedirect is intentional RSC control flow; verify the actual HTTP response separately.
@@ -138,10 +138,10 @@ test('C盘清理独立软件页生产中英文渲染，待发布不可下载，�
   assert.equal(result.pages[0].pending, true); assert.equal(result.pages[1].englishCleaner, true); assert.equal(result.pages[1].language, 'en'); assert.equal(result.pages[1].englishNav, true);
 });
 
-test('获客宣传的八个摄影文件随生产包发布，图片及来源说明不依赖远程热链', { skip: needsBuild }, () => {
-  const manifest = JSON.parse(readFileSync(new URL('../public/media/ai-leads/photos.json', import.meta.url), 'utf8'));
-  for (const photo of manifest.photos) assert.deepEqual(readFileSync(new URL('../dist/client/media/ai-leads/' + photo.file, import.meta.url)), readFileSync(new URL('../public/media/ai-leads/' + photo.file, import.meta.url)));
-  assert.deepEqual(readFileSync(new URL('../dist/client/media/ai-leads/photos.json', import.meta.url)), readFileSync(new URL('../public/media/ai-leads/photos.json', import.meta.url)));
+test('获客宣传功能位图随生产包发布，素材与生成来源不依赖远程热链', { skip: needsBuild }, () => {
+  const manifest = JSON.parse(readFileSync(new URL('../public/media/ai-leads/assets.json', import.meta.url), 'utf8'));
+  for (const asset of manifest.assets) assert.deepEqual(readFileSync(new URL('../dist/client/media/ai-leads/' + asset.file, import.meta.url)), readFileSync(new URL('../public/media/ai-leads/' + asset.file, import.meta.url)));
+  for (const file of ['assets.json', 'ASSETS.md']) assert.deepEqual(readFileSync(new URL('../dist/client/media/ai-leads/' + file, import.meta.url)), readFileSync(new URL('../public/media/ai-leads/' + file, import.meta.url)));
 });
 
 test('8张软件原图随生产包静态资源发布，部署无需临时文件夹或手动上传截图', { skip: needsBuild }, () => {

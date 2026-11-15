@@ -1,0 +1,55 @@
+{
+  "createdOn": "2026-11-15",
+  "generator": "Built-in image_gen",
+  "kind": "AI-generated feature concepts; not live screens or collection results",
+  "assets": [
+    {
+      "file": "keyword-discovery.webp",
+      "scene": "keyword-discovery",
+      "width": 1536,
+      "height": 1024,
+      "bytes": 101846,
+      "sha256": "185c373d4e1fa9572fdfa3ec6626729ab9f68e42ee18ce4fab31d2b30fdd4f48"
+    },
+    {
+      "file": "keyword-discovery-small.webp",
+      "scene": "keyword-discovery",
+      "width": 900,
+      "height": 600,
+      "bytes": 48794,
+      "sha256": "d095d677e529d78c62db41172fb3e3c9351319f1d3650001857c5e8b0dda3551"
+    },
+    {
+      "file": "precision-analysis.webp",
+      "scene": "precision-analysis",
+      "width": 1536,
+      "height": 1024,
+      "bytes": 129810,
+      "sha256": "f01d227e6cdfc7a04ad19342e9995638d23bf372e1359d5a05e32944b62a0276"
+    },
+    {
+      "file": "precision-analysis-small.webp",
+      "scene": "precision-analysis",
+      "width": 900,
+      "height": 600,
+      "bytes": 62540,
+      "sha256": "c8c5b0493cac12d5422a50e15403a9d6d5697b2ed6fdb5a3280a7b50468f3009"
+    },
+    {
+      "file": "lead-profiles.webp",
+      "scene": "lead-profiles",
+      "width": 1536,
+      "height": 1024,
+      "bytes": 120472,
+      "sha256": "b1e3afa1daeb68855e2e3a4c107631dbe23bec76137982ace31576008c298754"
+    },
+    {
+      "file": "lead-profiles-small.webp",
+      "scene": "lead-profiles",
+      "width": 900,
+      "height": 600,
+      "bytes": 57188,
+      "sha256": "b760332cf5a7db808a7dce44c7f789ce52133713eedfd97912bf570e81cdd31d"
+    }
+  ]
+}
