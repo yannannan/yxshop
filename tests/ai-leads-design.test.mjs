@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import vm from 'node:vm';
 import test from 'node:test';
@@ -91,6 +92,35 @@ test('宣传页中英文提供明显开始入口，平台区域筛选可用，�
     assert.equal(elements(list).filter(node => node.type === 'article').length, 7);
     assert.ok(!markup(list).includes(locale === 'en' ? 'Douyin' : '抖音'));
   }
+});
+
+test('浅色宣传页实际使用本地摄影图片，首屏优先加载、其余懒加载，不用矢量插画或外链图片占位', () => {
+  for (const locale of ['zh-CN', 'en']) {
+    const html = markup(host('landing', locale).render());
+    assert.ok(html.includes('class="al-site al-landing"')); assert.ok(!html.includes('<svg'));
+    const images = html.match(/<img\b[^>]*>/g) || []; assert.equal(images.length, 6);
+    for (const tag of images) assert.match(tag, /src="\/media\/ai-leads\/[a-z-]+\.webp"/);
+    const hero = images.find(tag => tag.includes('hero-collaboration.webp'));
+    assert.match(hero, /loading="eager"/); assert.match(hero, /fetchpriority="high"/i);
+    assert.ok(hero.includes('hero-collaboration-small.webp 900w')); assert.equal(images.filter(tag => tag.includes('loading="lazy"')).length, 5);
+    assert.ok(html.includes('id="capabilities"')); assert.ok(html.includes(locale === 'en' ? 'Can I collect real prospects now?' : '现在可以直接采集真实客户吗？'));
+    assert.ok(html.includes('https://unsplash.com/license')); assert.ok(!html.includes('al-orbit-art'));
+  }
+});
+
+test('摄影素材为真实WebP字节，六组来源与署名完整，响应式版本可独立发布', () => {
+  const manifest = JSON.parse(readFileSync(new URL('../public/media/ai-leads/photos.json', import.meta.url), 'utf8'));
+  assert.equal(manifest.photos.length, 8); assert.equal(new Set(manifest.photos.map(photo => photo.sourcePage)).size, 6);
+  let total = 0;
+  for (const photo of manifest.photos) {
+    assert.match(photo.file, /^[a-z-]+\.webp$/); assert.ok(photo.author);
+    assert.equal(new URL(photo.sourcePage).hostname, 'unsplash.com'); assert.equal(photo.license, 'https://unsplash.com/license');
+    const bytes = readFileSync(new URL('../public/media/ai-leads/' + photo.file, import.meta.url));
+    assert.equal(bytes.toString('ascii', 0, 4), 'RIFF'); assert.equal(bytes.toString('ascii', 8, 12), 'WEBP');
+    assert.equal(bytes.length, photo.bytes); assert.equal(createHash('sha256').update(bytes).digest('hex'), photo.sha256);
+    assert.ok(photo.width >= 900 && photo.height >= 600); total += bytes.length;
+  }
+  assert.ok(total < 2000000, 'all eight photographic files together should stay below 2MB');
 });
 
 test('工作台默认头像与名称、数量选择与营销条件均可用，预览不请求网络或扣费', () => {

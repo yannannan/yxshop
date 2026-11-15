@@ -1,0 +1,93 @@
+{
+  "checkedOn": "2026-11-15",
+  "photos": [
+    {
+      "file": "hero-collaboration.webp",
+      "author": "Cherrydeck",
+      "sourcePage": "https://unsplash.com/photos/people-collaborating-on-office-laptop-Qx7A7SChpnI",
+      "downloadUrl": "https://images.unsplash.com/photo-1603195827187-459ab02554a0?fm=webp&fit=max&w=1600&q=82",
+      "license": "https://unsplash.com/license",
+      "width": 1600,
+      "height": 2400,
+      "bytes": 411844,
+      "sha256": "36d7867e48676179e9ec8bbe6a610ff1c41f3120e1be1f6ea05b0c9c9b69b81a"
+    },
+    {
+      "file": "hero-collaboration-small.webp",
+      "author": "Cherrydeck",
+      "sourcePage": "https://unsplash.com/photos/people-collaborating-on-office-laptop-Qx7A7SChpnI",
+      "downloadUrl": "https://images.unsplash.com/photo-1603195827187-459ab02554a0?fm=webp&fit=max&w=900&q=82",
+      "license": "https://unsplash.com/license",
+      "width": 900,
+      "height": 1350,
+      "bytes": 159846,
+      "sha256": "29a22f9bde73240ddc87f945d4cea8df4be8e3faef7ebf63ee7ed78d912571df"
+    },
+    {
+      "file": "team-growth.webp",
+      "author": "Annie Spratt",
+      "sourcePage": "https://unsplash.com/photos/group-of-people-using-laptop-computer-QckxruozjRg",
+      "downloadUrl": "https://images.unsplash.com/photo-1522071820081-009f0129c71c?fm=webp&fit=max&w=1600&q=82",
+      "license": "https://unsplash.com/license",
+      "width": 1600,
+      "height": 1067,
+      "bytes": 231766,
+      "sha256": "920dd56983511c4bc829cff1cc9975a95da89c514bcaedaca1a75bf520c9e28b"
+    },
+    {
+      "file": "team-growth-small.webp",
+      "author": "Annie Spratt",
+      "sourcePage": "https://unsplash.com/photos/group-of-people-using-laptop-computer-QckxruozjRg",
+      "downloadUrl": "https://images.unsplash.com/photo-1522071820081-009f0129c71c?fm=webp&fit=max&w=900&q=82",
+      "license": "https://unsplash.com/license",
+      "width": 900,
+      "height": 600,
+      "bytes": 88264,
+      "sha256": "dd1fca271803da481ab88c51c7df5cf170e95bd29d5f8da81120ba0ff9a856c5"
+    },
+    {
+      "file": "global-trade.webp",
+      "author": "Venti Views",
+      "sourcePage": "https://unsplash.com/photos/aerial-view-of-city-buildings-during-daytime-6p0JBES_65E",
+      "downloadUrl": "https://images.unsplash.com/photo-1613690413712-dbe316605644?fm=webp&fit=max&w=1280&q=82",
+      "license": "https://unsplash.com/license",
+      "width": 1280,
+      "height": 865,
+      "bytes": 413908,
+      "sha256": "4d7f28488708176e1d5b60cbfc06d7609c7d7513992efa3301e6ad1b063e37ae"
+    },
+    {
+      "file": "china-market-sky.webp",
+      "author": "Richard Tao",
+      "sourcePage": "https://unsplash.com/photos/city-skyline-under-blue-sky-during-daytime-YXJtK1Bxyyw",
+      "downloadUrl": "https://images.unsplash.com/photo-1627208870083-455625ebe2cf?fm=webp&fit=max&w=1280&q=82",
+      "license": "https://unsplash.com/license",
+      "width": 1280,
+      "height": 853,
+      "bytes": 252448,
+      "sha256": "cb99424b5e7c236369d02e3c9d7038b3ce0b0a1a58a50e0f5fd74f1a42dc6d65"
+    },
+    {
+      "file": "data-insights.webp",
+      "author": "Carlos Muza",
+      "sourcePage": "https://unsplash.com/photos/laptop-computer-on-glass-top-table-hpjSkU2UYSU",
+      "downloadUrl": "https://images.unsplash.com/photo-1460925895917-afdab827c52f?fm=webp&fit=max&w=1280&q=82",
+      "license": "https://unsplash.com/license",
+      "width": 1280,
+      "height": 912,
+      "bytes": 95450,
+      "sha256": "943710cfd0dc9811e50f14f2603d7542dd7199566d94d74d40515cf4984f2b36"
+    },
+    {
+      "file": "customer-research.webp",
+      "author": "Invest Europe",
+      "sourcePage": "https://unsplash.com/photos/two-colleagues-collaborating-at-office-computers-5rAJrrjs9io",
+      "downloadUrl": "https://images.unsplash.com/photo-1761735485907-c59db6a69ccf?fm=webp&fit=max&w=1280&q=82",
+      "license": "https://unsplash.com/license",
+      "width": 1280,
+      "height": 853,
+      "bytes": 107816,
+      "sha256": "4de82bac079b77beaef6bb745ff15f29beb49159ec00d7cbdf825733d2f9a51f"
+    }
+  ]
+}
