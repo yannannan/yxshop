@@ -4,27 +4,24 @@ import { usePathname } from 'next/navigation';
 import { useEffect, useId, useRef, useState } from 'react';
 import { useI18n } from './language-provider';
 
-const preferenceKey = 'yxshop.mobile-access-state.v1';
-type Preference = 'auto' | 'expanded' | 'collapsed';
-const readPreference = (value: string | null): Preference => value === 'expanded' || value === 'collapsed' ? value : 'auto';
+// Start the revised text-button design expanded, without inheriting the old icon-only mode.
+const preferenceKey = 'yxshop.mobile-access-state.v2';
+const readExpanded = (value: string | null) => value !== 'collapsed';
 
 export function MobileAccess() {
   const { t } = useI18n(), pathname = usePathname(), panelId = useId();
   const trigger = useRef<HTMLButtonElement>(null);
-  const [preference, setPreference] = useState<Preference>('auto');
-  const [revealedOn, setRevealedOn] = useState<string | null>(null);
-  const [placement, setPlacement] = useState({ roomy: false, top: 98, right: 16, compactSize: 32 });
+  const [expanded, setExpanded] = useState(true);
+  const [top, setTop] = useState(98);
   const admin = pathname === '/admin' || !!pathname?.startsWith('/admin/');
-  const expanded = (revealedOn !== null && revealedOn === pathname) || (placement.roomy && preference !== 'collapsed');
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
-      try { setPreference(readPreference(window.localStorage.getItem(preferenceKey))); } catch { /* Storage is optional. */ }
+      try { setExpanded(readExpanded(window.localStorage.getItem(preferenceKey))); } catch { /* Storage is optional. */ }
     });
     function sync(event: StorageEvent) {
       if (event.key !== preferenceKey && event.key !== null) return;
-      setPreference(readPreference(event.newValue));
-      setRevealedOn(null);
+      setExpanded(readExpanded(event.newValue));
     }
     window.addEventListener('storage', sync);
     return () => { window.cancelAnimationFrame(frame); window.removeEventListener('storage', sync); };
@@ -32,55 +29,38 @@ export function MobileAccess() {
 
   useEffect(() => {
     if (admin) return;
-    let frame = 0, header: Element | null = null, content: Element | null = null;
+    let frame = 0, header: Element | null = null;
     const resize = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(schedule);
     function measure() {
       frame = 0;
       const nextHeader = document.querySelector('.unified-topbar');
-      const nextContent = document.querySelector('.cleaner-hero-inner') || document.querySelector('main');
-      if (header !== nextHeader || content !== nextContent) {
-        resize?.disconnect(); header = nextHeader; content = nextContent;
+      if (header !== nextHeader) {
+        resize?.disconnect(); header = nextHeader;
         if (header) resize?.observe(header);
-        if (content) resize?.observe(content);
       }
-      const width = document.documentElement.clientWidth || window.innerWidth;
-      const height = window.innerHeight;
-      const padding = content ? parseFloat(window.getComputedStyle(content).paddingRight) || 0 : 0;
-      const edge = content ? content.getBoundingClientRect().right - padding : width;
-      const gutter = Math.max(0, width - edge);
-      const top = Math.max(12, Math.min((header?.getBoundingClientRect().height || 74) + 24, height - 60));
-      const roomy = width > 720 && gutter >= 220 && height - top >= 240;
-      const compactSize = gutter >= 60 ? 44 : gutter >= 40 ? 32 : 28;
-      const right = roomy ? 24 : Math.max(0, Math.min(16, gutter - compactSize));
-      const next = { roomy, top, right, compactSize };
-      setPlacement(previous => Object.keys(next).every(key => previous[key as keyof typeof next] === next[key as keyof typeof next]) ? previous : next);
+      setTop(Math.max(12, Math.min((header?.getBoundingClientRect().height || 74) + 24, window.innerHeight - 60)));
     }
     function schedule() { if (!frame) frame = window.requestAnimationFrame(measure); }
-    function resized() { setRevealedOn(null); schedule(); }
-    // A new page may have a full-width workspace instead of the previous page's side gutter.
-    const resetFrame = window.requestAnimationFrame(() => { setRevealedOn(null); schedule(); });
     const mutations = new MutationObserver(schedule);
     mutations.observe(document.body, { childList: true, subtree: true });
-    window.addEventListener('resize', resized);
+    window.addEventListener('resize', schedule);
     schedule();
     return () => {
-      window.cancelAnimationFrame(frame); window.cancelAnimationFrame(resetFrame);
-      resize?.disconnect(); mutations.disconnect(); window.removeEventListener('resize', resized);
+      window.cancelAnimationFrame(frame);
+      resize?.disconnect(); mutations.disconnect(); window.removeEventListener('resize', schedule);
     };
   }, [pathname, admin]);
 
   function toggle(open: boolean) {
     const value = open ? 'expanded' : 'collapsed';
-    setPreference(value);
-    setRevealedOn(open && !placement.roomy ? pathname : null);
+    setExpanded(open);
     try { window.localStorage.setItem(preferenceKey, value); } catch { /* Keep the in-memory choice when storage is unavailable. */ }
   }
 
   if (admin) return null;
-  const iconOnly = !expanded && !placement.roomy;
-  return <aside className={`mobile-access-floating${expanded ? ' is-expanded' : ''}${iconOnly ? ' is-icon' : ''}`}
+  return <aside className={`mobile-access-floating${expanded ? ' is-expanded' : ''}`}
     data-mobile-access="true" aria-label={t('扫码手机端访问')}
-    style={{ top: placement.top, right: placement.right, width: iconOnly ? placement.compactSize : 180, maxHeight: `calc(100dvh - ${placement.top + 16}px)` }}
+    style={{ top, maxHeight: `calc(100dvh - ${top + 16}px)` }}
     onKeyDown={event => { if (event.key === 'Escape' && expanded) { event.preventDefault(); toggle(false); trigger.current?.focus(); } }}>
     <button type="button" className="mobile-access-trigger" ref={trigger} aria-expanded={expanded} aria-controls={panelId}
       aria-label={t('展开或收起手机访问二维码')} title={t('扫码手机端访问')} onClick={() => toggle(!expanded)}>

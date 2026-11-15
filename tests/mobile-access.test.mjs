@@ -8,7 +8,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { english } from '../lib/i18n-en.ts';
 
-const require = createRequire(import.meta.url), key = 'yxshop.mobile-access-state.v1';
+const require = createRequire(import.meta.url), key = 'yxshop.mobile-access-state.v2';
 function load(file, mocks, globals = {}) {
   const exports = {}, code = ts.transpileModule(readFileSync(new URL(file, import.meta.url), 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true },
@@ -86,35 +86,43 @@ test('服务端无需 window 即可输出唯一静态二维码，固定官方地
     assert.ok(html.includes('href="https://www.yxstar.shop"')); assert.ok(html.includes('rel="noopener noreferrer"'));
     assert.ok(html.includes('src="/mobile-access-qr.png"')); assert.ok(html.includes('width="148" height="148"'));
     assert.ok(html.includes(locale === 'en' ? 'Scan for mobile access' : '扫码手机端访问'));
-    assert.ok(html.includes('aria-expanded="false"')); assert.ok(html.includes('hidden=""'));
+    assert.ok(html.includes('aria-expanded="true"')); assert.ok(!html.includes('hidden=""'));
+    assert.ok(!html.includes('is-icon'));
   }
 });
 
-test('有留白时在导航下方默认展开，工具工作区收成边缘图标，响应导航高度与窗口变化', () => {
+test('默认展开且始终保留文字按钮，正文贴边和窗口缩小不再自动收起', () => {
   const h = host(); let tree = h.flush();
   assert.equal(button(tree).props['aria-expanded'], true); assert.equal(panel(tree).props.hidden, false);
-  assert.equal(tree.props.style.top, 98); assert.equal(tree.props.style.right, 24);
-  assert.ok(tree.props.style.width + tree.props.style.right + 16 <= h.geometry.width - h.geometry.right);
+  assert.equal(tree.props.style.top, 98);
   h.geometry.right = 1892; h.geometry.header = 102;
-  tree = h.emit('resize'); assert.equal(button(tree).props['aria-expanded'], false);
-  assert.ok(tree.props.className.includes('is-icon')); assert.equal(tree.props.style.width, 28); assert.equal(tree.props.style.right, 0); assert.equal(tree.props.style.top, 126);
-  tree = h.click(); assert.equal(panel(tree).props.hidden, false);
-  tree = h.emit('resize'); assert.equal(panel(tree).props.hidden, true); assert.equal(h.storage.get(key), 'expanded');
-  h.geometry.right = 1640; tree = h.emit('resize'); assert.equal(panel(tree).props.hidden, false);
-  h.geometry.height = 240; tree = h.emit('resize'); assert.equal(panel(tree).props.hidden, true);
+  tree = h.emit('resize'); assert.equal(button(tree).props['aria-expanded'], true);
+  assert.ok(!tree.props.className.includes('is-icon')); assert.equal(tree.props.style.top, 126);
+  tree = h.click(); assert.equal(panel(tree).props.hidden, true);
+  assert.equal(elements(button(tree)).find(node => node.type === 'b').props.children, '扫码手机端访问');
+  tree = h.emit('resize'); assert.equal(panel(tree).props.hidden, true);
+  h.click(); h.geometry.width = 900; h.geometry.height = 240;
+  tree = h.emit('resize'); assert.equal(panel(tree).props.hidden, false);
+  assert.equal(h.storage.get(key), 'expanded');
   h.unmount();
 });
 
-test('收起偏好跨页和刷新保留，手动打开窄页后不会意外在其他工作区展开', () => {
+test('展开和收起仅由用户控制，跨页、刷新和工具工作区保持选择', () => {
   const storage = new Map(), h = host({ storage }); h.flush();
   assert.equal(panel(h.click()).props.hidden, true); assert.equal(storage.get(key), 'collapsed');
   assert.equal(panel(h.navigate('/tools')).props.hidden, true);
   const reloaded = host({ storage }); assert.equal(panel(reloaded.flush()).props.hidden, true); reloaded.unmount();
   h.geometry.right = 1892; h.emit('resize'); assert.equal(panel(h.click()).props.hidden, false);
-  assert.equal(panel(h.navigate('/tools/document-signature.html')).props.hidden, true);
-  assert.equal(panel(h.navigate('/tools')).props.hidden, true);
-  h.geometry.right = 1640; assert.equal(panel(h.emit('resize')).props.hidden, false);
+  assert.equal(panel(h.navigate('/tools/document-signature.html')).props.hidden, false);
+  assert.equal(panel(h.navigate('/tools')).props.hidden, false);
+  const opened = host({ storage }); assert.equal(panel(opened.flush()).props.hidden, false); opened.unmount();
   h.unmount();
+});
+
+test('旧版图标模式偏好不影响新版首次默认展开，只有新版明确收起才隐藏二维码', () => {
+  const storage = new Map([['yxshop.mobile-access-state.v1', 'collapsed']]), h = host({ storage });
+  assert.equal(panel(h.flush()).props.hidden, false);
+  assert.equal(panel(h.click()).props.hidden, true); assert.equal(storage.get(key), 'collapsed'); h.unmount();
 });
 
 test('存储不可用仍能操作，Escape收起并回焦点，不影响页面导航', () => {
@@ -134,10 +142,10 @@ test('只同步对应存储项，后台及子页不展示，返回前台仍使�
   assert.ok(h.navigate('/administrator')); h.unmount();
 });
 
-test('内容加载观察器可重新测量留白，清理全部监听器，移动端不自动展开', () => {
-  const h = host(); h.flush(); h.geometry.width = 700; h.geometry.right = 680;
+test('导航高度变化仅更新位置，不改变展开状态，离开页面清理监听器', () => {
+  const h = host(); h.flush(); h.geometry.header = 110;
   h.observers.filter(observer => observer.active).forEach(observer => observer.callback());
-  assert.equal(panel(h.flush()).props.hidden, true);
+  const tree = h.flush(); assert.equal(panel(tree).props.hidden, false); assert.equal(tree.props.style.top, 134);
   h.unmount(); assert.ok(h.observers.every(observer => !observer.active));
   assert.ok([...h.listeners.values()].every(callbacks => callbacks.size === 0));
 });
