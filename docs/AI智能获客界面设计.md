@@ -75,11 +75,25 @@ Linux只读核对：
 
 ```bash
 git log -1 --oneline
-git branch --show-current
+git symbolic-ref --short HEAD
 git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}'
 ls public/media/ai-leads/*-zh.webp
 ```
 
-已向用户询问Linux当前提交和上游分支；本轮不远程登录、不操作线上数据库、不推送或重启线上服务。
+已取得Linux信息：当前提交16da2a4，上游origin/master；origin为`git@127.0.0.1:/home/git_space/java_project/yxshop`，仓库内项目路径前缀为`yxshopdev/`，远程分支只有master及yxshop-prod。Windows本地origin为`https://github.com/yannannan/yxshop.git`，项目本身就是仓库根目录，使用main/yxshop-dev。两者是独立仓库，运行Linux upgrade.sh不会从GitHub自动同步文件。不能直接把独立项目根目录分支覆盖到Linux的多目录仓库。
+
+准备了`ai-leads-linux-sync-20261116-8fa9010.tar.gz`，位于忽略输出目录`.vinext/release-packages/`。仅包含从327cde6基线到8fa9010的14个运行文件补丁：中文配图及对应页面、后台AI入口管理与所需素材清单。排除环境文件、离线依赖、构建物、两份采集草稿及其他用户提交，不新增SQL或修改upgrade.sh。包中包含中文README、文件清单、目标哈希和SHA256SUMS。
+
+将包上传至Linux /tmp后：
+
+```bash
+tar -xzf /tmp/ai-leads-linux-sync-20261116-8fa9010.tar.gz -C /tmp
+cd /home/www/yxshop/yxshopdev
+bash /tmp/ai-leads-sync-8fa9010/apply.sh && git push origin HEAD:master && bash upgrade.sh
+```
+
+apply.sh兼容当前Git已有命令，检查目录/上游/校验和并在仓库根目录用--directory=yxshopdev应用补丁，先执行完整--check --index检查，再应用并仅提交14个文件。目标文件不匹配时不修改源码，已完成时不重复提交。脚本不联网、不推送、不启动或停止商城；用户随后显式执行推送与原升级命令。原upgrade.sh会强制同步已跟踪文件，需要保留的其他源码应先提交或保存。
+
+同步包通过三个本地隔离场景：嵌套目录应用后逐文件哈希一致且未包含其他暂存文件/环境/离线引擎，重复执行不增加提交，存在目标源码修改时完整检查失败且项目文件不变。测试使用Git Bash与临时Git仓库，没有连接Linux、远程仓库或真实数据库。当前未远程部署。
 
 2026-11-16后台管理补齐验证：107项相关功能检查与18项无端口生产检查（125项）、生产构建和修改源码ESLint通过。覆盖AI预览管理项、排序和显示状态保存、前台同步、已有商品去重、免费预览拒绝收费保存、匿名/非授权访问拦截及积分/手印设置互不影响。类型检查保留16处既有错误；未启动浏览器或访问真实业务库/OSS，线上仅做公开页面与静态文件的只读HTTP检查。
