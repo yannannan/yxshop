@@ -17,11 +17,10 @@ async function handprintEntry(owner: ToolService) {
 export async function getPublishedTools() {
   const { results } = await env.DB.prepare(`SELECT ${columns} FROM products WHERE product_type='tool' AND status='active' AND tool_slug IS NOT NULL ORDER BY sort_order,id`).all<Record<string, unknown>>();
   // The handprint module has its own public page while sharing its owning tool's billing and records.
-  const tools = results.map(mapTool).filter(tool => tool.slug !== 'handprint-maker');
+  const tools = results.map(mapTool).filter(tool => tool.slug !== 'handprint-maker' && tool.slug !== 'ai-leads');
   const index = tools.findIndex(tool => tool.slug === 'document-signature');
   if (index >= 0) tools.splice(index + 1, 0, await handprintEntry(tools[index]));
-  const ordered = publicToolOrder(tools, (await readToolEntrySettings()).settings);
-  return tools.some(tool => tool.slug === 'ai-leads') ? ordered : [...ordered, aiLeadsPreviewTool];
+  return publicToolOrder([...tools, aiLeadsPreviewTool], (await readToolEntrySettings()).settings);
 }
 
 export async function getPublishedTool(slug: string) {

@@ -58,6 +58,15 @@ test('独立页面标识与 .html 路径保持稳定', () => {
   assert.equal(helpers.toolPagePath('c-drive-cleaner'), '/tools/c-drive-cleaner.html');
 });
 
+test('AI获客内置预览不能保存为收费或重复商品，不生成积分与收款配置', async () => {
+  for (const chargeType of ['free', 'points', 'paid']) {
+    const route = admin();
+    const response = await route.save({ slug: 'ai-leads', chargeType, pointsCost: 10, price: 19.9 });
+    assert.equal(response.status, 400); assert.match((await response.json()).message, /内置免费预览/);
+    assert.equal(route.writes.length, 0); assert.equal(route.payments.length, 0);
+  }
+});
+
 for (const chargeType of ['free', 'pending', 'paid']) {
   test(`新增${chargeType}工具：保存独立入口字段并按收费方式准备二维码`, async () => {
     const route = admin();

@@ -76,7 +76,7 @@ const post = (path, body, headers = {}) => new Request('http://localhost' + path
 
 test('管理端手印独立显示并继承原工具与模块价格，公开排序和隐藏不产生重复产品', () => {
   const result = entries.toolEntryRows(rows, [{ tool_slug: 'handprint-maker', sort_order: 0, enabled: 1 }], 7);
-  assert.equal(result.length, 6); assert.equal(result[0].tool_slug, 'handprint-maker'); assert.equal(result[0].id, 91); assert.equal(result[0].tool_points_cost, 7);
+  assert.equal(result.length, 7); assert.equal(result[0].tool_slug, 'handprint-maker'); assert.equal(result[0].id, 91); assert.equal(result[0].tool_points_cost, 7);
   const publicRows = result.map(row => ({ slug: row.tool_slug }));
   assert.equal(entries.publicToolOrder(publicRows, [{ tool_slug: 'handprint-maker', sort_order: 0, enabled: 0 }]).some(row => row.slug === 'handprint-maker'), false);
   assert.equal(entries.toolEntryRows(rows.map(row => row.id === 91 ? { ...row, status: 'inactive' } : row), [], 7).find(row => row.module_key).status, 'inactive');
@@ -85,21 +85,37 @@ test('管理端手印独立显示并继承原工具与模块价格，公开排�
 test('管理员排序事务保存全部入口，手印状态独立；拒绝缺项、重复、越界、跨站和无权限', async () => {
   const f = fixture(), route = f.entryRoute(), url = '/api/admin/tool-entries';
   const list = await (await route.GET(new Request('http://localhost' + url))).json();
-  assert.equal(list.tools.length, 6); assert.equal(list.tools.find(row => row.module_key).tool_points_cost, 7);
-  const order = list.tools.map((row, i) => ({ slug: row.tool_slug, sort: (6 - i) * 10 }));
+  assert.equal(list.tools.length, 7); assert.equal(list.tools.find(row => row.module_key).tool_points_cost, 7);
+  const order = list.tools.map((row, i) => ({ slug: row.tool_slug, sort: (7 - i) * 10 }));
   assert.equal((await route.POST(post(url, { action: 'sort', entries: order }))).status, 200);
   assert.equal((await (await route.GET(new Request('http://localhost' + url))).json()).tools[0].tool_slug, order.at(-1).slug);
   const published = load('../lib/tool-service-data.ts', { '@/db/mysql-runtime': { env: { DB: { prepare() { return { bind() { return this; }, async all() { return { results: rows }; }, async first() { return rows.find(row => row.id === 91); } }; } } } }, './tool-services': toolServices, './tool-module-pricing': { readModulePrices: async () => ({ handprint: 7 }) }, './tool-entry-settings': f.settings, './tool-entries': entries });
-  assert.deepEqual([...((await published.getPublishedTools()).map(row => row.slug))], [...[...order].sort((a, b) => a.sort - b.sort).map(row => row.slug), 'ai-leads'], 'saved admin order must reach the public directory; built-in UI preview follows configured tools');
+  assert.deepEqual([...((await published.getPublishedTools()).map(row => row.slug))], [...order].sort((a, b) => a.sort - b.sort).map(row => row.slug), 'saved admin order includes the AI preview');
   assert.equal((await route.POST(post(url, { action: 'visibility', slug: 'handprint-maker', enabled: false }))).status, 200);
   assert.equal(f.sqlite.prepare("SELECT enabled FROM tool_entry_settings WHERE tool_slug='handprint-maker'").get().enabled, 0);
   assert.equal(await published.getPublishedTool('handprint-maker'), null);
   assert.equal((await published.getPublishedTools()).some(row => row.slug === 'handprint-maker'), false);
+  assert.equal((await route.POST(post(url, { action: 'visibility', slug: 'ai-leads', enabled: false }))).status, 200);
+  assert.equal((await published.getPublishedTools()).some(row => row.slug === 'ai-leads'), false);
+  const hiddenPreview = (await (await route.GET(new Request('http://localhost' + url))).json()).tools.find(row => row.tool_slug === 'ai-leads');
+  assert.equal(hiddenPreview.status, 'inactive'); assert.equal(hiddenPreview.entry_enabled, false);
+  assert.equal((await published.getPublishedTool('ai-leads')).id, 0, 'directory visibility preserves the shared marketing page');
+  assert.equal((await route.POST(post(url, { action: 'visibility', slug: 'ai-leads', enabled: true }))).status, 200);
+  assert.equal((await published.getPublishedTools()).filter(row => row.slug === 'ai-leads').length, 1);
+  assert.equal(f.sqlite.prepare('SELECT COUNT(*) total FROM products').get().total, 5, 'preview settings never create a billable product');
   const count = f.writes.length;
   for (const [body, status] of [[{ action: 'sort', entries: order.slice(1) }, 409], [{ action: 'sort', entries: [order[0], order[0]] }, 400], [{ action: 'sort', entries: [{ slug: 'bad', sort: -1 }] }, 400], [{ action: 'visibility', slug: 'stamp-maker', enabled: false }, 400]]) assert.equal((await route.POST(post(url, body))).status, status);
   assert.equal((await route.POST(post(url, { action: 'sort', entries: order }, { origin: 'https://evil.invalid' }))).status, 403);
   assert.equal((await f.entryRoute(true).POST(post(url, { action: 'sort', entries: order }))).status, 403);
   assert.equal(f.writes.length, count);
+});
+
+test('AI获客管理项固定为免费预览，兼容同标识旧产品而不重复显示或继承收费', () => {
+  const legacy = { id: 123, name: '旧获客商品', tool_slug: 'ai-leads', status: 'inactive', tool_charge_type: 'paid', tool_points_cost: 900 };
+  const result = entries.toolEntryRows([...rows, legacy], []);
+  const previews = result.filter(row => row.tool_slug === 'ai-leads');
+  assert.equal(previews.length, 1); assert.equal(previews[0].id, 0); assert.equal(previews[0].preview_entry, 1);
+  assert.equal(previews[0].tool_charge_type, 'free'); assert.equal(previews[0].tool_points_cost, 0); assert.equal(previews[0].status, 'active');
 });
 
 test('缺少新配置表时旧入口读取回退，排序明确提示初始化且不修改产品', async () => {
@@ -203,7 +219,17 @@ test('管理界面显示手印、上下移动与全量排序保存，手印价�
   nodes(hp).find(node => node.type === 'button' && node.props.children === '积分配置').props.onClick(); render();
   assert.equal(nodes(tree).find(node => node.type === Prices).props.moduleKey, 'handprint');
   await nodes(tree).find(node => node.type === 'button' && node.props.children === '保存排序').props.onClick();
-  await new Promise(resolve => setImmediate(resolve)); assert.equal(requests.length, 1); assert.equal(requests[0].entries.length, 6);
+  await new Promise(resolve => setImmediate(resolve)); assert.equal(requests.length, 1); assert.equal(requests[0].entries.length, 7);
+  render();
+  const previewRow = nodes(tree).find(node => node.type === 'tr' && node.key === 'ai-leads');
+  assert.ok(nodes(previewRow).some(node => node.type === 'td' && React.Children.toArray(node.props.children).includes('免费预览')));
+  assert.ok(nodes(previewRow).some(node => node.props.href === '/ai-leads'));
+  assert.ok(!nodes(previewRow).some(node => node.type === 'button' && ['积分配置','编辑 / 收款配置'].includes(node.props.children)));
+  nodes(previewRow).find(node => node.type === 'button' && node.props.children === '隐藏目录').props.onClick();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(requests.at(-1).action, 'visibility'); assert.equal(requests.at(-1).slug, 'ai-leads');
+  assert.equal(f.sqlite.prepare("SELECT enabled FROM tool_entry_settings WHERE tool_slug='ai-leads'").get().enabled, 0);
+  assert.equal(f.sqlite.prepare("SELECT enabled FROM tool_entry_settings WHERE tool_slug='handprint-maker'").get().enabled, 1);
 });
 
 test('点击采集不拦截原生导航；记录访问、入口及实际功能选择，忽略已选项和管理端', async () => {

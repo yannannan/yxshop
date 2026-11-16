@@ -49,6 +49,7 @@ export async function POST(request: Request) {
     if (body.action !== 'save') return Response.json({ message: '未知工具操作' }, { status: 400 });
     const name = String(body.name || '').trim().slice(0, 255);
     const slug = String(body.slug || '').trim().toLowerCase();
+    if (slug === 'ai-leads') return Response.json({ message: 'AI智能获客当前为内置免费预览，请在工具管理中调整排序和目录展示，暂不配置收费。' }, { status: 400 });
     if (slug === 'handprint-maker') return Response.json({ message: '手印制作是文件在线签名的子功能，请在现有手印管理项配置' }, { status: 400 });
     const entryUrl = builtInToolEntry(slug) || String(body.entryUrl || '').trim();
     const chargeType = String(body.chargeType || 'pending');

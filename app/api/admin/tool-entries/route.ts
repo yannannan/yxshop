@@ -24,7 +24,7 @@ export async function POST(request: Request) {
     if (!body || typeof body !== 'object' || Array.isArray(body)) return Response.json({ message: '入口参数格式不正确' }, { status: 400, headers });
     if (body.action !== 'sort' && body.action !== 'visibility') return Response.json({ message: '未知入口操作' }, { status: 400, headers });
     if (body.action === 'sort' && (!Array.isArray(body.entries) || !body.entries.length || body.entries.length > 500 || body.entries.some((item: { slug?: unknown; sort?: unknown }) => typeof item?.slug !== 'string' || typeof item.sort !== 'number' || !Number.isSafeInteger(item.sort) || item.sort < 0 || item.sort > 1000000) || new Set(body.entries.map((item: { slug: string }) => item.slug)).size !== body.entries.length)) return Response.json({ message: '请填写 0～1000000 的整数排序，工具不能重复' }, { status: 400, headers });
-    if (body.action === 'visibility' && (body.slug !== 'handprint-maker' || typeof body.enabled !== 'boolean')) return Response.json({ message: '入口参数不正确' }, { status: 400, headers });
+    if (body.action === 'visibility' && (!['handprint-maker', 'ai-leads'].includes(body.slug) || typeof body.enabled !== 'boolean')) return Response.json({ message: '入口参数不正确' }, { status: 400, headers });
     await env.DB.transaction(async db => {
       const rows = (await db.prepare(query + ' FOR UPDATE').all<ToolRow>()).results;
       const current = (await db.prepare('SELECT tool_slug,sort_order,enabled FROM tool_entry_settings FOR UPDATE').all<{ tool_slug: string; sort_order: number; enabled: number }>()).results;

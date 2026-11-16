@@ -1,11 +1,11 @@
-import { handprintToolEntry, mapTool } from './tool-services';
+import { aiLeadsPreviewTool, handprintToolEntry, mapTool } from './tool-services';
 export type ToolRow = Record<string, unknown>;
 export type ToolEntrySetting = { tool_slug: string; sort_order: number; enabled: number };
 export type AdminToolEntry = ToolRow & { id: number; tool_slug: string; name: string; entry_sort: number; module_key: string; owner_status: string };
 
 export function toolEntryRows(rows: ToolRow[], settings: ToolEntrySetting[], handprintCost?: number): AdminToolEntry[] {
   const configured = new Map(settings.map(row => [row.tool_slug, row]));
-  const entries = rows.filter(row => row.tool_slug !== 'handprint-maker').flatMap((row, index) => {
+  const entries: AdminToolEntry[] = rows.filter(row => row.tool_slug !== 'handprint-maker' && row.tool_slug !== 'ai-leads').flatMap((row, index) => {
     const entry = { ...row, status: String(row.status), id: Number(row.id), tool_slug: String(row.tool_slug), name: String(row.name),
       entry_sort: index * 10, module_key: '', owner_status: String(row.status) };
     if (row.tool_slug !== 'document-signature') return [entry];
@@ -14,11 +14,15 @@ export function toolEntryRows(rows: ToolRow[], settings: ToolEntrySetting[], han
       detail: handprint.detail, cover_image: handprint.logo, tool_url: '/tools/handprint-maker.html',
       tool_points_cost: handprint.pointsCost, entry_sort: index * 10 + 1, module_key: 'handprint' }];
   });
+  const preview = aiLeadsPreviewTool;
+  entries.push({ id: 0, tool_slug: preview.slug, name: preview.name, description: preview.description, detail: preview.detail,
+    cover_image: preview.logo, tool_url: '/ai-leads', tool_charge_type: 'free', tool_points_cost: 0, price: 0,
+    status: 'active', owner_status: 'active', module_key: '', preview_entry: 1, entry_sort: rows.length * 10 });
   return entries.map(entry => {
     const setting = configured.get(entry.tool_slug);
     return { ...entry, entry_sort: setting ? Number(setting.sort_order) : entry.entry_sort,
       entry_enabled: setting ? Boolean(Number(setting.enabled)) : true,
-      status: entry.module_key && setting && !Number(setting.enabled) ? 'inactive' : entry.status };
+      status: (entry.module_key || entry.tool_slug === 'ai-leads') && setting && !Number(setting.enabled) ? 'inactive' : entry.status };
   }).sort((a, b) => a.entry_sort - b.entry_sort || a.tool_slug.localeCompare(b.tool_slug));
 }
 
