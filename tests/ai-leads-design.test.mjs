@@ -38,8 +38,9 @@ function host(name = 'workspace', locale = 'zh-CN', globals = {}) {
   const exported = load(`../components/ai-leads-${name}.tsx`, { react,
     './language-provider': { useI18n: () => ({ locale }) }, '../lib/ai-leads-design': design }, globals);
   const Component = exported[name === 'workspace' ? 'AiLeadsWorkspace' : 'AiLeadsLanding'];
-  return { render() { cursor = 0; return Component(); }, mountEffect() { return effect?.(); } };
+  return { render() { cursor = 0; return Component(); }, mountEffect() { return effect?.(); }, setLocale(next) { locale = next; } };
 }
+const imageFile = (scene, locale = 'zh-CN') => scene + (locale === 'en' ? '' : '-zh') + '.webp';
 const findButton = (tree, label) => elements(tree).find(node => node.type === 'button' && text(node) === label);
 const change = (tree, name, value) => elements(tree).find(node => node.type === 'input' && node.props.name === name).props.onChange({ target: { value } });
 const submit = tree => elements(tree).find(node => node.type === 'form').props.onSubmit({ preventDefault() {} });
@@ -103,22 +104,23 @@ test('宣传页仅保留共用导航，检索、分析和管理板块使用对�
     assert.ok(!html.includes('al-product-nav'));
     const images = html.match(/<img\b[^>]*>/g) || []; assert.equal(images.length, 5);
     for (const tag of images) assert.match(tag, /src="\/media\/ai-leads\/[a-z-]+\.webp"/);
-    const hero = images.find(tag => tag.includes('keyword-discovery.webp'));
+    const hero = images.find(tag => tag.includes(imageFile('keyword-discovery', locale)));
     assert.match(hero, /loading="eager"/); assert.match(hero, /fetchpriority="high"/i);
-    assert.ok(hero.includes('keyword-discovery-small.webp 900w')); assert.equal(images.filter(tag => tag.includes('loading="lazy"')).length, 4);
+    assert.ok(hero.includes(imageFile('keyword-discovery', locale).replace('.webp', '-small.webp') + ' 900w')); assert.equal(images.filter(tag => tag.includes('loading="lazy"')).length, 4);
     assert.ok(html.includes('id="capabilities"')); assert.ok(html.includes(locale === 'en' ? 'Can I collect real prospects now?' : '现在可以直接采集真实客户吗？'));
     assert.ok(html.includes(locale === 'en' ? 'AI-generated feature concepts' : 'AI生成的功能场景示意'));
     for (const [id, image] of [['al-analysis-title', 'precision-analysis'], ['al-profiles-title', 'lead-profiles']]) {
       const section = elements(tree).find(node => node.props['aria-labelledby'] === id);
-      assert.ok(markup(section).includes('/media/ai-leads/' + image + '.webp'));
+      assert.ok(markup(section).includes('/media/ai-leads/' + imageFile(image, locale)));
     }
     for (const name of ['hero-collaboration', 'global-trade', 'china-market-sky', 'customer-research', 'team-growth']) assert.ok(!html.includes(name));
   }
 });
 
-test('三组功能位图及响应式版本为真实WebP文件，生成来源与提示词可追溯', () => {
+test('三组中英文功能位图及响应式版本为真实WebP文件，生成来源与提示词可追溯', () => {
   const manifest = JSON.parse(readFileSync(new URL('../public/media/ai-leads/assets.json', import.meta.url), 'utf8'));
-  assert.equal(manifest.assets.length, 6); assert.equal(new Set(manifest.assets.map(asset => asset.scene)).size, 3);
+  assert.equal(manifest.assets.length, 12); assert.equal(new Set(manifest.assets.map(asset => asset.scene)).size, 3);
+  assert.deepEqual([...new Set(manifest.assets.map(asset => asset.locale))].sort(), ['en', 'zh-CN']);
   assert.equal(manifest.generator, 'Built-in image_gen');
   const provenance = readFileSync(new URL('../public/media/ai-leads/ASSETS.md', import.meta.url), 'utf8');
   let total = 0;
@@ -129,7 +131,31 @@ test('三组功能位图及响应式版本为真实WebP文件，生成来源与�
     assert.equal(bytes.length, asset.bytes); assert.equal(createHash('sha256').update(bytes).digest('hex'), asset.sha256);
     assert.ok(asset.width >= 900 && asset.height >= 600); total += bytes.length;
   }
-  assert.ok(total < 1000000, 'three concepts and responsive versions together should stay below 1MB');
+  for (const scene of ['keyword-discovery', 'precision-analysis', 'lead-profiles']) {
+    for (const locale of ['zh-CN', 'en']) {
+      const variants = manifest.assets.filter(asset => asset.scene === scene && asset.locale === locale);
+      assert.equal(variants.length, 2); assert.deepEqual(variants.map(asset => asset.width).sort((a,b) => a-b), [900,1536]);
+      assert.ok(variants.some(asset => asset.file === imageFile(scene, locale)));
+    }
+  }
+  assert.ok(total < 2000000, 'both language sets and responsive versions together should stay below 2MB');
+});
+
+test('切换语言时轮播和下方配图整套切换src与srcSet，保留当前轮播位置', () => {
+  const h = host('landing');
+  let tree = h.render();
+  elements(tree).find(node => node.type === 'button' && node.props['aria-label'] === '客户画像与线索管理').props.onClick();
+  for (const locale of ['zh-CN', 'en', 'zh-CN']) {
+    h.setLocale(locale); tree = h.render();
+    const images = markup(tree).match(/<img\b[^>]*>/g) || [];
+    assert.equal(images.length, 5);
+    for (const tag of images) {
+      if (locale === 'en') { assert.ok(!tag.includes('-zh')); assert.match(tag, /-small\.webp 900w/); }
+      else { assert.match(tag, /src="\/media\/ai-leads\/[a-z-]+-zh\.webp"/); assert.match(tag, /-zh-small\.webp 900w/); }
+    }
+    const current = elements(tree).find(node => node.type === 'figure' && node.props.hidden === false);
+    assert.ok(markup(current).includes(imageFile('lead-profiles', locale)));
+  }
 });
 
 test('轮播支持手动切换、回绕与暂停，不自动打断手动浏览', () => {
@@ -137,14 +163,14 @@ test('轮播支持手动切换、回绕与暂停，不自动打断手动浏览',
     const h = host('landing', locale);
     const current = tree => elements(tree).find(node => node.type === 'figure' && node.props.hidden === false);
     const arrow = (tree, label) => elements(tree).find(node => node.type === 'button' && node.props['aria-label'] === label);
-    let tree = h.render(); assert.ok(markup(current(tree)).includes('keyword-discovery.webp'));
+    let tree = h.render(); assert.ok(markup(current(tree)).includes(imageFile('keyword-discovery', locale)));
     arrow(tree, locale === 'en' ? 'Previous scene' : '上一张').props.onClick(); tree = h.render();
-    assert.ok(markup(current(tree)).includes('lead-profiles.webp'));
+    assert.ok(markup(current(tree)).includes(imageFile('lead-profiles', locale)));
     assert.ok(findButton(tree, locale === 'en' ? 'Play' : '播放'));
     arrow(tree, locale === 'en' ? 'Next scene' : '下一张').props.onClick(); tree = h.render();
-    assert.ok(markup(current(tree)).includes('keyword-discovery.webp'));
+    assert.ok(markup(current(tree)).includes(imageFile('keyword-discovery', locale)));
     arrow(tree, locale === 'en' ? 'Analysis & precise filtering' : '数据分析与精度筛选').props.onClick(); tree = h.render();
-    assert.ok(markup(current(tree)).includes('precision-analysis.webp'));
+    assert.ok(markup(current(tree)).includes(imageFile('precision-analysis', locale)));
   }
 });
 
@@ -157,7 +183,7 @@ test('自动轮播六秒切换，悬停、焦点、隐藏页面和减少动态�
     setInterval(fn, delay) { assert.equal(delay, 6000); const id = ++sequence; timers.set(id, fn); return id; }, clearInterval(id) { timers.delete(id); } });
   let tree = h.render(), cleanup = h.mountEffect(); assert.equal(timers.size, 1);
   [...timers.values()][0](); tree = h.render();
-  assert.ok(markup(elements(tree).find(node => node.type === 'figure' && node.props.hidden === false)).includes('precision-analysis.webp'));
+  assert.ok(markup(elements(tree).find(node => node.type === 'figure' && node.props.hidden === false)).includes(imageFile('precision-analysis')));
   doc.hidden = true; listeners.visibilitychange(); assert.equal(timers.size, 0);
   doc.hidden = false; listeners.visibilitychange(); assert.equal(timers.size, 1);
   media.matches = true; motionListeners.change(); assert.equal(timers.size, 0);

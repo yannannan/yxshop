@@ -6,8 +6,10 @@ import { useI18n } from './language-provider';
 import { acquisitionPlatforms } from '../lib/ai-leads-design';
 
 function FeatureImage({ name, alt, priority = false }: { name: string; alt: string; priority?: boolean }) {
-  return <img src={'/media/ai-leads/' + name + '.webp'}
-    srcSet={'/media/ai-leads/' + name + '-small.webp 900w, /media/ai-leads/' + name + '.webp 1536w'}
+  const { locale } = useI18n();
+  const imageName = locale === 'en' ? name : name + '-zh';
+  return <img src={'/media/ai-leads/' + imageName + '.webp'}
+    srcSet={'/media/ai-leads/' + imageName + '-small.webp 900w, /media/ai-leads/' + imageName + '.webp 1536w'}
     sizes="(max-width: 720px) calc(100vw - 40px), (max-width: 1100px) 80vw, 50vw"
     width={1536} height={1024} alt={alt} loading={priority ? 'eager' : 'lazy'}
     decoding="async" fetchPriority={priority ? 'high' : undefined} />;
