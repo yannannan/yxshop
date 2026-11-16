@@ -20,10 +20,10 @@ declare global {
 }
 
 declare namespace VinextRouteTypes {
-  type PageRoute = "/" | "/account" | "/account/activity" | "/account/orders" | "/account/profile" | "/addresses" | "/admin" | "/ai-leads" | "/ai-operations" | "/checkout/[id]" | "/orders" | "/points" | "/product/[id]" | "/products" | "/service-orders" | "/service-orders/[id]" | "/service/[slug]" | "/technician" | "/tools" | "/tools/[slug]";
-  type LayoutRoute = "/" | "/account" | "/admin" | "/product/[id]";
-  type RouteHandlerRoute = "/api/account" | "/api/account/avatar" | "/api/account/records" | "/api/addresses" | "/api/admin" | "/api/admin/homepage-display" | "/api/admin/onsite" | "/api/admin/points" | "/api/admin/session" | "/api/admin/summary" | "/api/admin/system" | "/api/admin/tool-pricing" | "/api/admin/tools" | "/api/auth/logout" | "/api/auth/send-code" | "/api/auth/session" | "/api/auth/verify" | "/api/categories" | "/api/homepage-display" | "/api/order-notifications/reply" | "/api/orders" | "/api/payment-qrs" | "/api/points" | "/api/product-images" | "/api/products" | "/api/site-tracker/[token]" | "/api/technical-consultations" | "/api/technical-payment-qrs" | "/api/technical-provider-applications" | "/api/technical-service-orders" | "/api/technical-services" | "/api/technician" | "/api/tools" | "/api/tools/access" | "/api/tools/document-signature" | "/api/tools/document-signature/[id]" | "/api/tools/document-signature/assets/[...path]" | "/api/tools/image-processor" | "/api/tools/image-processor/[id]" | "/api/tools/site-analysis" | "/api/tools/stamp-maker" | "/api/tools/stamp-maker/preview" | "/api/tools/usage" | "/api/tools/video-extractor" | "/api/tools/video-extractor/download" | "/robots.txt" | "/s/[token]" | "/sitemap.xml";
-  type AppRoute = "/" | "/account" | "/account/activity" | "/account/orders" | "/account/profile" | "/addresses" | "/admin" | "/ai-leads" | "/ai-operations" | "/api/account" | "/api/account/avatar" | "/api/account/records" | "/api/addresses" | "/api/admin" | "/api/admin/homepage-display" | "/api/admin/onsite" | "/api/admin/points" | "/api/admin/session" | "/api/admin/summary" | "/api/admin/system" | "/api/admin/tool-pricing" | "/api/admin/tools" | "/api/auth/logout" | "/api/auth/send-code" | "/api/auth/session" | "/api/auth/verify" | "/api/categories" | "/api/homepage-display" | "/api/order-notifications/reply" | "/api/orders" | "/api/payment-qrs" | "/api/points" | "/api/product-images" | "/api/products" | "/api/site-tracker/[token]" | "/api/technical-consultations" | "/api/technical-payment-qrs" | "/api/technical-provider-applications" | "/api/technical-service-orders" | "/api/technical-services" | "/api/technician" | "/api/tools" | "/api/tools/access" | "/api/tools/document-signature" | "/api/tools/document-signature/[id]" | "/api/tools/document-signature/assets/[...path]" | "/api/tools/image-processor" | "/api/tools/image-processor/[id]" | "/api/tools/site-analysis" | "/api/tools/stamp-maker" | "/api/tools/stamp-maker/preview" | "/api/tools/usage" | "/api/tools/video-extractor" | "/api/tools/video-extractor/download" | "/checkout/[id]" | "/orders" | "/points" | "/product/[id]" | "/products" | "/robots.txt" | "/s/[token]" | "/service-orders" | "/service-orders/[id]" | "/service/[slug]" | "/sitemap.xml" | "/technician" | "/tools" | "/tools/[slug]";
+  type PageRoute = "/" | "/account" | "/account/activity" | "/account/orders" | "/account/profile" | "/addresses" | "/admin" | "/ai-leads" | "/ai-leads/workspace" | "/ai-operations" | "/checkout/[id]" | "/orders" | "/points" | "/product/[id]" | "/products" | "/service-orders" | "/service-orders/[id]" | "/service/[slug]" | "/technician" | "/tools" | "/tools/[slug]";
+  type LayoutRoute = "/" | "/account" | "/admin" | "/ai-leads" | "/product/[id]";
+  type RouteHandlerRoute = "/api/account" | "/api/account/avatar" | "/api/account/records" | "/api/addresses" | "/api/admin" | "/api/admin/homepage-display" | "/api/admin/onsite" | "/api/admin/points" | "/api/admin/session" | "/api/admin/software" | "/api/admin/software/upload" | "/api/admin/summary" | "/api/admin/system" | "/api/admin/tool-entries" | "/api/admin/tool-pricing" | "/api/admin/tool-statistics" | "/api/admin/tools" | "/api/auth/logout" | "/api/auth/send-code" | "/api/auth/session" | "/api/auth/verify" | "/api/categories" | "/api/homepage-display" | "/api/order-notifications/reply" | "/api/orders" | "/api/payment-qrs" | "/api/points" | "/api/product-images" | "/api/products" | "/api/site-tracker/[token]" | "/api/technical-chat/attachment" | "/api/technical-chat/messages" | "/api/technical-consultations" | "/api/technical-payment-qrs" | "/api/technical-provider-applications" | "/api/technical-service-orders" | "/api/technical-services" | "/api/technician" | "/api/tools" | "/api/tools/access" | "/api/tools/activity" | "/api/tools/document-signature" | "/api/tools/document-signature/[id]" | "/api/tools/document-signature/assets/[...path]" | "/api/tools/image-processor" | "/api/tools/image-processor/[id]" | "/api/tools/site-analysis" | "/api/tools/software/download" | "/api/tools/stamp-maker" | "/api/tools/stamp-maker/preview" | "/api/tools/usage" | "/api/tools/video-extractor" | "/api/tools/video-extractor/download" | "/robots.txt" | "/s/[token]" | "/sitemap.xml";
+  type AppRoute = "/" | "/account" | "/account/activity" | "/account/orders" | "/account/profile" | "/addresses" | "/admin" | "/ai-leads" | "/ai-leads/workspace" | "/ai-operations" | "/api/account" | "/api/account/avatar" | "/api/account/records" | "/api/addresses" | "/api/admin" | "/api/admin/homepage-display" | "/api/admin/onsite" | "/api/admin/points" | "/api/admin/session" | "/api/admin/software" | "/api/admin/software/upload" | "/api/admin/summary" | "/api/admin/system" | "/api/admin/tool-entries" | "/api/admin/tool-pricing" | "/api/admin/tool-statistics" | "/api/admin/tools" | "/api/auth/logout" | "/api/auth/send-code" | "/api/auth/session" | "/api/auth/verify" | "/api/categories" | "/api/homepage-display" | "/api/order-notifications/reply" | "/api/orders" | "/api/payment-qrs" | "/api/points" | "/api/product-images" | "/api/products" | "/api/site-tracker/[token]" | "/api/technical-chat/attachment" | "/api/technical-chat/messages" | "/api/technical-consultations" | "/api/technical-payment-qrs" | "/api/technical-provider-applications" | "/api/technical-service-orders" | "/api/technical-services" | "/api/technician" | "/api/tools" | "/api/tools/access" | "/api/tools/activity" | "/api/tools/document-signature" | "/api/tools/document-signature/[id]" | "/api/tools/document-signature/assets/[...path]" | "/api/tools/image-processor" | "/api/tools/image-processor/[id]" | "/api/tools/site-analysis" | "/api/tools/software/download" | "/api/tools/stamp-maker" | "/api/tools/stamp-maker/preview" | "/api/tools/usage" | "/api/tools/video-extractor" | "/api/tools/video-extractor/download" | "/checkout/[id]" | "/orders" | "/points" | "/product/[id]" | "/products" | "/robots.txt" | "/s/[token]" | "/service-orders" | "/service-orders/[id]" | "/service/[slug]" | "/sitemap.xml" | "/technician" | "/tools" | "/tools/[slug]";
 
   interface ParamMap {
     "/": {};
@@ -34,6 +34,7 @@ declare namespace VinextRouteTypes {
     "/addresses": {};
     "/admin": {};
     "/ai-leads": {};
+    "/ai-leads/workspace": {};
     "/ai-operations": {};
     "/api/account": {};
     "/api/account/avatar": {};
@@ -44,9 +45,13 @@ declare namespace VinextRouteTypes {
     "/api/admin/onsite": {};
     "/api/admin/points": {};
     "/api/admin/session": {};
+    "/api/admin/software": {};
+    "/api/admin/software/upload": {};
     "/api/admin/summary": {};
     "/api/admin/system": {};
+    "/api/admin/tool-entries": {};
     "/api/admin/tool-pricing": {};
+    "/api/admin/tool-statistics": {};
     "/api/admin/tools": {};
     "/api/auth/logout": {};
     "/api/auth/send-code": {};
@@ -61,6 +66,8 @@ declare namespace VinextRouteTypes {
     "/api/product-images": {};
     "/api/products": {};
     "/api/site-tracker/[token]": { token: string; };
+    "/api/technical-chat/attachment": {};
+    "/api/technical-chat/messages": {};
     "/api/technical-consultations": {};
     "/api/technical-payment-qrs": {};
     "/api/technical-provider-applications": {};
@@ -69,12 +76,14 @@ declare namespace VinextRouteTypes {
     "/api/technician": {};
     "/api/tools": {};
     "/api/tools/access": {};
+    "/api/tools/activity": {};
     "/api/tools/document-signature": {};
     "/api/tools/document-signature/[id]": { id: string; };
     "/api/tools/document-signature/assets/[...path]": { path: string[]; };
     "/api/tools/image-processor": {};
     "/api/tools/image-processor/[id]": { id: string; };
     "/api/tools/site-analysis": {};
+    "/api/tools/software/download": {};
     "/api/tools/stamp-maker": {};
     "/api/tools/stamp-maker/preview": {};
     "/api/tools/usage": {};
@@ -100,6 +109,7 @@ declare namespace VinextRouteTypes {
     "/": never;
     "/account": never;
     "/admin": never;
+    "/ai-leads": never;
     "/product/[id]": never;
   }
 }
