@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
-import { mkdtemp, mkdir, writeFile, readFile, rm, realpath, readdir } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, rm, realpath, readdir, rename, rmdir } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { join, resolve, relative, isAbsolute, delimiter } from 'node:path';
@@ -337,4 +337,34 @@ test('CentOS 官方公钥文件缺失或被修改时停止安装，不联系 yum
     assert.notEqual(result.code, 0); assert.match(result.stderr, keyIssue === 'missing' ? /缺少官方公钥/ : /公钥校验失败/);
     assert.deepEqual(await f.events(), ['binary-check']); assert.doesNotMatch(result.stdout, /安装及启动检查通过/);
   }
+});
+
+test('嵌套旧仓库一次性接入独立发布仓库后，原upgrade直接更新新上游并保留父仓库、配置和离线引擎', async t => {
+  const old = await fixture(t, 'master', { subdirectory: 'yxshopdev', trackedEnvironment: true });
+  const release = await fixture(t, 'yxshop-dev');
+  await release.publish();
+  const parentHead = (await old.git(old.clientRepository, 'rev-parse', 'HEAD')).stdout.trim();
+  const parentOrigin = (await old.git(old.clientRepository, 'config', '--get', 'remote.origin.url')).stdout.trim();
+  const engine = join(old.client, 'vendor/video-engine');
+  await mkdir(engine, { recursive: true });
+  await writeFile(join(engine, 'ffmpeg'), 'keep-linux-offline-engine');
+  const metadataClone = join(old.root, 'metadata-clone');
+  const releaseOrigin = (await release.git(release.client, 'config', '--get', 'remote.origin.url')).stdout.trim();
+  await old.git(old.root, 'clone', '--no-checkout', '--single-branch', '--branch', 'yxshop-dev', releaseOrigin, metadataClone);
+  assert.deepEqual(await old.events(), [], 'cloning metadata must not stop the running application');
+  await rename(join(metadataClone, '.git'), join(old.client, '.git'));
+  await rmdir(metadataClone);
+  assert.equal((await old.git(old.client, 'rev-parse', '--show-prefix')).stdout.trim(), '');
+  assert.equal((await old.git(old.client, 'rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}')).stdout.trim(), 'origin/yxshop-dev');
+  const result = await old.run();
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stdout, /本次同步目标：origin\/yxshop-dev/);
+  assert.equal(await readFile(join(old.client, 'app.txt'), 'utf8'), 'v2\n');
+  assert.equal(await readFile(join(old.client, '.env.mysql'), 'utf8'), 'keep-server-environment');
+  assert.equal(await readFile(join(old.client, '.env.local'), 'utf8'), 'keep-local-environment');
+  assert.equal(await readFile(join(old.client, 'uploads/keep.txt'), 'utf8'), 'keep-user-upload');
+  assert.equal(await readFile(join(engine, 'ffmpeg'), 'utf8'), 'keep-linux-offline-engine');
+  assert.equal((await old.git(old.clientRepository, 'rev-parse', 'HEAD')).stdout.trim(), parentHead);
+  assert.equal((await old.git(old.clientRepository, 'config', '--get', 'remote.origin.url')).stdout.trim(), parentOrigin);
+  assert.deepEqual(await old.events(), ['stop', 'pnpm install --frozen-lockfile --prod=false', 'video-script --check', 'pnpm build', 'start']);
 });
