@@ -2,11 +2,11 @@
 
 2026-11-16。本地项目仓库根目录为yxshopdev本身，origin为https://github.com/yannannan/yxshop.git。Linux当前使用父仓库/home/www/yxshop/.git，项目位于yxshopdev/子目录，origin是服务器本机裸仓库且跟踪origin/master。两者的仓库结构不同。
 
-采用同一GitHub仓库的yxshop-dev作为固定发布分支。后续由助手在获得明确授权后提交并推送此分支，Linux继续执行原upgrade.sh。本次不修改升级脚本，不采用每次上传修复包的流程。
+采用同一GitHub仓库的yxshop-dev作为固定发布分支。用户已于2026-11-16明确要求后续自动提交GitHub；后续由助手检查后提交并推送此分支，Linux继续执行原upgrade.sh。本次不修改升级脚本，不采用每次上传修复包的流程。
 
 ## 执行前提
 
-- 发布分支须已包含8fa9010：包括中文图片切换及后台AI获客管理修复。仅本地提交不会更新GitHub，推送授权仍需用户确认。
+- 发布分支须已包含8fa9010：包括中文图片切换及后台AI获客管理修复。仅本地提交不会更新GitHub；后续常规推送已获用户授权，但执行本段Linux对齐前仍须确认修复实际已经推至远程。
 - 在2026-11-16通过不携带凭据的GitHub请求确认仓库公开，读取不需要GitHub密钥；服务器仍需能联网访问GitHub。
 - 先保存需要保留、尚未提交到发布分支的源码改动，原upgrade.sh会强制同步已跟踪文件。
 
