@@ -26,7 +26,7 @@ export async function GET(request: Request, context: Context) {
     if (kind === 'signature' || kind === 'stamp' || kind === 'handprint') {
       const tool = kind === 'stamp' ? await findStampTool() : null;
       const png = kind === 'stamp'
-        ? tool && await readSigningStamp(userId, tool.id, id, true)
+        ? tool && await readSigningStamp(userId, tool.id, id, new URL(request.url).searchParams.get('quality') !== 'signing')
         : (await readSignatureImage(userId, id, kind === 'handprint' ? 'handprint' : 'signature'))?.png;
       if (!png) throw new SignatureError(kind === 'handprint' ? '手印记录不存在' : kind === 'stamp' ? '印章不存在或不属于当前账号' : '签名记录不存在', 404);
       return new Response(new Uint8Array(png), {

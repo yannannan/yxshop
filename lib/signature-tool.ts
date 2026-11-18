@@ -19,6 +19,8 @@ export type SignaturePlacement = {
   width: number;
   height: number;
   rotation?: number;
+  opacity?: number;
+  edgeFade?: number;
 };
 
 export type SavedSignature = {
@@ -94,7 +96,7 @@ export function parseSignaturePlacements(value: unknown): SignaturePlacement[] {
     throw new SignatureError('请添加至少一个签名位置，最多30处');
   }
   return value.map(placement => {
-    const { signatureId, page, x, y, width, height, asset, rotation } = placement || {};
+    const { signatureId, page, x, y, width, height, asset, rotation, opacity, edgeFade } = placement || {};
     if ((asset !== undefined && asset !== 'stamp' && asset !== 'handprint') || !(asset === 'stamp' ? isStampId(signatureId) : isSignatureId(signatureId)) ||
       !Number.isInteger(page) || page < 1 || page > signatureLimits.pages ||
       ![x, y, width, height].every(Number.isFinite) || x < 0 || x >= 1 || y < 0 || y >= 1 || width <= 0 || height <= 0 ||
@@ -104,10 +106,14 @@ export function parseSignaturePlacements(value: unknown): SignaturePlacement[] {
     if (rotation !== undefined && (!Number.isInteger(rotation) || rotation < -180 || rotation > 180)) {
       throw new SignatureError('旋转角度必须是-180到180之间的整数');
     }
+    if ([opacity, edgeFade].some(value => value !== undefined && (!Number.isInteger(value) || value < 0 || value > 100))) {
+      throw new SignatureError('透明度和边缘淡化必须是0到100之间的整数');
+    }
     // Omitting zero preserves the request hashes of existing unrotated tasks.
     const angle = rotation ? { rotation } : {};
+    const effects = { ...(opacity !== undefined && opacity !== 100 ? { opacity } : {}), ...(edgeFade ? { edgeFade } : {}) };
     return asset
-      ? { signatureId: signatureId.toLowerCase(), page, x, y, width, height, asset, ...angle }
-      : { signatureId, page, x, y, width, height, ...angle };
+      ? { signatureId: signatureId.toLowerCase(), page, x, y, width, height, asset, ...angle, ...effects }
+      : { signatureId, page, x, y, width, height, ...angle, ...effects };
   });
 }

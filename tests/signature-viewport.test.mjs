@@ -291,6 +291,7 @@ test('PDF缩放及三类素材旋转保留导出坐标，修改角度才重新�
     '@heroicons/react/24/outline': {},
     './language-provider': { useI18n: () => ({ t: value => value, locale: 'zh-CN' }) },
     './stamp-maker': { StampMaker }, './signature-viewport': { SignatureViewport: Viewport },
+    './signing-asset-preview': { SigningAssetPreview: 'asset-preview' },
     './handprint-maker': { HandprintMaker },
     '../lib/account-client': { useAccount: () => ({ account: { user: { id: 1 } } }), notifyAccountChanged() {} },
     '../lib/account': { accountLoginHref: () => '/login' }, '../lib/signature-tool': spec,
@@ -339,8 +340,14 @@ test('PDF缩放及三类素材旋转保留导出坐标，修改角度才重新�
   assert.ok(view(), 'returning from handprint creation preserves the uploaded document');
   view().props.onPlace(.7, .7); render();
   find(node => node.props?.id === 'ds-rotation').props.onChange({ target: { value: '-37' } }); render();
+  find(node => node.props?.['aria-label'] === '整体透明度').props.onChange({ target: { value: '25' } }); render();
+  find(node => node.props?.['aria-label'] === '签署素材边缘淡化').props.onChange({ target: { value: '40' } }); render();
   assert.equal(view().props.children.flat().filter(node => node?.props?.className === 'ds-placement')[1].props.style.transform, 'rotate(-37deg)');
   namedButton('印章').props.onClick(); render(); view().props.onPlace(.5, .2); render();
+  assert.equal(find(node => node.props?.['aria-label'] === '整体透明度').props.value, 0);
+  find(node => node.props?.['aria-label'] === '整体透明度').props.onChange({ target: { value: '80' } }); render();
+  namedButton('透明效果复位').props.onClick(); render();
+  assert.equal(find(node => node.props?.['aria-label'] === '整体透明度').props.value, 0);
   find(node => node.props?.['aria-label'] === '向右旋转90度').props.onClick(); render();
   assert.equal(find(node => node.props?.id === 'ds-rotation').props.value, 90);
   namedButton('角度复位').props.onClick(); render(); assert.equal(find(node => node.props?.id === 'ds-rotation').props.value, 0);
@@ -348,6 +355,8 @@ test('PDF缩放及三类素材旋转保留导出坐标，修改角度才重新�
   assert.equal(find(node => node.props?.id === 'ds-rotation').props.value, -90);
   find(node => node.props?.['aria-label'] === '旋转角度数值').props.onChange({ target: { valueAsNumber: 90 } }); render();
   placementBefore.props.onClick({ stopPropagation() {} }); render();
+  find(node => node.props?.['aria-label'] === '整体透明度').props.onChange({ target: { value: '60' } }); render();
+  find(node => node.props?.['aria-label'] === '签署素材边缘淡化').props.onChange({ target: { value: '20' } }); render();
   find(node => node.props?.['aria-label'] === '旋转角度数值').props.onChange({ target: { valueAsNumber: 20 } }); render();
   find(node => node.props?.['aria-label'] === '旋转角度数值').props.onChange({ target: { valueAsNumber: NaN } }); render();
   assert.equal(find(node => node.props?.id === 'ds-rotation').props.value, 20, 'partial numeric input must not change the angle');
@@ -366,6 +375,9 @@ test('PDF缩放及三类素材旋转保留导出坐标，修改角度才重新�
   assert.equal(submitted[0].placements.length, 3);
   assert.equal(submitted[0].placements[1].asset, 'handprint');
   assert.deepEqual([...submitted[0].placements.map(item => item.rotation)], [20, -37, 90]);
+  assert.deepEqual([...submitted[0].placements.map(item => [item.opacity ?? 100, item.edgeFade ?? 0])], [[40, 20], [75, 40], [100, 0]]);
+  const previews = nodes(tree).filter(node => node.type === 'asset-preview');
+  assert.equal(previews[0].props.opacity, 40); assert.equal(previews[0].props.edgeFade, 20);
   near(submitted[0].placements[0].x, .275); near(submitted[0].placements[0].y, .45 - .25 * (600 / 840) * .4 / 2);
   await zoom(4);
   assert.ok(find(node => node.type === 'a' && node.props.href === '/private/signed'), 'zoom must preserve the existing result');
@@ -374,7 +386,12 @@ test('PDF缩放及三类素材旋转保留导出坐标，修改角度才重新�
   assert.equal(find(node => node.type === 'a' && node.props.href === '/private/signed'), undefined);
   assert.equal(submitted.length, 1, 'angle adjustment is a free preview operation');
   namedButton('生成签署文件').props.onClick(); await settle();
+  find(node => node.props?.['aria-label'] === '整体透明度').props.onChange({ target: { value: '30' } }); render();
+  assert.equal(find(node => node.type === 'a' && node.props.href === '/private/signed'), undefined);
+  assert.equal(submitted.length, 2, 'effect adjustment invalidates the old result without submitting another task');
+  namedButton('生成签署文件').props.onClick(); await settle();
   assert.notEqual(submitted[0].id, submitted[1].id, 'changed angle uses a new signing task');
+  assert.notEqual(submitted[1].id, submitted[2].id, 'changed transparency also uses a new signing task');
   const visibleSize = [canvas.width, canvas.height], drawCount = draws.length;
   holdRender = true; await zoom(2);
   assert.deepEqual([canvas.width, canvas.height], visibleSize, 'keep the prior preview while rerendering');

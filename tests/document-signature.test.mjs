@@ -14,6 +14,7 @@ import { convertSignatureWord, signatureWordReadiness, validateWordArchive } fro
 const spec = await tsImport('../lib/signature-tool.ts', import.meta.url);
 const image = await tsImport('../lib/image-tool.ts', import.meta.url);
 const render = await tsImport('../lib/signature-render.ts', import.meta.url);
+const signingEffects = await tsImport('../lib/signature-effects.ts', import.meta.url);
 const signingGeometry = await tsImport('../lib/signature-geometry.ts', import.meta.url);
 const rasterCodec = await tsImport('../lib/raster-codec.ts', import.meta.url);
 const requestHelpers = await tsImport('../lib/image-request.ts', import.meta.url);
@@ -175,7 +176,7 @@ function load(file, mocks) {
 
 // Share the route's error class in its VM renderer, as the production module graph does.
 const routeRender = load('../lib/signature-render.ts', { './signature-tool': spec,
-  './signature-geometry': signingGeometry, './raster-codec': rasterCodec });
+  './signature-geometry': signingGeometry, './raster-codec': rasterCodec, './signature-effects': signingEffects });
 
 function fixture({ failUpload = false, changePrice = false, failSave = false, failHandprintSave = false, stamp = null, missingHandprints = false } = {}) {
   let data = { balance: 100, signatures: {}, handprints: {}, documents: {}, charges: [], signCost: 20 };
@@ -302,7 +303,7 @@ function fixture({ failUpload = false, changePrice = false, failSave = false, fa
     access: user => route.GET(new Request('https://example.test/api/tools/document-signature', {
       headers: user ? { 'test-user': String(user) } : {},
     })),
-    stampPreview: user => download.GET(new Request(`https://example.test/api/tools/document-signature/${signatureId}?kind=stamp`,
+    stampPreview: (user, quality = '') => download.GET(new Request(`https://example.test/api/tools/document-signature/${signatureId}?kind=stamp&quality=${quality}`,
       { headers: user ? { 'test-user': String(user) } : {} }), { params: Promise.resolve({ id: signatureId }) }),
     handprintPreview: user => download.GET(new Request(`https://example.test/api/tools/document-signature/${signatureId}?kind=handprint`,
       { headers: user ? { 'test-user': String(user) } : {} }), { params: Promise.resolve({ id: signatureId }) }),
@@ -333,6 +334,9 @@ test('签名和本人印章可同时放置，即使编号相同也使用各自�
   const preview = await f.stampPreview(1);
   assert.equal(preview.headers.get('content-type'), 'image/png');
   assert.equal(PNG.sync.read(Buffer.from(await preview.arrayBuffer())).width, 240);
+  const signingPreview = await f.stampPreview(1, 'signing');
+  assert.deepEqual(Buffer.from(await signingPreview.arrayBuffer()), PNG.sync.write(png));
+  assert.equal((await f.stampPreview(2, 'signing')).status, 404);
 
   const placement = { ...position, x: .75, y: .75, width: .25, height: .25, asset: 'stamp' };
   assert.equal((await f.sign(2, taskId, [placement])).status, 404);
@@ -453,4 +457,18 @@ test('旋转角度进入签署任务指纹，零角度兼容旧重试，非法�
   assert.equal((await f.sign(1, nextTaskId, [{ ...position, rotation: 30 }])).status, 200);
   assert.equal(f.data.balance, 50);
   assert.deepEqual(f.data.charges.map(row => row.cost), [10, 20, 20]);
+});
+
+test('签署透明效果参与任务指纹，无效参数不上传不扣费，默认值兼容历史任务', async () => {
+  const f = fixture(); assert.equal((await f.create()).status, 200);
+  for (const patch of [{ opacity: 101 }, { edgeFade: -1 }, { opacity: '50' }, { edgeFade: .5 }]) assert.equal((await f.sign(1, taskId, [{ ...position, ...patch }])).status, 400);
+  assert.equal(f.uploads.length, 0); assert.equal(f.data.balance, 90);
+  assert.equal((await f.sign()).status, 200);
+  assert.equal((await f.sign(1, taskId, [{ ...position, opacity: 100, edgeFade: 0 }])).status, 200);
+  assert.equal((await f.sign(1, taskId, [{ ...position, opacity: 50 }])).status, 409);
+  assert.equal((await f.sign(1, taskId, [{ ...position, edgeFade: 50 }])).status, 409);
+  const selected = [{ ...position, opacity: 50, edgeFade: 20 }];
+  assert.equal((await f.sign(1, nextTaskId, selected)).status, 200);
+  assert.equal((await f.sign(1, nextTaskId, selected)).status, 200);
+  assert.equal(f.uploads.length, 2); assert.equal(f.data.balance, 50);
 });

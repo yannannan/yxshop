@@ -4,6 +4,7 @@ import { encodePng } from './raster-codec';
 import type { RasterImage } from './image-tool';
 import { SignatureError, signatureLimits, signingAssetKey, type SignaturePlacement } from './signature-tool';
 import { rotationComponents, signingBounds } from './signature-geometry';
+import { applySigningEffects, signingEffectSurface } from './signature-effects';
 
 export function readSignatureRaster(bytes: Uint8Array, width: unknown, height: unknown, maxPixels: number): RasterImage {
   if (typeof width !== 'number' || typeof height !== 'number' || !Number.isInteger(width) || !Number.isInteger(height) ||
@@ -78,11 +79,31 @@ function paintRotatedImage(image: RasterImage, placement: SignaturePlacement, si
   }
 }
 
+function signingRasterAssets(signatures: Map<string, Buffer>) {
+  const decoded = new Map<string, RasterImage>();
+  const adjusted = new Map<string, RasterImage>();
+  const surfaces = new Map<string, ReturnType<typeof signingEffectSurface>>();
+  return (placement: SignaturePlacement) => {
+    const key = signingAssetKey(placement), effectKey = signingEffectKey(placement);
+    let image = adjusted.get(effectKey);
+    if (!image) {
+      let original = decoded.get(key);
+      if (!original) { original = PNG.sync.read(signatures.get(key)!); decoded.set(key, original); }
+      if (placement.edgeFade && !surfaces.has(key)) surfaces.set(key, signingEffectSurface(original));
+      image = applySigningEffects(original, placement, surfaces.get(key));
+      adjusted.set(effectKey, image);
+    }
+    return image;
+  };
+}
+
+const signingEffectKey = (placement: SignaturePlacement) => `${signingAssetKey(placement)}:${placement.opacity ?? 100}:${placement.edgeFade ?? 0}`;
+
 export function signImage(image: RasterImage, placements: SignaturePlacement[], signatures: Map<string, Buffer>) {
-  const decoded = new Map([...signatures].map(([id, png]) => [id, PNG.sync.read(png)]));
+  const asset = signingRasterAssets(signatures);
   for (const placement of placements) {
     if (placement.page !== 1) throw new SignatureError('签名位置超出页面范围');
-    const signature = decoded.get(signingAssetKey(placement))!;
+    const signature = asset(placement);
     if (placement.rotation) { paintRotatedImage(image, placement, signature); continue; }
     const left = Math.floor(placement.x * image.width);
     const top = Math.floor(placement.y * image.height);
@@ -145,11 +166,17 @@ export async function signPdf(bytes: Uint8Array, placements: SignaturePlacement[
   }
   const pages = pdf.getPages();
   if (!pages.length || pages.length > signatureLimits.pages) throw new SignatureError('最多支持100页文档');
-  const images = new Map(await Promise.all([...signatures].map(async ([id, png]) => [id, await pdf.embedPng(png)] as const)));
+  const asset = signingRasterAssets(signatures);
+  const variants = new Map(placements.map(placement => [signingEffectKey(placement), placement]));
+  const images = new Map(await Promise.all([...variants].map(async ([key, placement]) => {
+    const png = (placement.opacity ?? 100) === 100 && !placement.edgeFade
+      ? signatures.get(signingAssetKey(placement))! : encodePng(asset(placement));
+    return [key, await pdf.embedPng(png)] as const;
+  })));
   for (const placement of placements) {
     const page = pages[placement.page - 1];
     if (!page) throw new SignatureError('签名位置超出页面范围');
-    page.drawImage(images.get(signingAssetKey(placement))!, pdfSignaturePosition(page, placement));
+    page.drawImage(images.get(signingEffectKey(placement))!, pdfSignaturePosition(page, placement));
   }
   return Buffer.from(await pdf.save({ updateFieldAppearances: false }));
 }

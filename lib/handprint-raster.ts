@@ -60,7 +60,7 @@ const cross = (a: Point, b: Point, c: Point) => (b.x - a.x) * (c.y - a.y) - (b.y
 
 // Fill the ink's convex envelope before measuring distance, so gaps between ridges
 // are preserved rather than treated as outside edges of the handprint.
-export function handprintSurface(image: HandprintRaster): HandprintSurface {
+export function handprintSurface(image: { width: number; height: number; data: ArrayLike<number> }): HandprintSurface {
   const { width, height, data } = image, points: Point[] = [];
   let left = width, right = -1, top = height, bottom = -1;
   for (let y = 0; y < height; y++) {

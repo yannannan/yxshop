@@ -10,6 +10,7 @@ import type { RenderTask } from 'pdfjs-dist';
 import { useI18n } from './language-provider';
 import { StampMaker } from './stamp-maker';
 import { SignatureViewport } from './signature-viewport';
+import { SigningAssetPreview } from './signing-asset-preview';
 import { HandprintMaker } from './handprint-maker';
 import type { HandprintRaster } from '../lib/handprint-raster';
 import { fitSigningPlacement, signingPositionRange } from '../lib/signature-geometry';
@@ -391,6 +392,12 @@ function SignatureEditor({ tool, stampTool, initialMode = 'create' }: SignatureE
     resetResult();
   }
 
+  function changePlacementEffects(item: Placement, patch: Pick<SignaturePlacement, 'opacity' | 'edgeFade'>) {
+    if (busy || operation.current) return;
+    setPlacements(previous => previous.map(entry => entry.key === item.key ? { ...entry, ...patch } : entry));
+    resetResult();
+  }
+
   function removePlacement() {
     if (!activePlacement || busy || operation.current) return;
     setPlacements(previous => previous.filter(item => item.key !== activeKey));
@@ -597,7 +604,7 @@ function SignatureEditor({ tool, stampTool, initialMode = 'create' }: SignatureE
                       onClick={event => { event.stopPropagation(); setActiveKey(item.key); }} onPointerDown={event => startDrag(event, item)}
                       onPointerMove={dragPlacement} onPointerUp={() => { drag.current = null; }}
                       onPointerCancel={() => { drag.current = null; }} onLostPointerCapture={() => { drag.current = null; }}>
-                      <img src={asset.previewUrl} alt="" draggable={false} />
+                      <SigningAssetPreview src={asset.previewUrl} asset={item.asset} opacity={item.opacity} edgeFade={item.edgeFade} />
                     </button>;
                   })}
               </SignatureViewport>
@@ -643,6 +650,17 @@ function SignatureEditor({ tool, stampTool, initialMode = 'create' }: SignatureE
                   value={activePlacement.x * 100} onChange={event => movePlacement(activeKey, Number(event.target.value) / 100, activePlacement.y)} /></label>
                 <label>{t('纵向位置')}<input type="range" min={positionRange.minY * 100} max={positionRange.maxY * 100} step=".1" disabled={busy}
                   value={activePlacement.y * 100} onChange={event => movePlacement(activeKey, activePlacement.x, Number(event.target.value) / 100)} /></label>
+                <fieldset className="ds-placement-effects" disabled={busy}>
+                  <legend>{t('透明与边缘')}</legend>
+                  <label>{t('整体透明度')}<output>{100 - (activePlacement.opacity ?? 100)}%</output>
+                    <input type="range" min="0" max="100" step="1" aria-label={t('整体透明度')}
+                      value={100 - (activePlacement.opacity ?? 100)} onChange={event => changePlacementEffects(activePlacement, { opacity: 100 - Number(event.target.value) })} /></label>
+                  <label>{t('边缘淡化')}<output>{activePlacement.edgeFade ?? 0}%</output>
+                    <input type="range" min="0" max="100" step="1" aria-label={t('签署素材边缘淡化')}
+                      value={activePlacement.edgeFade ?? 0} onChange={event => changePlacementEffects(activePlacement, { edgeFade: Number(event.target.value) })} /></label>
+                  <p>{t('透明度0%正常、100%全透明；边缘淡化只影响印迹外围，数值越大越柔和。')}</p>
+                  <button type="button" className="ds-secondary" onClick={() => changePlacementEffects(activePlacement, { opacity: 100, edgeFade: 0 })}>{t('透明效果复位')}</button>
+                </fieldset>
                 <div className="ds-rotation">
                   <div className="ds-rotation-heading"><label htmlFor="ds-rotation">{t('旋转角度')}</label>
                     <span><input key={activeKey} ref={rotationInput} type="number" aria-label={t('旋转角度数值')} min="-180" max="180" step="1" disabled={busy}
