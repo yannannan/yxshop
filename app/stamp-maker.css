@@ -57,3 +57,5 @@
   .stamp-signature-view .stamp-settings { grid-row: 2; }
   .stamp-signature-view .stamp-layout-grid { grid-template-columns: minmax(0, 1fr); }
 }
+
+.stamp-font-size-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}.stamp-font-size-heading>label{margin:0}.stamp-font-size-value{display:inline-flex;align-items:center;gap:6px;flex-shrink:0;font-size:11px;color:#8592a3}.stamp-fields .stamp-font-size-value input[type=number]{flex:0 1 auto;width:76px;min-width:0;padding:7px 8px;text-align:center}.stamp-font-size-control>input[type=range]{margin-top:13px}.stamp-font-size-control .stamp-field-hint{line-height:1.85}

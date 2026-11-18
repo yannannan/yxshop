@@ -5,6 +5,9 @@ import { softwareEnglish } from './software-en.mjs';
 import { consultationEnglish } from './consultation-en.mjs';
 // Interface copy only. User-authored business content is preserved.
 export const english: Record<string, string> = {
+  '文字大小滑块': 'Text size slider',
+  '字号按1000×1000设计画布计算，预览按比例缩放。': 'Font size is based on a 1000×1000 design canvas. The preview scales proportionally. ',
+  '当前导出尺寸下约 {0} px；字号过大时文字可能重叠。': 'Approximately {0} px at the selected export size. Large text may overlap.',
   "面向国内与海外的获客场景，预览关键词检索、线索分析与客户管理工作台。": "Explore domestic and international prospecting with keyword search, lead analysis and a customer management workspace preview.",
   ...siteAnalysisEnglish,
   ...imageToolEnglish,

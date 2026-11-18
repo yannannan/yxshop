@@ -49,14 +49,14 @@ const n = (value: number) => value.toFixed(2);
 function label(text: string, x: number, y: number, size: number, rotation = 0) {
   return `<text x="0" y="0" text-anchor="middle" font-size="${n(size)}" transform="translate(${n(x)} ${n(y)}) rotate(${n(rotation)})">${escape(text)}</text>`;
 }
-function curved(text: string, rx: number, ry: number, size: number, span: number, bottom = false) {
+function curved(text: string, rx: number, ry: number, size: number, span: number, bottom = false, autoFit = true) {
   const letters = [...text];
   const count = letters.length;
   const maxSize = (span * Math.PI / 180) * Math.min(rx, ry) / Math.max(1, count) * 0.92;
   return letters.map((letter, index) => {
     const angle = bottom ? 90 + span / 2 - (count === 1 ? span / 2 : index * span / (count - 1)) : -90 - span / 2 + (count === 1 ? span / 2 : index * span / (count - 1));
     const radians = angle * Math.PI / 180;
-    return label(letter, 500 + rx * Math.cos(radians), 500 + ry * Math.sin(radians), Math.min(size, maxSize), angle + (bottom ? -90 : 90));
+    return label(letter, 500 + rx * Math.cos(radians), 500 + ry * Math.sin(radians), autoFit ? Math.min(size, maxSize) : size, angle + (bottom ? -90 : 90));
   }).join('');
 }
 function star() {
@@ -73,7 +73,9 @@ export function stampSvg(options: StampOptions, preview = false) {
     const ry = o.shape === 'ellipse' ? 305 : 410;
     body = `<ellipse cx="500" cy="500" rx="410" ry="${ry}" fill="none" stroke="currentColor" stroke-width="${o.border}" />`;
     if (o.innerRing) body += `<ellipse cx="500" cy="500" rx="382" ry="${ry - 28}" fill="none" stroke="currentColor" stroke-width="${n(o.border * .4)}" />`;
-    body += curved(o.text, 410 - o.fontSize - o.textInset, ry - o.fontSize - o.textInset, o.fontSize, o.arc);
+    // Main text follows the chosen font size, even when it overlaps. Keep the path
+    // radii positive at large sizes; numbering retains its original auto-fit.
+    body += curved(o.text, Math.max(1, 410 - o.fontSize - o.textInset), Math.max(1, ry - o.fontSize - o.textInset), o.fontSize, o.arc, false, false);
     if (o.symbol === 'star') body += star();
     if (o.symbol === 'dot') body += '<circle cx="500" cy="475" r="35" />';
     body += label(o.subtitle, 500, o.shape === 'ellipse' ? 640 : 670, Math.min(76, 590 / Math.max(1, [...o.subtitle].length)));

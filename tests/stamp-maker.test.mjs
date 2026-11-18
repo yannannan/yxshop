@@ -53,6 +53,36 @@ test('四种样式参数可用；严格校验文字、颜色、尺寸、布尔�
   assert.equal(normalized.text, '宇星工作室'); assert.equal(normalized.color, '#aa2233'); assert.equal('svg' in normalized, false);
 });
 
+test('文字大小接受1到500的设计像素，前后端共用范围并拒绝越界或无效值', () => {
+  assert.deepEqual(options.stampFontSizeRange, { min: 1, max: 500 });
+  for (const fontSize of [1, 28, 80, 81, 200, 500]) assert.equal(options.parseStampOptions({ ...standard, fontSize }).fontSize, fontSize);
+  for (const fontSize of [0, -1, 501, NaN, Infinity, null, '500']) assert.throws(() => options.parseStampOptions({ ...standard, fontSize }));
+});
+
+test('圆章和椭圆章主文字按实际字号渲染，不被自动缩小，大字号与最大间距仍保持有效路径', async () => {
+  for (const shape of ['circle', 'ellipse']) {
+    for (const fontSize of [1, 80, 150, 500]) {
+      const sample = options.parseStampOptions({ ...standard, shape, text: '字体大小测试', fontSize, textInset: 100, subtitle: '', code: '', symbol: 'none' });
+      const svg = stampSvg(sample);
+      const mainLabels = [...svg.matchAll(/<text\b[^>]*font-size="([\d.]+)"[^>]*>([^<]+)<\/text>/g)];
+      assert.equal(mainLabels.length, 6);
+      assert.ok(mainLabels.every(match => Number(match[1]) === fontSize));
+      assert.ok(!/NaN|Infinity|font-size="-/.test(svg));
+      for (const match of svg.matchAll(/translate\(([-\d.]+) ([-\d.]+)\)/g)) {
+        assert.ok([Number(match[1]), Number(match[2])].every(value => Number.isFinite(value) && value >= 0 && value <= 1000));
+      }
+      if ([1,500].includes(fontSize)) {
+        for (const preview of [true,false]) {
+          const png = await renderStamp({ ...sample, size: 256 }, preview);
+          assert.equal(png.readUInt32BE(16), preview ? 420 : 256);
+          assert.equal(png.readUInt32BE(20), preview ? 420 : 256);
+          assert.equal(cornerAlpha(png), 0);
+        }
+      }
+    }
+  }
+});
+
 test('真实 WebAssembly 中文渲染：各样式返回 PNG，预览固定 420，高清支持全部尺寸', async () => {
   for (const preset of options.stampPresets) {
     const png = await renderStamp(preset.options, true);
@@ -481,11 +511,25 @@ test('界面可调整间距和字体，切换样式保留选择，重置恢复�
     if (['经典圆章', '简约椭圆'].includes(shape)) assert.equal(inset.props.value, 68);
     else assert.equal(inset, undefined);
   }
+  const fontInput = () => all(render()).find(node => node.props.id === 'stamp-font-size');
+  const fontSlider = () => all(render()).find(node => node.type === 'input' && node.props['aria-label'] === '文字大小滑块');
+  assert.equal(fontInput().props.min, 1); assert.equal(fontInput().props.max, 500);
+  assert.equal(fontSlider().props.min, 1); assert.equal(fontSlider().props.max, 500);
+  fontInput().props.onChange({ target: { value: '500' } });
+  assert.equal(fontSlider().props.value, 500);
+  fontSlider().props.onChange({ target: { value: '1' } });
+  assert.equal(fontInput().props.value, 1);
+  fontInput().props.onChange({ target: { value: '' } });
+  assert.equal(fontInput().props.value, '');
+  fontInput().props.onChange({ target: { value: '150' } });
+  assert.equal(fontSlider().props.value, 150);
+  assert.ok(text(render()).includes('当前导出尺寸下约 614.4 px'));
   all(render()).find(node => node.type === 'button' && text(node) === '重置').props.onClick();
   assert.equal(control(render(), '文字距边框', 'input').props.value, 12);
   assert.equal(control(render(), '印章字体', 'select').props.value, 'serif');
   assert.equal(control(render(), '导出格式', 'select').props.value, 'png');
   assert.equal(control(render(), '图片背景', 'select').props.disabled, false);
+  assert.equal(fontInput().props.value, 80);
 });
 
 test('预览失败后可单独重试相同参数，成功后清除错误，始终不发起制作请求', async () => {
