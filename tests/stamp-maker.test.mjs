@@ -59,6 +59,78 @@ test('文字大小接受1到500的设计像素，前后端共用范围并拒绝�
   for (const fontSize of [0, -1, 501, NaN, Infinity, null, '500']) assert.throws(() => options.parseStampOptions({ ...standard, fontSize }));
 });
 
+test('新增字距、不透明度和笔画粗细均严格校验，旧参数保持原排版和浓度', () => {
+  const { letterSpacing, opacity, textWeight, ...legacy } = standard;
+  assert.equal(letterSpacing, 0); assert.equal(opacity, 100); assert.equal(textWeight, 0);
+  assert.deepEqual(options.parseStampOptions(legacy), standard);
+  for (const [key, min, max] of [['letterSpacing', -50, 100], ['opacity', 0, 100], ['textWeight', 0, 12]]) {
+    for (const value of [min, max]) assert.equal(options.parseStampOptions({ ...standard, [key]: value })[key], value);
+    for (const value of [min - 1, max + 1, NaN, Infinity, null, String(max)]) assert.throws(() => options.parseStampOptions({ ...standard, [key]: value }));
+  }
+  assert.equal(options.parseStampOptions({ ...standard, font: 'fangsong' }).font, 'fangsong');
+});
+
+test('字距调整圆章弧线和方形字阵，保持边框及辅助文字独立，极端字号仍有效', async () => {
+  const positions = svg => [...svg.matchAll(/<text[^>]*transform="translate\(([-\d.]+) ([-\d.]+)\) rotate\(([-\d.]+)\)"[^>]*>([^<]+)<\/text>/g)].map(m => m.slice(1, 4).map(Number));
+  for (const preset of options.stampPresets) {
+    const sample = { ...preset.options, text: '字距测试', code: '123' };
+    const tight = stampSvg({ ...sample, letterSpacing: -30 }), loose = stampSvg({ ...sample, letterSpacing: 40 });
+    const a = positions(tight), b = positions(loose);
+    if (['circle', 'ellipse'].includes(preset.shape)) assert.ok(b[3][2] - b[0][2] > a[3][2] - a[0][2]);
+    else {
+      const left = preset.shape === 'name' ? 2 : 0, right = preset.shape === 'name' ? 0 : 1;
+      assert.ok(b[right][0] - b[left][0] > a[right][0] - a[left][0]);
+      assert.ok(b[preset.shape === 'name' ? 1 : 2][1] - b[0][1] > a[preset.shape === 'name' ? 1 : 2][1] - a[0][1]);
+    }
+    assert.equal(tight.match(/<(?:ellipse|rect)[^>]*>/)[0], loose.match(/<(?:ellipse|rect)[^>]*>/)[0]);
+    const labels = svg => [...svg.matchAll(/<text[^>]*>[^<]*<\/text>/g)].map(m => m[0]);
+    assert.deepEqual(labels(tight).slice(4), labels(loose).slice(4), '所有辅助文字及编号均保持原位置');
+    assert.notDeepEqual(await renderStamp({ ...sample, letterSpacing: -30, size: 256 }), await renderStamp({ ...sample, letterSpacing: 40, size: 256 }));
+  }
+  for (const fontSize of [1, 500]) for (const letterSpacing of [-50, 100]) assert.doesNotMatch(stampSvg({ ...standard, fontSize, letterSpacing, textInset: 100 }), /NaN|Infinity/);
+});
+
+test('透明度实际作用于整个印章，PNG和SVG保留半透明，JPG白底淡化，预览水印独立', async () => {
+  for (const preset of options.stampPresets) {
+    for (const format of ['png', 'svg']) {
+      for (const opacity of [0, 50, 100]) {
+        const image = await renderStamp({ ...preset.options, opacity, format, size: 256 });
+        let pixels;
+        if (format === 'png') pixels = PNG.sync.read(image).data;
+        else {
+          const renderer = new Resvg(image.toString());
+          try { const result = renderer.render(); try { pixels = Buffer.from(result.pixels); } finally { result.free(); } } finally { renderer.free(); }
+        }
+        let max = 0; for (let i = 3; i < pixels.length; i += 4) max = Math.max(max, pixels[i]);
+        assert.ok(Math.abs(max - Math.round(opacity / 100 * 255)) <= 1, `${preset.shape}/${format}/${opacity}: alpha ${max}`);
+      }
+    }
+  }
+  for (const background of ['transparent', 'white']) {
+    const pixels = PNG.sync.read(await renderStamp({ ...standard, background, opacity: 0, size: 256 })).data;
+    assert.ok(pixels.every((value, index) => index % 4 !== 3 || value === (background === 'white' ? 255 : 0)));
+  }
+  const jpg = jpeg.decode(await renderStamp({ ...standard, format: 'jpeg', opacity: 0, size: 256 }));
+  assert.ok(jpg.data.every(value => value >= 250));
+  const faint = jpeg.decode(await renderStamp({ ...standard, format: 'jpeg', opacity: 50, size: 256 }));
+  assert.ok(faint.data.some((value, i) => i % 4 === 1 && value > 110 && value < 180));
+  const preview = PNG.sync.read(await renderStamp({ ...standard, opacity: 0 }, true));
+  assert.ok(preview.data.some((value, i) => i % 4 === 3 && value > 0), '印章全透明时预览水印仍显示');
+});
+
+test('仿宋使用实际本地字体，文字加粗改变字形像素但不改变边框和图案', async () => {
+  assert.ok(options.stampFonts.some(font => font.value === 'fangsong'));
+  for (const preset of options.stampPresets) {
+    const sample = { ...preset.options, font: 'fangsong', text: '字形测试', code: '123', size: 512 };
+    const normal = stampSvg(sample), bold = stampSvg({ ...sample, textWeight: 8 });
+    assert.equal(normal.match(/<(?:ellipse|rect)[^>]*>/)[0], bold.match(/<(?:ellipse|rect)[^>]*>/)[0]);
+    assert.ok([...bold.matchAll(/<text[^>]*>[^<]+<\/text>/g)].every(m => m[0].includes('stroke-width="8.00"')));
+    const sum = png => PNG.sync.read(png).data.reduce((total, value, i) => total + (i % 4 === 3 ? value : 0), 0);
+    assert.ok(sum(await renderStamp({ ...sample, textWeight: 8 })) > sum(await renderStamp(sample)));
+    assert.notDeepEqual(await renderStamp(sample), await renderStamp({ ...sample, font: 'serif' }));
+  }
+});
+
 test('圆章和椭圆章主文字按实际字号渲染，不被自动缩小，大字号与最大间距仍保持有效路径', async () => {
   for (const shape of ['circle', 'ellipse']) {
     for (const fontSize of [1, 80, 150, 500]) {
@@ -176,7 +248,7 @@ test('圆形与椭圆文字可独立向内移动，不改变边框、字号、�
   }
 });
 
-test('三种真实中文字体在四种样式中均可生成不同的预览与高清像素', async () => {
+test('四种真实中文字体在四种样式中均可生成不同的预览与高清像素', async () => {
   for (const preset of options.stampPresets) {
     const previews = [], exports = [];
     for (const { value: font } of options.stampFonts) {
@@ -186,8 +258,8 @@ test('三种真实中文字体在四种样式中均可生成不同的预览与�
       assert.equal(cornerAlpha(exported), 0);
       previews.push(preview.toString('base64')); exports.push(exported.toString('base64'));
     }
-    assert.equal(new Set(previews).size, 3, `${preset.shape} 预览应实际使用不同字体`);
-    assert.equal(new Set(exports).size, 3, `${preset.shape} 成品应实际使用不同字体`);
+    assert.equal(new Set(previews).size, options.stampFonts.length, `${preset.shape} 预览应实际使用不同字体`);
+    assert.equal(new Set(exports).size, options.stampFonts.length, `${preset.shape} 成品应实际使用不同字体`);
   }
   for (const shape of ['circle', 'ellipse']) {
     const sample = { ...standard, shape, symbol: 'none', subtitle: '', code: '', size: 1024 };
@@ -277,18 +349,22 @@ test('API 返回实际文件的 MIME 和格式，格式参与任务指纹；付�
   assert.equal(new Set(hashes).size, 3);
 });
 
-test('PNG 兼容升级前的任务指纹，旧页面重试不会因新增格式参数被拒绝', async () => {
-  const { format, ...legacy } = standard;
+test('默认字距、透明度和粗细兼容升级前各格式的任务指纹，旧页面重试不重复扣次', async () => {
+  const { format, letterSpacing, opacity, textWeight, ...legacy } = standard;
   assert.equal(format, 'png');
-  const expected = createHash('sha256').update(JSON.stringify(legacy)).digest('hex');
-  for (const selected of [standard, legacy]) {
-    const setup = api(); assert.equal((await setup.generate({ options: selected })).status, 200);
-    assert.equal(setup.calls.find(call => call[0] === 'save')[4], expected);
+  assert.equal(letterSpacing, 0); assert.equal(opacity, 100); assert.equal(textWeight, 0);
+  for (const format of Object.keys(options.stampFormats)) {
+    const old = format === 'png' ? legacy : { ...legacy, background: format === 'jpeg' ? 'white' : legacy.background, format };
+    const expected = createHash('sha256').update(JSON.stringify(old)).digest('hex');
+    for (const selected of [{ ...standard, format }, old]) {
+      const setup = api(); assert.equal((await setup.generate({ options: selected })).status, 200);
+      assert.equal(setup.calls.find(call => call[0] === 'save')[4], expected);
+    }
   }
 });
 test('预览与成品接收相同字体和间距，更改任一项会生成不同参数指纹', async () => {
   const hashes = [];
-  for (const patch of [{}, { font: 'sans' }, { textInset: 65 }]) {
+  for (const patch of [{}, { font: 'sans' }, { textInset: 65 }, { letterSpacing: -20 }, { opacity: 50 }, { textWeight: 8 }]) {
     const setup = api(), selected = { ...standard, ...patch };
     assert.equal((await setup.preview.POST(new Request('http://localhost', { method: 'POST', body: JSON.stringify(selected) }))).status, 200);
     assert.equal((await setup.generate({ options: selected })).status, 200);
@@ -297,7 +373,7 @@ test('预览与成品接收相同字体和间距，更改任一项会生成不�
     assert.equal(renders[1][1].font, selected.font); assert.equal(renders[1][1].textInset, selected.textInset);
     hashes.push(setup.calls.find(call => call[0] === 'save')[4]);
   }
-  assert.equal(new Set(hashes).size, 3);
+  assert.equal(new Set(hashes).size, 6);
 });
 test('同一任务网络重试即使次数已耗尽，也返回先前成品，不重新渲染或扣次', async () => {
   const setup = api({ entitled: false, previous: { id, reused: true, image: 'data:image/png;base64,cG5n' } });
@@ -307,6 +383,11 @@ test('同一任务网络重试即使次数已耗尽，也返回先前成品，�
 test('渲染失败不调用权益保存，损坏请求或参数被拒绝', async () => {
   const setup = api({ renderFails: true }); assert.equal((await setup.generate()).status, 503); assert.ok(!setup.calls.some(call => call[0] === 'save'));
   for (const body of [{ id: 'anything' }, { options: { ...standard, size: 99999 } }, { options: null }]) assert.equal((await api().generate(body)).status, 400);
+  for (const patch of [{ letterSpacing: 101 }, { opacity: -1 }, { textWeight: 13 }]) {
+    const invalid = api();
+    assert.equal((await invalid.generate({ options: { ...standard, ...patch } })).status, 400);
+    assert.deepEqual(invalid.calls, [], '无效调整参数不能读取权益、渲染或扣次');
+  }
   assert.equal((await api().route.POST(new Request('http://localhost', { method: 'POST', body: '{' }))).status, 400);
   assert.equal((await api().route.POST(new Request('http://localhost', { method: 'POST', body: ' '.repeat(8193) }))).status, 413);
 });
@@ -497,6 +578,9 @@ test('界面可调整间距和字体，切换样式保留选择，重置恢复�
   const control = (tree, title, type) => all(all(tree).find(node => node.type === 'label' && text(node).startsWith(title))).find(node => node.type === type);
   control(render(), '文字距边框', 'input').props.onChange({ target: { value: '68' } });
   control(render(), '印章字体', 'select').props.onChange({ target: { value: 'kai' } });
+  control(render(), '字间距', 'input').props.onChange({ target: { value: '-25' } });
+  control(render(), '印章透明度', 'input').props.onChange({ target: { value: '65' } });
+  control(render(), '字体粗细', 'input').props.onChange({ target: { value: '8' } });
   control(render(), '导出格式', 'select').props.onChange({ target: { value: 'jpeg' } });
   control(render(), '导出尺寸', 'select').props.onChange({ target: { value: '4096' } });
   assert.equal(control(render(), '图片背景', 'select').props.value, 'white');
@@ -507,6 +591,9 @@ test('界面可调整间距和字体，切换样式保留选择，重置恢复�
     assert.equal(control(tree, '印章字体', 'select').props.value, 'kai');
     assert.equal(control(tree, '导出格式', 'select').props.value, 'jpeg');
     assert.equal(control(tree, '导出尺寸', 'select').props.value, 4096);
+    assert.equal(control(tree, '字间距', 'input').props.value, -25);
+    assert.equal(control(tree, '印章透明度', 'input').props.value, 65);
+    assert.equal(control(tree, '字体粗细', 'input').props.value, 8);
     const inset = control(tree, '文字距边框', 'input');
     if (['经典圆章', '简约椭圆'].includes(shape)) assert.equal(inset.props.value, 68);
     else assert.equal(inset, undefined);
@@ -530,6 +617,9 @@ test('界面可调整间距和字体，切换样式保留选择，重置恢复�
   assert.equal(control(render(), '导出格式', 'select').props.value, 'png');
   assert.equal(control(render(), '图片背景', 'select').props.disabled, false);
   assert.equal(fontInput().props.value, 80);
+  assert.equal(control(render(), '字间距', 'input').props.value, 0);
+  assert.equal(control(render(), '印章透明度', 'input').props.value, 0);
+  assert.equal(control(render(), '字体粗细', 'input').props.value, 0);
 });
 
 test('预览失败后可单独重试相同参数，成功后清除错误，始终不发起制作请求', async () => {

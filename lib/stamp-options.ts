@@ -5,12 +5,14 @@ export const stampFonts = [
   { value: 'serif', label: '宋体 · 典雅清晰' },
   { value: 'sans', label: '黑体 · 简洁醒目' },
   { value: 'kai', label: '霞鹜文楷 · 手写风格' },
+  { value: 'fangsong', label: '朱雀仿宋 · 公章风格' },
 ] as const;
 export type StampFont = typeof stampFonts[number]['value'];
 export const stampSizes = [256, 512, 768, 1024, 1280, 1600, 2048, 2560, 3072, 4096] as const;
 export type StampSize = typeof stampSizes[number];
 // Font sizes use the fixed 1000×1000 design canvas; preview/export scale uniformly.
 export const stampFontSizeRange = { min: 1, max: 500 } as const;
+export const stampLetterSpacingRange = { min: -50, max: 100 } as const;
 export const stampFormats = {
   png: { label: 'PNG', mime: 'image/png', extension: 'png' },
   jpeg: { label: 'JPG', mime: 'image/jpeg', extension: 'jpg' },
@@ -21,12 +23,13 @@ export type StampOptions = {
   shape: StampShape; text: string; subtitle: string; code: string; color: string;
   border: number; fontSize: number; arc: number; textInset: number; font: StampFont; innerRing: boolean;
   symbol: 'star' | 'dot' | 'none'; rotation: number; background: 'transparent' | 'white'; size: StampSize; format: StampFormat;
+  letterSpacing: number; opacity: number; textWeight: number;
 };
 export const stampPresets: { shape: StampShape; name: string; note: string; options: StampOptions }[] = [
-  { shape: 'circle', name: '经典圆章', note: '弧形文字 · 居中图案', options: { shape: 'circle', text: '宇星创意工作室', subtitle: '设计专用章', code: '', color: '#c83932', border: 14, fontSize: 80, arc: 220, textInset: 12, font: 'serif', innerRing: false, symbol: 'star', rotation: 0, background: 'transparent', size: 1600, format: 'png' } },
-  { shape: 'ellipse', name: '简约椭圆', note: '横向舒展 · 清晰留白', options: { shape: 'ellipse', text: '宇星创意工作室', subtitle: '业务专用章', code: '', color: '#c83932', border: 12, fontSize: 80, arc: 210, textInset: 12, font: 'serif', innerRing: false, symbol: 'star', rotation: 0, background: 'transparent', size: 1600, format: 'png' } },
-  { shape: 'square', name: '方形印章', note: '规整排版 · 简洁大方', options: { shape: 'square', text: '宇星创意工作室', subtitle: '设计专用', code: '', color: '#c83932', border: 14, fontSize: 64, arc: 240, textInset: 12, font: 'serif', innerRing: false, symbol: 'none', rotation: 0, background: 'transparent', size: 1600, format: 'png' } },
-  { shape: 'name', name: '个人姓名章', note: '纵向字阵 · 二至四字', options: { shape: 'name', text: '宇星之印', subtitle: '', code: '', color: '#c83932', border: 16, fontSize: 64, arc: 240, textInset: 12, font: 'serif', innerRing: false, symbol: 'none', rotation: 0, background: 'transparent', size: 1600, format: 'png' } },
+  { shape: 'circle', name: '经典圆章', note: '弧形文字 · 居中图案', options: { shape: 'circle', text: '宇星创意工作室', subtitle: '设计专用章', code: '', color: '#c83932', border: 14, fontSize: 80, arc: 220, textInset: 12, font: 'serif', innerRing: false, symbol: 'star', rotation: 0, background: 'transparent', size: 1600, format: 'png', letterSpacing: 0, opacity: 100, textWeight: 0 } },
+  { shape: 'ellipse', name: '简约椭圆', note: '横向舒展 · 清晰留白', options: { shape: 'ellipse', text: '宇星创意工作室', subtitle: '业务专用章', code: '', color: '#c83932', border: 12, fontSize: 80, arc: 210, textInset: 12, font: 'serif', innerRing: false, symbol: 'star', rotation: 0, background: 'transparent', size: 1600, format: 'png', letterSpacing: 0, opacity: 100, textWeight: 0 } },
+  { shape: 'square', name: '方形印章', note: '规整排版 · 简洁大方', options: { shape: 'square', text: '宇星创意工作室', subtitle: '设计专用', code: '', color: '#c83932', border: 14, fontSize: 64, arc: 240, textInset: 12, font: 'serif', innerRing: false, symbol: 'none', rotation: 0, background: 'transparent', size: 1600, format: 'png', letterSpacing: 0, opacity: 100, textWeight: 0 } },
+  { shape: 'name', name: '个人姓名章', note: '纵向字阵 · 二至四字', options: { shape: 'name', text: '宇星之印', subtitle: '', code: '', color: '#c83932', border: 16, fontSize: 64, arc: 240, textInset: 12, font: 'serif', innerRing: false, symbol: 'none', rotation: 0, background: 'transparent', size: 1600, format: 'png', letterSpacing: 0, opacity: 100, textWeight: 0 } },
 ];
 export const defaultStampOptions = (): StampOptions => ({ ...stampPresets[0].options });
 
@@ -55,7 +58,7 @@ export function parseStampOptions(value: unknown): StampOptions {
   const format = input.format === undefined ? 'png' : input.format;
   if (typeof format !== 'string' || !Object.hasOwn(stampFormats, format)) throw new Error('请选择有效的导出格式');
   if (typeof input.innerRing !== 'boolean' || !['star', 'dot', 'none'].includes(String(input.symbol)) || !['transparent', 'white'].includes(String(input.background)) || !stampSizes.includes(input.size as StampSize)) throw new Error('印章导出参数不正确');
-  return { shape: input.shape as StampShape, text, subtitle: input.shape === 'name' ? '' : subtitle, code: input.shape === 'name' ? '' : input.code, color: input.color.toLowerCase(), border: number('border', 6, 24), fontSize: number('fontSize', stampFontSizeRange.min, stampFontSizeRange.max), arc: number('arc', 180, 280), textInset: number('textInset', 0, 100, 12), font: font as StampFont, innerRing: input.innerRing, symbol: input.symbol as StampOptions['symbol'], rotation: number('rotation', -20, 20), background: format === 'jpeg' ? 'white' : input.background as StampOptions['background'], size: input.size as StampSize, format: format as StampFormat };
+  return { shape: input.shape as StampShape, text, subtitle: input.shape === 'name' ? '' : subtitle, code: input.shape === 'name' ? '' : input.code, color: input.color.toLowerCase(), border: number('border', 6, 24), fontSize: number('fontSize', stampFontSizeRange.min, stampFontSizeRange.max), arc: number('arc', 180, 280), textInset: number('textInset', 0, 100, 12), font: font as StampFont, innerRing: input.innerRing, symbol: input.symbol as StampOptions['symbol'], rotation: number('rotation', -20, 20), background: format === 'jpeg' ? 'white' : input.background as StampOptions['background'], size: input.size as StampSize, format: format as StampFormat, letterSpacing: number('letterSpacing', stampLetterSpacingRange.min, stampLetterSpacingRange.max, 0), opacity: number('opacity', 0, 100, 100), textWeight: number('textWeight', 0, 12, 0) };
 }
 
 // 根据成品真实文件头恢复格式；原有仅存 PNG base64 的记录继续兼容，无需改表。

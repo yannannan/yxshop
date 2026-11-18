@@ -5,6 +5,13 @@ import { softwareEnglish } from './software-en.mjs';
 import { consultationEnglish } from './consultation-en.mjs';
 // Interface copy only. User-authored business content is preserved.
 export const english: Record<string, string> = {
+  '朱雀仿宋 · 公章风格': 'Zhuque Fangsong · Traditional stamp style',
+  '字体粗细': 'Text stroke weight',
+  '0为字体原始笔画，增大可加粗；不改变印章边框。': '0 preserves the original font strokes. Increase to thicken the text without changing the stamp border.',
+  '字间距': 'Letter spacing',
+  '印章透明度': 'Stamp transparency',
+  '按设计画布像素调整印章名称，正数更疏、负数更紧，0保持原排版；辅助文字和编号不变。圆章文字最多铺满一圈。': 'Adjust the stamp title in design pixels: positive values spread letters, negative values tighten them, and 0 keeps the original layout. Subtitle and code stay unchanged. Curved text is limited to one revolution.',
+  '0%正常显示，100%完全透明；只淡化印章，白色背景不变。': '0% is fully visible and 100% is fully transparent. Only the stamp fades; the white background stays unchanged.',
   '文字大小滑块': 'Text size slider',
   '字号按1000×1000设计画布计算，预览按比例缩放。': 'Font size is based on a 1000×1000 design canvas. The preview scales proportionally. ',
   '当前导出尺寸下约 {0} px；字号过大时文字可能重叠。': 'Approximately {0} px at the selected export size. Large text may overlap.',

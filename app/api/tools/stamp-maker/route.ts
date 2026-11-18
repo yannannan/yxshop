@@ -37,9 +37,11 @@ export async function POST(request: Request) {
     if (!body || !isStampId(body.id)) throw new StampError('制作任务编号不正确');
     let options;
     try { options = parseStampOptions(body.options); } catch (error) { throw new StampError((error as Error).message); }
-    // 默认 PNG 延用旧参数指纹，升级前已成功的任务仍可原编号重试。
-    const { format, ...legacyOptions } = options;
-    const id = body.id.toLowerCase(), hash = createHash('sha256').update(JSON.stringify(format === 'png' ? legacyOptions : options)).digest('hex');
+    // New controls at their defaults retain the old fingerprint, so requests
+    // completed before an upgrade can still be retried without another charge.
+    const { format, letterSpacing, opacity, textWeight, ...legacyOptions } = options;
+    const fingerprint = { ...legacyOptions, ...(format === 'png' ? {} : { format }), ...(letterSpacing === 0 ? {} : { letterSpacing }), ...(opacity === 100 ? {} : { opacity }), ...(textWeight === 0 ? {} : { textWeight }) };
+    const id = body.id.toLowerCase(), hash = createHash('sha256').update(JSON.stringify(fingerprint)).digest('hex');
     const tool = await getStampTool(), user = await stampUser(request);
     if (tool.tool_charge_type === 'pending') throw new StampError('收费方式待确认，目前可以预览，暂未开放制作', 409);
     const free = tool.tool_charge_type === 'free';

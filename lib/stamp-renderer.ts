@@ -9,6 +9,7 @@ const fonts = {
   serif: { file: 'NotoSerifCJKsc-Regular.otf', family: 'Noto Serif CJK SC' },
   sans: { file: 'NotoSansCJKsc-Regular.otf', family: 'Noto Sans CJK SC' },
   kai: { file: 'LXGWWenKai-Regular.ttf', family: 'LXGW WenKai' },
+  fangsong: { file: 'ZhuqueFangsong-Regular.ttf', family: 'Zhuque Fangsong (technical preview)' },
 } satisfies Record<StampFont, { file: string; family: string }>;
 // 开发热更新会重新执行本模块，外部 Wasm 包却仍然是同一实例。
 // 按初始化函数实例保存 Promise，既跨热更新共享，也隔离不同模块运行时。
@@ -46,17 +47,17 @@ async function resources(font: StampFont) {
 }
 const escape = (text: string) => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
 const n = (value: number) => value.toFixed(2);
-function label(text: string, x: number, y: number, size: number, rotation = 0) {
-  return `<text x="0" y="0" text-anchor="middle" font-size="${n(size)}" transform="translate(${n(x)} ${n(y)}) rotate(${n(rotation)})">${escape(text)}</text>`;
+function label(text: string, x: number, y: number, size: number, rotation = 0, weight = 0) {
+  return `<text x="0" y="0" text-anchor="middle" font-size="${n(size)}"${weight ? ` stroke="currentColor" stroke-width="${n(weight)}" stroke-linejoin="round" paint-order="stroke fill"` : ''} transform="translate(${n(x)} ${n(y)}) rotate(${n(rotation)})">${escape(text)}</text>`;
 }
-function curved(text: string, rx: number, ry: number, size: number, span: number, bottom = false, autoFit = true) {
+function curved(text: string, rx: number, ry: number, size: number, span: number, bottom = false, autoFit = true, weight = 0) {
   const letters = [...text];
   const count = letters.length;
   const maxSize = (span * Math.PI / 180) * Math.min(rx, ry) / Math.max(1, count) * 0.92;
   return letters.map((letter, index) => {
     const angle = bottom ? 90 + span / 2 - (count === 1 ? span / 2 : index * span / (count - 1)) : -90 - span / 2 + (count === 1 ? span / 2 : index * span / (count - 1));
     const radians = angle * Math.PI / 180;
-    return label(letter, 500 + rx * Math.cos(radians), 500 + ry * Math.sin(radians), autoFit ? Math.min(size, maxSize) : size, angle + (bottom ? -90 : 90));
+    return label(letter, 500 + rx * Math.cos(radians), 500 + ry * Math.sin(radians), autoFit ? Math.min(size, maxSize) : size, angle + (bottom ? -90 : 90), weight);
   }).join('');
 }
 function star() {
@@ -68,6 +69,8 @@ function star() {
 
 export function stampSvg(options: StampOptions, preview = false) {
   const o = options;
+  const spacing = o.letterSpacing ?? 0;
+  const weight = o.textWeight ?? 0;
   let body = '';
   if (o.shape === 'circle' || o.shape === 'ellipse') {
     const ry = o.shape === 'ellipse' ? 305 : 410;
@@ -75,28 +78,32 @@ export function stampSvg(options: StampOptions, preview = false) {
     if (o.innerRing) body += `<ellipse cx="500" cy="500" rx="382" ry="${ry - 28}" fill="none" stroke="currentColor" stroke-width="${n(o.border * .4)}" />`;
     // Main text follows the chosen font size, even when it overlaps. Keep the path
     // radii positive at large sizes; numbering retains its original auto-fit.
-    body += curved(o.text, Math.max(1, 410 - o.fontSize - o.textInset), Math.max(1, ry - o.fontSize - o.textInset), o.fontSize, o.arc, false, false);
+    const rx = Math.max(1, 410 - o.fontSize - o.textInset), textRy = Math.max(1, ry - o.fontSize - o.textInset);
+    // Add tracking to the existing arc layout, centered at the top. Limit a
+    // line to one revolution and keep negative tracking from reversing it.
+    const span = Math.max(0, Math.min(360, o.arc + spacing * Math.max(0, [...o.text].length - 1) / ((rx + textRy) / 2) * 180 / Math.PI));
+    body += curved(o.text, rx, textRy, o.fontSize, span, false, false, weight);
     if (o.symbol === 'star') body += star();
     if (o.symbol === 'dot') body += '<circle cx="500" cy="475" r="35" />';
-    body += label(o.subtitle, 500, o.shape === 'ellipse' ? 640 : 670, Math.min(76, 590 / Math.max(1, [...o.subtitle].length)));
-    body += curved(o.code, 360, ry - 40, 28, Math.min(100, Math.max(30, o.code.length * 5)), true);
+    body += label(o.subtitle, 500, o.shape === 'ellipse' ? 640 : 670, Math.min(76, 590 / Math.max(1, [...o.subtitle].length)), 0, weight);
+    body += curved(o.code, 360, ry - 40, 28, Math.min(100, Math.max(30, o.code.length * 5)), true, true, weight);
   } else {
     body = `<rect x="140" y="140" width="720" height="720" rx="${o.shape === 'name' ? 16 : 36}" fill="none" stroke="currentColor" stroke-width="${o.border}" />`;
     if (o.innerRing) body += `<rect x="166" y="166" width="668" height="668" rx="12" fill="none" stroke="currentColor" stroke-width="${n(o.border * .4)}" />`;
     const letters = [...o.text];
     if (o.shape === 'name') {
-      body += letters.map((letter, index) => label(letter, letters.length <= 2 ? 500 : (index < 2 ? 660 : 350), (index % 2 ? 715 : 410), 250)).join('');
+      body += letters.map((letter, index) => label(letter, letters.length <= 2 ? 500 : (index < 2 ? 660 + spacing / 2 : 350 - spacing / 2), (index % 2 ? 715 + spacing / 2 : 410 - spacing / 2), 250, 0, weight)).join('');
     } else {
       const columns = letters.length <= 4 ? 2 : letters.length <= 9 ? 3 : 4;
       const rows = Math.ceil(letters.length / columns), cellHeight = (o.subtitle || o.code ? 460 : 560) / rows, size = Math.min(205, 520 / columns, cellHeight * .78);
-      body += letters.map((letter, index) => label(letter, 500 + ((index % columns) - (Math.min(columns, letters.length - Math.floor(index / columns) * columns) - 1) / 2) * (size + 14), 220 + size + Math.floor(index / columns) * cellHeight, size)).join('');
-      body += label(o.subtitle, 500, 748, Math.min(60, 580 / Math.max(1, [...o.subtitle].length)));
-      body += label(o.code, 500, 815, 25);
+      body += letters.map((letter, index) => label(letter, 500 + ((index % columns) - (Math.min(columns, letters.length - Math.floor(index / columns) * columns) - 1) / 2) * (size + 14 + spacing), 220 + size + Math.floor(index / columns) * cellHeight + (Math.floor(index / columns) - (rows - 1) / 2) * spacing, size, 0, weight)).join('');
+      body += label(o.subtitle, 500, 748, Math.min(60, 580 / Math.max(1, [...o.subtitle].length)), 0, weight);
+      body += label(o.code, 500, 815, 25, 0, weight);
     }
   }
   const background = o.background === 'white' ? '<rect width="1000" height="1000" fill="white" />' : '';
   const watermark = preview ? '<g font-family="Noto Serif CJK SC" fill="#718096" opacity=".38" font-size="40" text-anchor="middle" transform="rotate(-28 500 500)"><text x="500" y="310">宇星脉通 · 效果预览</text><text x="500" y="540">宇星脉通 · 效果预览</text><text x="500" y="770">宇星脉通 · 效果预览</text></g>' : '';
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1000" viewBox="0 0 1000 1000"><g font-family="${fonts[o.font].family}, Noto Serif CJK SC">${background}<g color="${o.color}" fill="${o.color}" transform="rotate(${o.rotation} 500 500)">${body}</g>${watermark}</g></svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1000" viewBox="0 0 1000 1000"><g font-family="${fonts[o.font].family}, Noto Serif CJK SC">${background}<g color="${o.color}" fill="${o.color}" opacity="${n((o.opacity ?? 100) / 100)}" transform="rotate(${o.rotation} 500 500)">${body}</g>${watermark}</g></svg>`;
 }
 
 export async function renderStamp(options: StampOptions, preview = false): Promise<Buffer> {
