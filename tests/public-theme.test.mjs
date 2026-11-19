@@ -48,6 +48,29 @@ test('品牌主按钮、正文及辅助文字在白色/浅蓝背景上达到普�
   for (const key of ['--ip-on-dark', '--ip-dark-muted', '--ip-warm']) assert.ok(contrast(lightPanels[key], '#f2f7ff') >= 4.5, `${key} must stay readable after changing tool panels from dark to light`);
 });
 
+test('侧栏与内容区、选中项有清楚层次，选中状态不会被悬停覆盖', () => {
+  const nav = variables['--ui-nav-bg'], active = variables['--ui-nav-active'];
+  assert.ok(contrast(nav, '#f3f8fe') >= 7, 'navigation and content must be visibly separated');
+  assert.ok(contrast(active, nav) >= 3, 'selected fill must stand out from the sidebar');
+  assert.ok(contrast('#fff', active) >= 4.5);
+  for (const key of ['--ui-nav-text', '--ui-nav-muted']) assert.ok(contrast(variables[key], nav) >= 4.5);
+  const hover = theme.nodes.find(node => node.type === 'rule' && node.nodes.some(d => d.prop === 'background' && d.value === 'var(--ui-nav-hover)'));
+  const selected = theme.nodes.find(node => node.type === 'rule' && node.nodes.some(d => d.prop === 'background' && d.value === 'var(--ui-nav-active)'));
+  for (const [container, node] of [
+    ['account-sidebar', '<nav><a class="active is-hovered" aria-current="page">我的积分</a></nav>'],
+    ['seo-sidebar seo-workspace-sidebar', '<nav><div class="seo-submenu"><button class="active is-hovered">分析</button></div></nav>'],
+    ['ds-sidebar', '<nav class="ds-modes"><button class="is-hovered" aria-pressed="true">签署</button></nav>'],
+    ['ip-sidebar', '<nav><button class="is-hovered" aria-current="page">处理</button></nav>'],
+    ['al-sidebar', '<nav><button class="is-hovered" aria-current="page">获客</button></nav>'],
+    ['technician-sidebar', '<nav><button class="active is-hovered">工作台</button></nav>'],
+  ]) {
+    const $ = load(`<aside class="${container}">${node}</aside>`);
+    const control = $('.is-hovered');
+    assert.equal(control.is(selected.selector), true, container);
+    assert.equal(control.is(hover.selector.replaceAll(':hover', '.is-hovered').replaceAll(':disabled', '[disabled]')), false, container);
+  }
+});
+
 test('主题保留内容图像、画布、颜色选择和二维码，不对素材应用滤镜或重着色', () => {
   theme.walkRules(rule => {
     assert.doesNotMatch(rule.selector, /(?:\.stamp-colors|\.qr-grid|\.qr-logo|\.service-qr|\bcanvas\b|\bimg\b)(?:\s|[,:.>#]|$)/);

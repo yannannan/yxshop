@@ -9,6 +9,12 @@ body:not(:has([data-admin-ui])) {
   --ui-soft: #edf5ff;
   --ui-cyan: #edf8fb;
   --ui-surface: #fff;
+  --ui-nav-bg: #132d4b;
+  --ui-nav-text: #d6e3f3;
+  --ui-nav-muted: #a9bfd9;
+  --ui-nav-line: #35516e;
+  --ui-nav-hover: #254c76;
+  --ui-nav-active: #2870e6;
   --ui-shadow: 0 8px 28px #274e7b09;
   --ui-shadow-hover: 0 14px 36px #274e7b14;
   --ui-hero: linear-gradient(116deg, #f5f9ff, #edf5ff 56%, #e5f5fb);
@@ -279,6 +285,44 @@ body:not(:has([data-admin-ui])) .cleaner-screenshot-tabs { background:#173452; }
 body:not(:has([data-admin-ui])) .cleaner-screenshot-tabs button[aria-selected=true] { background:#e8f2ff; color:#245fae; border-color:#b6d0f3; }
 body:not(:has([data-admin-ui])) :is(.mobile-access,.mobile-access-card,.mobile-access-toggle) { border-color:var(--ui-line); box-shadow:var(--ui-shadow); }
 body:not(:has([data-admin-ui])) .service-float { background:#173452; border:1px solid #2c5077; box-shadow:0 8px 24px #17345222; }
+
+/* Navigation needs stronger separation than content cards. The selected state
+   keeps its fill on hover; small-screen layouts retain their existing wrapping. */
+body:not(:has([data-admin-ui])) :is(.account-sidebar,.seo-sidebar,.seo-workspace-sidebar,.ds-sidebar,.ip-sidebar,.al-sidebar,.technician-sidebar) {
+  background:var(--ui-nav-bg); color:var(--ui-nav-text); border-color:var(--ui-nav-line);
+  box-shadow:inset -1px 0 #ffffff08;
+}
+body:not(:has([data-admin-ui])) .account-sidebar>p {
+  margin:0 12px 16px; padding:4px 0 18px; border-bottom:1px solid var(--ui-nav-line);
+  font-size:16px; line-height:1.5; font-weight:650; color:#fff;
+}
+body:not(:has([data-admin-ui])) .account-sidebar>nav { gap:8px; }
+body:not(:has([data-admin-ui])) :is(.account-sidebar>nav a,.seo-sidebar nav button,.seo-workspace-sidebar nav button,.ds-modes button,.ip-sidebar nav button,.al-sidebar nav button,.technician-sidebar nav button) {
+  color:var(--ui-nav-text); border-radius:8px;
+}
+body:not(:has([data-admin-ui])) :is(.account-sidebar>nav a,.seo-sidebar nav button,.seo-workspace-sidebar nav button,.ds-modes button,.ip-sidebar nav button,.al-sidebar nav button,.technician-sidebar nav button):hover:not(:disabled):not(.active):not([aria-pressed=true]):not([aria-current]) {
+  background:var(--ui-nav-hover); color:#fff;
+}
+body:not(:has([data-admin-ui])) .seo-workspace-sidebar .seo-menu-group.current>.seo-menu-toggle {
+  background:var(--ui-nav-hover); color:#fff; font-weight:650;
+}
+body:not(:has([data-admin-ui])) :is(.account-sidebar>nav a.active,.seo-sidebar nav button.active,.seo-workspace-sidebar .seo-submenu button.active,.ds-modes button[aria-pressed=true],.ip-sidebar nav button[aria-current],.al-sidebar nav button[aria-current=page],.technician-sidebar nav button.active) {
+  background:var(--ui-nav-active); color:#fff; font-weight:650; border-color:#77adff;
+  box-shadow:inset 0 0 0 1px #ffffff24,0 3px 10px #061d3520;
+}
+body:not(:has([data-admin-ui])) .account-sidebar a.active::before,
+body:not(:has([data-admin-ui])) :is(.ds-modes button[aria-pressed=true],.ip-sidebar nav button[aria-current])::before { background:#fff; }
+body:not(:has([data-admin-ui])) .ip-sidebar nav button[aria-current] .ip-menu-icon { color:inherit; }
+body:not(:has([data-admin-ui])) .seo-workspace-sidebar .seo-submenu { border-left-color:#587797; }
+body:not(:has([data-admin-ui])) .seo-submenu button.active .seo-menu-dot { background:#fff; }
+body:not(:has([data-admin-ui])) :is(.seo-sidebar-heading>span,.seo-sidebar nav small,.seo-sidebar .seo-eyebrow) { color:var(--ui-nav-muted); }
+body:not(:has([data-admin-ui])) .account-sidebar .account-back-home {
+  margin:24px 12px 0; padding-top:20px; border-top:1px solid var(--ui-nav-line); color:var(--ui-nav-muted);
+}
+body:not(:has([data-admin-ui])) .account-sidebar .account-back-home:hover { color:#fff; }
+body:not(:has([data-admin-ui])) :is(.account-sidebar,.seo-sidebar,.ds-sidebar,.ip-sidebar,.al-sidebar,.technician-sidebar) :is(a,button):focus-visible {
+  outline-color:#b8d7ff; outline-offset:3px;
+}
 
 @media (max-width:720px) {
   body:not(:has([data-admin-ui])) :is(.tool-entry-card,.product-card,.technical-service-card,.points-package) { border-radius:12px; }
