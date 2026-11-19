@@ -52,6 +52,10 @@ let queries = 0;
 // 只允许页面读取模拟的公开工具数据；没有真实连接或写业务数据库。
 mysql.createPool = () => ({ async execute(sql, values = []) {
   if (sql.startsWith('SELECT tool_slug,sort_order,enabled FROM tool_entry_settings')) return [[]];
+  if (sql.startsWith('SELECT id,parent_id,name FROM categories WHERE status=')) return [[]];
+  if (sql.startsWith("SELECT * FROM products WHERE status='active' AND COALESCE(product_type,'digital')")) return [[]];
+  if (sql === "SELECT * FROM products WHERE status='active' AND id=? LIMIT 1") return [[{ id: 1, name: '生产数据库商品一', description: '商品一功能说明', product_type: 'digital' }, { id: 2, name: '生产数据库商品二', description: '商品二交付说明', product_type: 'digital' }].filter(row => row.id === values[0])];
+  if (sql.startsWith('SELECT s.slug,s.title,s.summary FROM technical_services ')) return [[{ slug: 'ai-site-deployment', title: '生产网站部署服务', summary: '网站部署服务说明' }, { slug: 'ai-system-customization', title: '生产系统定制服务', summary: '系统定制服务说明' }].filter(row => row.slug === values[0])];
   if (sql.startsWith('SELECT ') && (sql.includes('FROM tool_software_pages') || sql.includes('FROM tool_software_releases'))) return [[]];
   if (sql.startsWith('SELECT ') && sql.includes('FROM site_analysis_integrations i')) { queries++; return [[{ site_id: '22222222-2222-4222-8222-222222222222', script_token: 'a'.repeat(64), user_id: 1, verified_at: '2026-10-26', host: 'example.org' }]]; }
   const publicTool = sql.includes("FROM products WHERE product_type='tool' AND status='active'") ||
@@ -70,16 +74,18 @@ ssr.renderToReadableStream = (tree, options = {}) => render(tree, {
 });
 const module = await import(${JSON.stringify(entry.href)});
 const handler = typeof module.default === 'function' ? module.default : module.default.fetch.bind(module.default);
-const pages = [];
+const pages = [], metadata = [];
 for (const spec of ${JSON.stringify(paths)}) {
   const path = typeof spec === 'string' ? spec : spec.path;
-  const response = await handler(new Request('http://localhost:3000' + path, { method: typeof spec === 'object' ? spec.method || 'GET' : 'GET', headers: typeof spec === 'object' ? { cookie: 'yxshop_locale=' + (spec.locale || 'zh-CN') } : {} }));
+  const response = await handler(new Request('http://localhost:3000' + path, { method: typeof spec === 'object' ? spec.method || 'GET' : 'GET', headers: typeof spec === 'object' ? { 'user-agent': spec.userAgent || 'Mozilla/5.0 (YXStar QA)', cookie: 'yxshop_locale=' + (spec.locale || 'zh-CN') } : {} }));
   if (path.includes('/assets/build/')) {
     const bytes = Buffer.from(await response.arrayBuffer());
     pages.push({ status: response.status, type: response.headers.get('content-type'), hash: createHash('sha256').update(bytes).digest('hex') });
     continue;
   }
   const html = await response.text();
+  const $ = require('cheerio').load(html);
+  metadata.push({ path, title: $('head title').text(), description: $('head meta[name="description"]').attr('content'), keywords: $('head meta[name="keywords"]').attr('content'), robots: $('head meta[name="robots"]').attr('content'), canonical: $('head link[rel="canonical"]').attr('href'), descriptionCount: $('head meta[name="description"]').length, keywordsCount: $('head meta[name="keywords"]').length, ogDescription: $('head meta[property="og:description"]').attr('content'), twitterDescription: $('head meta[name="twitter:description"]').attr('content') });
   const mobileAccessCount = (html.match(/data-mobile-access="true"/g) || []).length;
   const stampSidebar = path.startsWith('/tools/stamp-maker.html') ? html.match(/<aside class="ds-sidebar">.*?<\\/aside>/s)?.[0] || '' : '';
   const stampMenu = [...stampSidebar.matchAll(/<button[^>]*aria-pressed="(true|false)"[^>]*>.*?<span>([^<]+)<\\/span><\\/button>/gs)].map(match => match.slice(1));
@@ -95,13 +101,35 @@ for (const spec of ${JSON.stringify(paths)}) {
   if (path.startsWith('/tools/c-drive-cleaner.html')) Object.assign(pages.at(-1), { cleaner: html.includes('class="cleaner-site"'), pending: html.includes('版本即将发布'), englishCleaner: html.includes('Coming soon') && html.includes('Free C: drive cleanup') && html.includes('Yuxing Disk Manager'), genericLaunch: html.includes('class="tool-detail"'), requestedHero: html.includes('class="cleaner-hero-title"') && html.includes('class="cleaner-hero-tagline"') && (html.includes('免费C盘清理100%释放') || html.includes('Free C: drive cleanup · 100% space release')), sharedNav: html.includes('unified-topbar') && html.includes('href="/ai-leads"') && html.includes('href="/?channel=technical#channel-content"') && html.includes('storefront-account-actions') && !html.includes('class="cleaner-header"'), disabledDownload: html.includes('class="cleaner-download" disabled=""'), canonical: html.includes('https://www.yxstar.shop/tools/c-drive-cleaner.html'), screenshots: (html.match(/role="tab"[^>]*aria-selected=/g) || []).length, heroCarousel: html.includes('cleaner-showcase cleaner-showcase-hero'), hasDetails: html.includes('class="cleaner-carousel-detail"'), hasCarousel: html.includes('class="cleaner-carousel-viewport"') && (html.includes('暂停轮播') || html.includes('Pause slideshow')), stackedStories: html.includes('class="cleaner-story"'), loginFree: html.includes('免登录下载') || html.includes('No login to download') });
   if (stampSidebar) Object.assign(pages.at(-1), { menu: stampMenu, stampActive: /id="ds-stamp-maker" aria-labelledby/.test(html), structuredData: html.includes('application/ld+json'), embeddedStamp: html.includes('stamp-signature-view') });
 }
-console.log(JSON.stringify({ pages, errors, queries }));
+console.log(JSON.stringify({ pages, metadata, errors, queries }));
 `;
   const { stdout } = await execute(process.execPath, ['--input-type=module', '-e', code], { timeout: 30000, windowsHide: true, maxBuffer: 1000000 });
   return JSON.parse(stdout.trim().split(/\r?\n/).at(-1));
 }
 
 const needsBuild = !existsSync(entry) ? '请先执行 pnpm build 生成生产包' : false;
+
+test('所有页面在服务器HTML头部提供独立SEO，含四个固定词且私有页面维持noindex', { skip: needsBuild }, async () => {
+  const paths = ['/', '/tools', '/products', '/ai-operations', '/ai-leads', '/ai-leads/workspace', '/product/1', '/product/2', '/service/ai-site-deployment', '/service/ai-system-customization', '/account', '/account/orders', '/account/activity', '/account/profile', '/points', '/addresses', '/orders', '/checkout/demo-order', '/service-orders', '/service-orders/demo-order', '/technician', '/admin', '/tools/stamp-maker.html', '/tools/handprint-maker.html', '/tools/document-signature.html', '/tools/c-drive-cleaner.html', '/tools/image-processor.html', '/tools/video-extractor.html', '/tools/yxstar-site-tool.html'];
+  const result = await renderPages(paths.map(path => ({ path })));
+  assert.deepEqual(result.errors, [], JSON.stringify(result.pages.filter(page => page.status !== 200 || page.failed).map(page => ({ path: page.path, status: page.status })))); assert.ok(result.pages.every(page => page.status === 200));
+  const titles = new Set();
+  for (const meta of result.metadata) {
+    assert.equal(meta.descriptionCount, 1, meta.path); assert.equal(meta.keywordsCount, 1, meta.path);
+    for (const term of ['宇星脉通', 'AI智能获客', 'AI贸易获客', 'AI外贸获客']) { assert.ok(meta.keywords.includes(term), meta.path); assert.ok(meta.description.includes(term), meta.path); }
+    assert.equal(meta.ogDescription, meta.description, meta.path); assert.equal(meta.twitterDescription, meta.description, meta.path);
+    assert.ok(!titles.has(meta.title), meta.path); titles.add(meta.title);
+    const privatePage = /^\/(?:account|points|addresses|orders|checkout|service-orders|technician|admin)(?:\/|$)/.test(meta.path) || meta.path === '/ai-leads/workspace';
+    assert.equal(meta.robots.includes('noindex'), privatePage, meta.path);
+    if (privatePage) assert.equal(meta.canonical, undefined, meta.path);
+    else assert.equal(new URL(meta.canonical).href, new URL(meta.path, 'https://www.yxstar.shop').href, meta.path);
+  }
+  assert.ok(result.metadata.find(meta => meta.path === '/product/1').title.includes('生产数据库商品一'));
+  assert.ok(result.metadata.find(meta => meta.path === '/service/ai-site-deployment').title.includes('生产网站部署服务'));
+  const english = await renderPages([{ path: '/ai-leads', locale: 'en', userAgent: 'Googlebot' }, { path: '/tools/stamp-maker.html', locale: 'en', userAgent: 'Baiduspider' }, { path: '/account', locale: 'en' }]);
+  assert.deepEqual(english.errors, []);
+  for (const meta of english.metadata) { assert.match(meta.title, /Yuxing Maitong/); for (const term of ['宇星脉通', 'AI智能获客', 'AI贸易获客', 'AI外贸获客']) { assert.ok(meta.keywords.includes(term)); assert.ok(meta.description.includes(term)); } }
+});
 
 test('站长旧链接实际生产渲染工作区，获客宣传及工作台中英文保留统一导航且只有预览', { skip: needsBuild }, async () => {
   const result = await renderPages(['/tools/yxstar-site-tool.html', '/ai-leads', { path: '/ai-leads', locale: 'en' }, '/ai-leads/workspace', { path: '/ai-leads/workspace', locale: 'en' }]);

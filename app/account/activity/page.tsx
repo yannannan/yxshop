@@ -1,5 +1,7 @@
 import { AccountShell } from '@/components/account-shell';
 import { AccountRecordList } from '@/components/account-center';
+import { getPageMetadata } from '@/lib/page-seo-server';
+export async function generateMetadata() { return getPageMetadata('accountActivity'); }
 export default async function AccountActivityPage({ searchParams }: { searchParams: Promise<{ filter?: string | string[] }> }) {
   const { filter } = await searchParams;
   const initialFilter = typeof filter === 'string' ? filter : undefined;

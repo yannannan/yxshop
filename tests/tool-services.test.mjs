@@ -197,7 +197,7 @@ test('独立 HTML 页面提供服务端正文、标题、描述、canonical 和�
   });
   const params = Promise.resolve({ slug: 'sample-tool.html' });
   const metadata = await page.generateMetadata({ params });
-  assert.equal(metadata.title, '独立 SEO 标题'); assert.equal(metadata.description, '独立 SEO 描述'); assert.equal(metadata.alternates.canonical, `${helpers.siteOrigin()}/tools/sample-tool.html`);
+  assert.equal(metadata.title, '独立 SEO 标题'); assert.ok(metadata.description.startsWith('独立 SEO 描述。')); assert.ok(metadata.description.includes('AI外贸获客')); assert.equal(metadata.alternates.canonical, `${helpers.siteOrigin()}/tools/sample-tool.html`);
   const html = renderToStaticMarkup(await page.default({ params }));
   for (const text of ['独立工具', '服务端可读取的工具简介', '具体使用说明', 'application/ld+json', '工具入口待配置']) assert.ok(html.includes(text));
   assert.ok(!html.includes('secret'));

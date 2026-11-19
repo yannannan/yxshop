@@ -152,7 +152,7 @@ test('导航高度变化仅更新位置，不改变展开状态，离开页面�
 
 test('全局根布局只挂载一次入口，与页面同处语言上下文且不依赖各页面客服', async () => {
   const MobileAccess = () => null, LanguageProvider = ({ children }) => children;
-  const Layout = load('../app/layout.tsx', { '@/lib/i18n-server': { getI18n: async () => ({ locale: 'en' }), localizeMetadata() {} },
+  const Layout = load('../app/layout.tsx', { '@/lib/i18n-server': { getI18n: async () => ({ locale: 'en' }) }, '@/lib/page-seo-server': { getPageMetadata() {} },
     '@/components/language-provider': { LanguageProvider }, '@/components/tool-activity': { ToolActivity: () => null },
     '@/components/mobile-access': { MobileAccess }, ...Object.fromEntries([...readFileSync(new URL('../app/layout.tsx', import.meta.url), 'utf8').matchAll(/import '(\.\/[^']+\.css)'/g)].map(match => [match[1], {}])) }, { URL, process: { env: {} } }).default;
   const tree = await Layout({ children: React.createElement('main', null, 'page') });

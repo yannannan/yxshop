@@ -7,6 +7,7 @@ import ts from 'typescript';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { english } from '../lib/i18n-en.ts';
+import { buildPageMetadata } from '../lib/page-seo.ts';
 
 const require = createRequire(import.meta.url);
 function load(file, mocks, globals = {}) {
@@ -39,7 +40,7 @@ test('动态提示保留插值和特殊字符，优先匹配具体模板，不�
 
 test('实际 React Provider 按树隔离：英文前台与固定中文管理端互不污染', () => {
   function Label() { return React.createElement('span', null, provider.useI18n().t('我的订单')); }
-  const Admin = load('../app/admin/layout.tsx', { '@/components/language-provider': provider }).default;
+  const Admin = load('../app/admin/layout.tsx', { '@/components/language-provider': provider, '@/lib/page-seo': { buildPageMetadata } }).default;
   const html = renderToStaticMarkup(React.createElement(provider.LanguageProvider, { locale: 'en' }, React.createElement(Label), React.createElement(Admin, null, React.createElement(Label)), React.createElement(Label)));
   assert.equal((html.match(/My Orders/g) || []).length, 2); assert.equal((html.match(/我的订单/g) || []).length, 1); assert.match(html, /lang="zh-CN"/);
   assert.equal(renderToStaticMarkup(React.createElement(Label)), '<span>我的订单</span>');

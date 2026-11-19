@@ -12,6 +12,12 @@ export async function getPublishedProducts() {
   return results.map(publicProduct);
 }
 
+export async function getPublishedProduct(id: number) {
+  if (!Number.isSafeInteger(id) || id < 1) return null;
+  const row = await env.DB.prepare("SELECT * FROM products WHERE status='active' AND id=? LIMIT 1").bind(id).first<Record<string, unknown>>();
+  return row && row.product_type !== 'points' ? publicProduct(row) : null;
+}
+
 export async function getPublishedCategories(): Promise<CategoryNode[]> {
   type Row = { id: number; parent_id: number | null; name: string };
   const { results } = await env.DB.prepare("SELECT id,parent_id,name FROM categories WHERE status='active' ORDER BY sort,id").all<Row>();
