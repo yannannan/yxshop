@@ -344,8 +344,10 @@ body:not(:has([data-admin-ui])) .refined-store :is(.storefront-banner-digital,.s
 }
 body:not(:has([data-admin-ui])) .refined-store .storefront-banner-copy p { color:#526b88; }
 body:not(:has([data-admin-ui])) .refined-store .storefront-banner-features>span {
-  padding:0; border:0; border-radius:0; background:transparent; color:#526b88;
+  padding:6px 10px; border:1px solid #e7d193; border-radius:6px; background:#fff5d8; color:#72521b;
 }
+body:not(:has([data-admin-ui])) .refined-store .storefront-banner-features { gap:10px 12px; }
+body:not(:has([data-admin-ui])) .refined-store .storefront-banner-features svg { color:#936914; }
 body:not(:has([data-admin-ui])) .refined-store .channel-switch>button,
 body:not(:has([data-admin-ui])) .refined-store .channel-switch>button:last-child {
   background:#fff; border-color:#d5dfeb; box-shadow:0 3px 12px #23426505;
@@ -367,11 +369,26 @@ body:not(:has([data-admin-ui])) .refined-store .catalog-filter-area {
   padding:18px; background:#fff; border:1px solid #d7e1ed; border-radius:12px; box-shadow:none;
 }
 body:not(:has([data-admin-ui])) .refined-store .category-tabs button {
-  min-height:38px; font-size:13px; font-weight:500; background:#f3f6fa; color:#52657b; border-color:#e0e7f0;
+  min-height:40px; font-size:13px; font-weight:500; background:#f3f6fa; color:#52657b; border-color:#e0e7f0;
 }
 body:not(:has([data-admin-ui])) .refined-store .category-tabs button:not(.active):hover { background:#edf3fb; color:#2059a9; border-color:#b9cde8; }
 body:not(:has([data-admin-ui])) .refined-store .category-tabs button.active { background:#2468e3; color:#fff; border-color:#2468e3; box-shadow:none; }
-body:not(:has([data-admin-ui])) .refined-store .catalog-search { border-color:#c3d2e5; }
+body:not(:has([data-admin-ui])) .refined-store .catalog-filter-row { gap:16px; }
+body:not(:has([data-admin-ui])) .refined-store .catalog-filter-row .catalog-search {
+  display:flex; align-items:center; flex:1 1 340px; max-width:420px; min-width:260px;
+  height:44px; min-height:44px; padding:3px 3px 3px 12px; gap:8px;
+  border-color:#b9cde5; border-radius:9px;
+}
+body:not(:has([data-admin-ui])) .refined-store .catalog-search>span { display:flex; align-items:center; flex-shrink:0; font-size:20px; transform:none; }
+body:not(:has([data-admin-ui])) .refined-store .catalog-search>input {
+  flex:1 1 0; min-width:0; width:0; height:36px; margin:0; padding:0;
+  border:0; border-radius:0; background:transparent; font-size:14px; line-height:1.5;
+}
+body:not(:has([data-admin-ui])) .refined-store .catalog-search>input:focus-visible { outline:none; box-shadow:none; }
+body:not(:has([data-admin-ui])) .refined-store .catalog-search>button {
+  align-self:center; flex:0 0 68px; width:68px; height:36px; min-height:36px; margin:0;
+  padding:0 12px; border-radius:6px; font-size:13px; line-height:1; font-weight:600; box-shadow:none;
+}
 body:not(:has([data-admin-ui])) .refined-store :is(.tool-directory,.product-category-section,.technical-services-section) {
   padding:24px; background:#fff; border:1px solid #d9e2ec;
   border-radius:14px; box-shadow:0 4px 16px #23426505;
@@ -411,7 +428,24 @@ body:not(:has([data-admin-ui])) .refined-store .product-card .badge {
   background:#fffffff0; color:#405976; border:1px solid #dce5ef; box-shadow:none;
 }
 
+/* Catalog actions stay inside the card link, with space between copy and the
+   action row. A currentColor arrow follows the button instead of an orange asset. */
+body:not(:has([data-admin-ui])) .tool-entry-card>p { min-height:44px; margin:10px 0 14px; line-height:1.7; }
+body:not(:has([data-admin-ui])) .tool-entry-card .tool-entry-bottom { align-items:center; gap:12px 10px; padding-top:12px; border-top-color:#e7edf5; }
+body:not(:has([data-admin-ui])) .tool-entry-card .tool-entry-action {
+  display:inline-flex; align-items:center; justify-content:center; gap:6px; flex:0 1 auto;
+  min-height:36px; max-width:100%; margin-left:auto; padding:8px 10px;
+  border:1px solid #c2d4ed; border-radius:8px; background:#f1f6ff; color:#275f9f;
+  font-size:12px; font-weight:600; line-height:1.5; text-align:center; box-shadow:none;
+}
+body:not(:has([data-admin-ui])) .tool-entry-action svg { display:block; flex-shrink:0; width:14px; height:14px; }
+body:not(:has([data-admin-ui])) :is(.tool-entry-card:hover,.tool-entry-card:focus-visible) .tool-entry-action { background:#e7f0ff; color:#1e5ba7; border-color:#8aafde; }
+
 @media (max-width:720px) {
+  body:not(:has([data-admin-ui])) .refined-store .catalog-filter-row .catalog-search { flex:1 0 100%; width:100%; min-width:0; max-width:none; height:48px; min-height:48px; }
+  body:not(:has([data-admin-ui])) .refined-store .catalog-search>input { height:40px; }
+  body:not(:has([data-admin-ui])) .refined-store .catalog-search>button { height:40px; min-height:40px; }
+  body:not(:has([data-admin-ui])) .tool-entry-card .tool-entry-action { min-height:40px; }
   body:not(:has([data-admin-ui])) .refined-store :is(.catalog-filter-area,.tool-directory,.product-category-section,.technical-services-section) { padding:16px; }
   body:not(:has([data-admin-ui])) .refined-store .category-tabs { gap:7px; }
   body:not(:has([data-admin-ui])) .refined-store .category-tabs button { padding-inline:11px; min-height:40px; }
