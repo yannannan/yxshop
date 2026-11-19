@@ -6,6 +6,9 @@ import { load } from 'cheerio';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { tsImport } from 'tsx/esm/api';
+import { createRequire } from 'node:module';
+import vm from 'node:vm';
+import ts from 'typescript';
 
 const css = readFileSync(new URL('../app/public-theme.css', import.meta.url), 'utf8');
 const theme = postcss.parse(css), scope = 'body:not(:has([data-admin-ui]))';
@@ -46,6 +49,32 @@ test('品牌主按钮、正文及辅助文字在白色/浅蓝背景上达到普�
   ]) assert.ok(contrast(foreground, background) >= 4.5, `${foreground}/${background}: ${contrast(foreground, background)}`);
   const lightPanels = Object.fromEntries(theme.nodes.find(node => node.selector === `${scope} .ip-main`).nodes.filter(node => node.type === 'decl').map(node => [node.prop, node.value]));
   for (const key of ['--ip-on-dark', '--ip-dark-muted', '--ip-warm']) assert.ok(contrast(lightPanels[key], '#f2f7ff') >= 4.5, `${key} must stay readable after changing tool panels from dark to light`);
+  for (const color of ['green','orange','purple','blue']) assert.ok(contrast(variables[`--ui-tag-${color}-text`], variables[`--ui-tag-${color}-bg`]) >= 4.5, `${color} label must remain readable`);
+  for (const background of ['#195ed1','#2468df','#096660','#087a72']) assert.ok(contrast('#fff', background) >= 4.5, 'channel descriptions must remain readable on saturated cards');
+});
+
+test('工具标签独立区分预览、免费、积分、套餐和待配置，不改变价格文案', async () => {
+  // Exercise the real card JSX without Next's framework-only Image wrapper.
+  const require = createRequire(import.meta.url), exports = {};
+  const mocks = {
+    react: React, 'react/jsx-runtime': require('react/jsx-runtime'),
+    '@/components/language-provider': { useI18n: () => ({ t:value=>value }) },
+    'next/image': ({ src,alt,width,height }) => React.createElement('img',{ src,alt,width,height }),
+    '../lib/tool-services': await tsImport('../lib/tool-services.ts', import.meta.url),
+    '../lib/homepage-display': await tsImport('../lib/homepage-display.ts', import.meta.url),
+    './catalog-pagination': { CatalogPagination: () => null },
+  };
+  vm.runInNewContext(ts.transpileModule(readFileSync(new URL('../components/tool-directory.tsx', import.meta.url),'utf8'), { compilerOptions:{ module:ts.ModuleKind.CommonJS, target:ts.ScriptTarget.ES2022, jsx:ts.JsxEmit.ReactJSX, esModuleInterop:true } }).outputText, { exports, require:name=>mocks[name] });
+  const { ToolDirectory } = exports;
+  const tools = ['preview','free','points','paid','pending'].map((kind, i) => ({
+    id:i+1, slug:kind==='preview'?'ai-leads':`test-${kind}`, name:kind, description:'介绍', logo:'',
+    chargeType:kind==='preview'?'free':kind, pointsCost:10, plans:[], entryConfigured:true,
+  }));
+  const $ = load(renderToStaticMarkup(React.createElement(ToolDirectory, { tools })));
+  for (const kind of ['preview','free','points','paid','pending']) assert.equal($(`.tool-charge-badge.${kind}`).length, 1);
+  assert.equal($('.tool-charge-badge.preview').text(), '界面预览');
+  assert.match($('.tool-charge-badge.points').text(), /10 积分\/次/);
+  assert.equal($('.tool-entry-card').length, 5);
 });
 
 test('侧栏与内容区、选中项有清楚层次，选中状态不会被悬停覆盖', () => {
