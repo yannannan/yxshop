@@ -333,62 +333,54 @@ body:not(:has([data-admin-ui])) :is(.account-sidebar,.seo-sidebar,.ds-sidebar,.i
   outline-color:#b8d7ff; outline-offset:3px;
 }
 
-/* Home hierarchy: a distinct canvas, a stronger hero, solid channel choices,
-   and white catalog sections. Saturated accents are reserved for labels. */
-body:not(:has([data-admin-ui])) .refined-store { background:#eef2f7; }
+/* Home uses white surfaces and restrained blue accents. Separation comes
+   from spacing and borders rather than a separate color for each section. */
+body:not(:has([data-admin-ui])) .refined-store { background:#f4f6f9; }
 body:not(:has([data-admin-ui])) .refined-store .storefront-banners {
-  border-color:#acc8ed; box-shadow:0 10px 30px #234d8112;
+  border-color:#d4dfed; box-shadow:0 7px 24px #23426508;
 }
-body:not(:has([data-admin-ui])) .refined-store .storefront-banner-digital { background:linear-gradient(110deg,#e4efff,#d9eaff 62%,#d8f2f4); }
-body:not(:has([data-admin-ui])) .refined-store .storefront-banner-service { background:linear-gradient(110deg,#e7f3ff,#d8ecfb 60%,#d9f4ed); }
-body:not(:has([data-admin-ui])) .refined-store .storefront-banner-copy p { color:#3f5c7e; }
+body:not(:has([data-admin-ui])) .refined-store :is(.storefront-banner-digital,.storefront-banner-service) {
+  background:linear-gradient(115deg,#f7faff,#edf3fb);
+}
+body:not(:has([data-admin-ui])) .refined-store .storefront-banner-copy p { color:#526b88; }
 body:not(:has([data-admin-ui])) .refined-store .storefront-banner-features>span {
-  padding:5px 9px; border:1px solid #b5cfef; border-radius:6px; background:#ffffffbd; color:#295b91;
+  padding:0; border:0; border-radius:0; background:transparent; color:#526b88;
 }
-body:not(:has([data-admin-ui])) .refined-store .channel-switch>button {
-  background:#fff; border-color:#b7cde8; box-shadow:0 5px 16px #1d416a0c;
-}
+body:not(:has([data-admin-ui])) .refined-store .channel-switch>button,
 body:not(:has([data-admin-ui])) .refined-store .channel-switch>button:last-child {
-  background:#e2f5ef; border-color:#91cdbb;
+  background:#fff; border-color:#d5dfeb; box-shadow:0 3px 12px #23426505;
 }
-body:not(:has([data-admin-ui])) .refined-store .channel-switch>button:last-child :is(b,em) { color:#126a5c; }
-body:not(:has([data-admin-ui])) .refined-store .channel-switch>button:last-child .channel-icon { color:#087466; background:#c3eddf; }
 body:not(:has([data-admin-ui])) .refined-store .channel-switch>button.active {
-  background:linear-gradient(110deg,#195ed1,#2468df); border-color:#1954bd; box-shadow:0 7px 20px #2468e32a;
+  background:#f5f9ff; border-color:#86a9d8; box-shadow:inset 3px 0 #2468e3;
 }
-body:not(:has([data-admin-ui])) .refined-store .channel-switch>button.active:last-child {
-  background:linear-gradient(110deg,#096660,#087a72); border-color:#075f59; box-shadow:0 7px 20px #087a7224;
-}
-body:not(:has([data-admin-ui])) .refined-store .channel-switch>button.active :is(b,small) { color:#fff; }
-body:not(:has([data-admin-ui])) .refined-store .channel-switch>button.active .channel-icon { color:#fff; background:#ffffff24; }
-body:not(:has([data-admin-ui])) .refined-store .channel-switch>button.active em { background:#fff; color:#1f5fc4; border-color:#fff; }
-body:not(:has([data-admin-ui])) .refined-store .channel-switch>button.active:last-child em { color:#096660; }
-body:not(:has([data-admin-ui])) .refined-store .quick-benefits { background:#fff; border-color:#c5d5e8; box-shadow:0 4px 14px #23426507; }
-body:not(:has([data-admin-ui])) .refined-store .quick-benefits>span { border-color:#d8e2ed; }
-body:not(:has([data-admin-ui])) .refined-store .quick-benefits>span::before { color:#117454; background:#ddf6e9; }
-body:not(:has([data-admin-ui])) .refined-store .quick-benefits>span:nth-child(2)::before { color:#6940ad; background:#eee5ff; }
-body:not(:has([data-admin-ui])) .refined-store .quick-benefits>span:nth-child(3)::before { color:#8a4b08; background:#fff0d3; }
-body:not(:has([data-admin-ui])) .refined-store .quick-benefits small { color:#5d7088; }
+body:not(:has([data-admin-ui])) .refined-store .channel-switch>button b { color:#183353; }
+body:not(:has([data-admin-ui])) .refined-store .channel-switch>button small { color:#586f8a; }
+body:not(:has([data-admin-ui])) .refined-store .channel-switch>button .channel-icon { color:#356ba9; background:#edf3fb; }
+body:not(:has([data-admin-ui])) .refined-store .channel-switch>button.active .channel-icon { color:#fff; background:#2468e3; }
+body:not(:has([data-admin-ui])) .refined-store .channel-switch>button em { color:#426b9c; border-color:#c8d8ed; background:#fff; }
+body:not(:has([data-admin-ui])) .refined-store .channel-switch>button.active em { background:#2468e3; color:#fff; border-color:#2468e3; }
+body:not(:has([data-admin-ui])) .refined-store .quick-benefits { background:#fff; border-color:#dce4ed; box-shadow:none; }
+body:not(:has([data-admin-ui])) .refined-store .quick-benefits>span { border-color:#e5ebf2; }
+body:not(:has([data-admin-ui])) .refined-store .quick-benefits>span::before { color:#496e9b; background:#edf3fb; }
+body:not(:has([data-admin-ui])) .refined-store .quick-benefits small { color:#5e7087; }
 body:not(:has([data-admin-ui])) .refined-store .catalog-filter-area {
-  padding:18px; background:#fff; border:1px solid #bccfe5; border-radius:12px; box-shadow:0 5px 18px #23426509;
+  padding:18px; background:#fff; border:1px solid #d7e1ed; border-radius:12px; box-shadow:none;
 }
-body:not(:has([data-admin-ui])) .refined-store .category-tabs button { min-height:38px; font-size:13px; font-weight:600; }
-body:not(:has([data-admin-ui])) .refined-store .category-tabs button:nth-child(2) { background:var(--ui-tag-green-bg); color:var(--ui-tag-green-text); border-color:#a9dbbf; }
-body:not(:has([data-admin-ui])) .refined-store .category-tabs button:nth-child(3) { background:var(--ui-tag-purple-bg); color:var(--ui-tag-purple-text); border-color:#d0bbef; }
-body:not(:has([data-admin-ui])) .refined-store .category-tabs button:nth-child(4) { background:var(--ui-tag-orange-bg); color:var(--ui-tag-orange-text); border-color:#edcb8a; }
-body:not(:has([data-admin-ui])) .refined-store .category-tabs button:not(.active):hover { background:#e0ecff; color:#2059a9; border-color:#86aee8; }
-body:not(:has([data-admin-ui])) .refined-store .category-tabs button.active { background:#2468e3; color:#fff; border-color:#2468e3; box-shadow:0 3px 9px #2468e326; }
-body:not(:has([data-admin-ui])) .refined-store .catalog-search { border-color:#a7bfdc; }
+body:not(:has([data-admin-ui])) .refined-store .category-tabs button {
+  min-height:38px; font-size:13px; font-weight:500; background:#f3f6fa; color:#52657b; border-color:#e0e7f0;
+}
+body:not(:has([data-admin-ui])) .refined-store .category-tabs button:not(.active):hover { background:#edf3fb; color:#2059a9; border-color:#b9cde8; }
+body:not(:has([data-admin-ui])) .refined-store .category-tabs button.active { background:#2468e3; color:#fff; border-color:#2468e3; box-shadow:none; }
+body:not(:has([data-admin-ui])) .refined-store .catalog-search { border-color:#c3d2e5; }
 body:not(:has([data-admin-ui])) .refined-store :is(.tool-directory,.product-category-section,.technical-services-section) {
-  padding:24px; background:#fff; border:1px solid #c5d5e8; border-top:3px solid #2468e3;
-  border-radius:14px; box-shadow:0 7px 24px #2342650c;
+  padding:24px; background:#fff; border:1px solid #d9e2ec;
+  border-radius:14px; box-shadow:0 4px 16px #23426505;
 }
-body:not(:has([data-admin-ui])) .refined-store .technical-services-section { border-top-color:#087a72; }
-body:not(:has([data-admin-ui])) .refined-store :is(.tool-directory-heading,.product-category-section>header,.technical-services-heading) { padding-bottom:18px; border-bottom:1px solid #d7e2ef; }
-body:not(:has([data-admin-ui])) .refined-store :is(.tool-directory-heading h2,.product-category-section h2,.technical-services-heading h2) { font-size:24px; font-weight:650; color:#163658; }
-body:not(:has([data-admin-ui])) .refined-store :is(.tool-entry-card,.product-card,.technical-service-card) { border-color:#c4d4e7; box-shadow:0 4px 14px #23426509; }
+body:not(:has([data-admin-ui])) .refined-store :is(.tool-directory-heading,.product-category-section>header,.technical-services-heading) { padding-bottom:18px; border-bottom:1px solid #e4eaf2; }
+body:not(:has([data-admin-ui])) .refined-store :is(.tool-directory-heading h2,.product-category-section h2,.technical-services-heading h2) { font-size:23px; font-weight:650; color:#203750; }
+body:not(:has([data-admin-ui])) .refined-store :is(.tool-entry-card,.product-card,.technical-service-card) { border-color:#e0e7f0; box-shadow:none; }
 body:not(:has([data-admin-ui])) .refined-store .tool-entry-card { border-top-width:1px; }
-body:not(:has([data-admin-ui])) .refined-store :is(.tool-entry-card,.product-card,.technical-service-card):hover { border-color:#77a5e4; box-shadow:0 10px 24px #23426516; }
+body:not(:has([data-admin-ui])) .refined-store :is(.tool-entry-card,.product-card,.technical-service-card):hover { border-color:#b6cbe6; box-shadow:0 7px 20px #2342650c; }
 
 /* Bright labels across public pages, with text as well as color carrying meaning. */
 body:not(:has([data-admin-ui])) .section-kicker { display:inline-flex; padding:5px 9px; border:1px solid #bbd3f4; border-radius:5px; background:var(--ui-tag-blue-bg); color:var(--ui-tag-blue-text); line-height:1.4; }
@@ -402,6 +394,22 @@ body:not(:has([data-admin-ui])) .product-card .badge { background:#ffbe45; color
 body:not(:has([data-admin-ui])) .product-attribute-tags>span { background:var(--ui-tag-blue-bg); color:var(--ui-tag-blue-text); border-color:#bbd3f4; }
 body:not(:has([data-admin-ui])) .product-attribute-tags>span:nth-child(2) { background:var(--ui-tag-purple-bg); color:var(--ui-tag-purple-text); border-color:#d0bbef; }
 body:not(:has([data-admin-ui])) .product-attribute-tags>span:nth-child(3) { background:var(--ui-tag-green-bg); color:var(--ui-tag-green-text); border-color:#a9dbbf; }
+
+/* Keep homepage labels quiet; pricing and category names carry their meaning. */
+body:not(:has([data-admin-ui])) .refined-store .section-kicker {
+  display:inline-block; padding:0; border:0; border-radius:0; background:transparent;
+  color:#60748f; font-size:10px; line-height:1.5;
+}
+body:not(:has([data-admin-ui])) .refined-store .site-navigation :is(a,button).active {
+  background:#edf4ff; color:#205dc6; border-color:#c9ddfb; box-shadow:inset 0 -2px #2468e3;
+}
+body:not(:has([data-admin-ui])) .refined-store .tool-entry-card .tool-charge-badge,
+body:not(:has([data-admin-ui])) .refined-store .product-card .product-attribute-tags>span {
+  background:#f1f4f8; color:#52657b; border:1px solid #e0e7ef; font-weight:500;
+}
+body:not(:has([data-admin-ui])) .refined-store .product-card .badge {
+  background:#fffffff0; color:#405976; border:1px solid #dce5ef; box-shadow:none;
+}
 
 @media (max-width:720px) {
   body:not(:has([data-admin-ui])) .refined-store :is(.catalog-filter-area,.tool-directory,.product-category-section,.technical-services-section) { padding:16px; }

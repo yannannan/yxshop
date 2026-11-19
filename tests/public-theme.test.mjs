@@ -50,7 +50,7 @@ test('品牌主按钮、正文及辅助文字在白色/浅蓝背景上达到普�
   const lightPanels = Object.fromEntries(theme.nodes.find(node => node.selector === `${scope} .ip-main`).nodes.filter(node => node.type === 'decl').map(node => [node.prop, node.value]));
   for (const key of ['--ip-on-dark', '--ip-dark-muted', '--ip-warm']) assert.ok(contrast(lightPanels[key], '#f2f7ff') >= 4.5, `${key} must stay readable after changing tool panels from dark to light`);
   for (const color of ['green','orange','purple','blue']) assert.ok(contrast(variables[`--ui-tag-${color}-text`], variables[`--ui-tag-${color}-bg`]) >= 4.5, `${color} label must remain readable`);
-  for (const background of ['#195ed1','#2468df','#096660','#087a72']) assert.ok(contrast('#fff', background) >= 4.5, 'channel descriptions must remain readable on saturated cards');
+  for (const [foreground,background] of [['#183353','#fff'],['#586f8a','#f5f9ff'],['#52657b','#f1f4f8']]) assert.ok(contrast(foreground,background) >= 4.5, 'quiet homepage cards and labels must remain readable');
 });
 
 test('工具标签独立区分预览、免费、积分、套餐和待配置，不改变价格文案', async () => {
