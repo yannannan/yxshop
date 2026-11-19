@@ -1,0 +1,292 @@
+/* Public storefront theme. AdminLayout always supplies data-admin-ui, including
+   its login screen. Keep business status colors, artwork and canvas pixels local. */
+body:not(:has([data-admin-ui])) {
+  --ui-primary: #2468e3;
+  --ui-primary-hover: #1856c2;
+  --ui-ink: #183353;
+  --ui-muted: #586f8a;
+  --ui-line: #d9e5f3;
+  --ui-soft: #edf5ff;
+  --ui-cyan: #edf8fb;
+  --ui-surface: #fff;
+  --ui-shadow: 0 8px 28px #274e7b09;
+  --ui-shadow-hover: 0 14px 36px #274e7b14;
+  --ui-hero: linear-gradient(116deg, #f5f9ff, #edf5ff 56%, #e5f5fb);
+  --ink: var(--ui-ink);
+  --muted: var(--ui-muted);
+  --line: var(--ui-line);
+  --orange: var(--ui-primary);
+  --cream: #f3f8fe;
+  color: var(--ui-ink);
+  background: linear-gradient(130deg, #f6f9ff, #f0f7ff 65%, #edf8fb);
+  font-family: Arial, "Microsoft YaHei", "PingFang SC", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+body:not(:has([data-admin-ui])) ::selection { background: #cfe2ff; color: #163b70; }
+body:not(:has([data-admin-ui])) :is(button,a,input,select,textarea,summary):focus-visible {
+  outline: 2px solid var(--ui-primary); outline-offset: 3px;
+}
+body:not(:has([data-admin-ui])) :is(button,a) {
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color .18s, border-color .18s, color .18s, box-shadow .18s;
+}
+body:not(:has([data-admin-ui])) button:disabled { cursor: not-allowed; }
+body:not(:has([data-admin-ui])) :is(button:disabled,a[aria-disabled=true]) { opacity:.5; box-shadow:none; cursor:not-allowed; }
+body:not(:has([data-admin-ui])) :is(input,select,textarea) { accent-color: var(--ui-primary); }
+body:not(:has([data-admin-ui])) :is(input:not([type=range],[type=checkbox],[type=radio],[type=color],[type=file],[type=hidden]),select,textarea) {
+  color: var(--ui-ink); border-color: var(--ui-line); background-color: #fff; border-radius: 8px;
+}
+body:not(:has([data-admin-ui])) :is(input,textarea)::placeholder { color: #7a8ea6; opacity: 1; }
+body:not(:has([data-admin-ui])) :is(input,select,textarea):focus-visible { box-shadow: 0 0 0 3px #2468e312; }
+body:not(:has([data-admin-ui])) :is(input[readonly],input:disabled,select:disabled,textarea:disabled) { background-color: #f3f7fc; }
+body:not(:has([data-admin-ui])) :is(input,select,textarea)[aria-invalid=true] { border-color:#c64b48; box-shadow:0 0 0 2px #c64b4812; }
+
+/* Shared navigation, account controls and overlays. */
+body:not(:has([data-admin-ui])) .topbar.refined-topbar.compact-topbar.unified-topbar {
+  background: #fffffffa; border-bottom: 1px solid var(--ui-line); box-shadow: 0 3px 18px #244f7c06;
+}
+body:not(:has([data-admin-ui])) .brand { color: #163353; }
+body:not(:has([data-admin-ui])) .site-navigation :is(a,button) { color: #566e8b; border-radius: 8px; }
+body:not(:has([data-admin-ui])) .site-navigation :is(a,button):hover,
+body:not(:has([data-admin-ui])) .site-navigation :is(a,button).active {
+  background: var(--ui-soft); color: #205dc6; border-color: #c9ddfb; box-shadow: inset 0 -2px #2468e3;
+}
+body:not(:has([data-admin-ui])) :is(.account-dropdown,.auth-modal,.service-panel,.technical-chat-modal,.technical-appointment-modal,.customer-address-modal,.technical-provider-application-modal,.technical-support-chat) {
+  background: #fff; color: var(--ui-ink); border: 1px solid var(--ui-line); border-radius: 16px; box-shadow: 0 24px 70px #153d6b22;
+}
+body:not(:has([data-admin-ui])) :is(.account-trigger,.language-switcher select,.login-btn) { border-color: var(--ui-line); border-radius: 8px; color: var(--ui-ink); }
+body:not(:has([data-admin-ui])) :is(.account-dropdown>nav a:hover,.account-menu-points,.account-chip,.code-field button) { background: #f2f7ff; color: var(--ui-primary); }
+body:not(:has([data-admin-ui])) :is(.modal-sub,.agreement,.account-points-link,.storefront-account-actions) { color: var(--ui-muted); }
+body:not(:has([data-admin-ui])) :is(.phone-field,.code-field) { border-color: var(--ui-line); background: #fff; }
+body:not(:has([data-admin-ui])) :is(.modal-backdrop,.technical-modal-backdrop,.technical-chat-backdrop) { background: #102b4c80; }
+body:not(:has([data-admin-ui])) .section-kicker { color: #3273cc; letter-spacing: .12em; }
+
+/* One button hierarchy across purchase, account, service and tool flows. */
+body:not(:has([data-admin-ui])) :is(
+  .primary-wide,.confirm-order,.paid-button,.paid-state a,.help-banner>button,.refined-empty button,
+  .refined-card .buy-row button,.search button,.product-directory-search button,
+  .account-primary,.points-primary,.tool-launch button,.technical-card-actions a.primary,
+  .technical-buy-panel button:not(.technical-outline),.technical-current-service-buy,
+  .technical-card-purchase,.technical-market-service-actions .primary,.technical-order-actions a.primary,
+  .technical-service-paid-button,.technical-appointment-modal>button,.technical-chat-input button,
+  .technical-order-modal-actions button:not(.technical-order-consult),.technical-provider-application-actions button:not(.secondary),
+  .technical-provider-application-success button,.customer-address-head>button,.orders-empty>button,
+  .customer-address-modal-actions button:not(.secondary),.technical-customer-acceptance button,.technical-customer-review>button,
+  .video-primary,.stamp-create-button,.stamp-download-button,.seo-workspace .seo-primary,
+  .ip-workspace .ip-primary,.ip-download,.ds-primary,.chat-composer .chat-send,
+  .cleaner-site .cleaner-download,.al-site .al-primary,.technician-primary,.talent-entry button,
+  .technician-order-actions .primary,.technician-work-form .primary,.technician-modal-actions .primary,.technician-form-actions button,.technician-chat-reply button
+) {
+  background: var(--ui-primary); color: #fff; border: 1px solid var(--ui-primary);
+  border-radius: 8px; font-weight: 600; min-height: 40px; line-height: 1.5; box-shadow: 0 4px 12px #2468e315;
+}
+body:not(:has([data-admin-ui])) :is(
+  .primary-wide,.confirm-order,.paid-button,.paid-state a,.help-banner>button,.refined-empty button,
+  .refined-card .buy-row button,.search button,.product-directory-search button,.account-primary,.points-primary,.tool-launch button,
+  .technical-card-actions a.primary,.technical-buy-panel button:not(.technical-outline),.technical-current-service-buy,
+  .technical-card-purchase,.technical-market-service-actions .primary,.technical-order-actions a.primary,
+  .technical-service-paid-button,.technical-appointment-modal>button,.technical-chat-input button,
+  .technical-order-modal-actions button:not(.technical-order-consult),.technical-provider-application-actions button:not(.secondary),
+  .technical-provider-application-success button,.customer-address-head>button,.orders-empty>button,
+  .customer-address-modal-actions button:not(.secondary),.technical-customer-acceptance button,.technical-customer-review>button,
+  .video-primary,.stamp-create-button,.stamp-download-button,.seo-workspace .seo-primary,
+  .ip-workspace .ip-primary,.ip-download,.ds-primary,.chat-composer .chat-send,
+  .cleaner-site .cleaner-download,.al-site .al-primary,.technician-primary,.talent-entry button,
+  .technician-order-actions .primary,.technician-work-form .primary,.technician-modal-actions .primary,.technician-form-actions button,.technician-chat-reply button
+):hover:not(:disabled):not([aria-disabled=true]) {
+  background: var(--ui-primary-hover); border-color: var(--ui-primary-hover); color: #fff; box-shadow: 0 5px 16px #2468e326;
+}
+body:not(:has([data-admin-ui])) :is(
+  .account-secondary,.catalog-more-link,.tool-directory-heading>a,.tool-entry-action,
+  .technical-outline,.technical-current-service-consult,.technical-consult-cta,.technical-card-consult,
+  .technical-order-consult,.customer-address-modal-actions .secondary,.technical-provider-application-actions .secondary,
+  .video-secondary,.seo-quiet,.ip-upload-button,.ip-selection-controls button,.ds-secondary,.al-outline,
+  .stamp-history-jump,.stamp-history-open,.catalog-pagination button,.catalog-pagination a,.pagination button,
+  .account-pagination button,.points-pagination button,.video-pagination button,.al-icon-button
+) { color: #2c62ac; background: #fff; border: 1px solid #cfdef1; border-radius: 8px; box-shadow: none; }
+body:not(:has([data-admin-ui])) :is(
+  .account-secondary,.catalog-more-link,.tool-directory-heading>a,.tool-entry-action,.technical-outline,
+  .technical-current-service-consult,.technical-consult-cta,.technical-card-consult,.seo-quiet,.ip-upload-button,
+  .ip-selection-controls button,.ds-secondary,.al-outline,.stamp-history-jump,.stamp-history-open,
+  .catalog-pagination button,.catalog-pagination a,.pagination button,.account-pagination button,.points-pagination button,.al-icon-button
+):hover:not(:disabled):not([aria-disabled=true]) { color: #1d59b5; background: #edf5ff; border-color: #abcaf4; }
+
+/* Home, catalog and promotional sections: airy, layered surfaces. */
+body:not(:has([data-admin-ui])) :is(.store-shell,.refined-shell,.simple-page,.checkout-page,.refined-checkout,.technical-detail-page,.technical-order-page,.customer-address-page) {
+  background: transparent; color: var(--ui-ink);
+}
+body:not(:has([data-admin-ui])) .storefront-banners { --banner-accent: #2468e3; background: var(--ui-hero); border-color: var(--ui-line); box-shadow: var(--ui-shadow); }
+body:not(:has([data-admin-ui])) .storefront-banner-digital { background: var(--ui-hero); }
+body:not(:has([data-admin-ui])) .storefront-banner-service { background: linear-gradient(116deg,#f6faff,#edf5ff 50%,#e4f5f7); }
+body:not(:has([data-admin-ui])) .banner-theme-service { --banner-accent: #267cb1; }
+body:not(:has([data-admin-ui])) .storefront-banner-eyebrow { color: #42688e; }
+body:not(:has([data-admin-ui])) .storefront-banner-copy :is(h1,h2) { color: #153657; }
+body:not(:has([data-admin-ui])) .storefront-banner-copy :is(h1,h2) em { color: var(--ui-primary); }
+body:not(:has([data-admin-ui])) .storefront-banner-copy p,
+body:not(:has([data-admin-ui])) .storefront-banner-features>span { color:#587391; }
+body:not(:has([data-admin-ui])) .storefront-banner-features svg { color:#3976bc; }
+body:not(:has([data-admin-ui])) .channel-switch>button,
+body:not(:has([data-admin-ui])) .channel-switch>button:first-child {
+  background: linear-gradient(110deg,#fff,#f1f7ff); border-color: var(--ui-line); border-radius: 14px; box-shadow: var(--ui-shadow);
+}
+body:not(:has([data-admin-ui])) .channel-switch>button:last-child { background: linear-gradient(110deg,#fff,#edf8fb); }
+body:not(:has([data-admin-ui])) .channel-switch>button.active { border-color: #87b2f3; box-shadow: 0 0 0 1px #2468e310,var(--ui-shadow); }
+body:not(:has([data-admin-ui])) :is(.channel-icon,.channel-switch>button:first-child .channel-icon,.channel-switch>button.active .channel-icon) { background: #e5efff; color: var(--ui-primary); box-shadow: none; }
+body:not(:has([data-admin-ui])) .channel-switch>button.active em { background: var(--ui-primary); color: #fff; border-color: var(--ui-primary); }
+body:not(:has([data-admin-ui])) .quick-benefits { border-color: var(--ui-line); background: #ffffffd9; border-radius: 12px; }
+body:not(:has([data-admin-ui])) .quick-benefits>span:before { background: var(--ui-soft); color: var(--ui-primary); }
+body:not(:has([data-admin-ui])) :is(.category-tabs button,.subcategory-tabs button,.product-tools select,.refined-search,.search) { background: #fff; border-color: var(--ui-line); border-radius: 8px; color: #52708f; }
+body:not(:has([data-admin-ui])) :is(.category-tabs button.active,.category-tabs button:hover,.subcategory-tabs button.active,.subcategory-tabs button:hover,.catalog-pagination [aria-current=page]) { color: #fff; background: var(--ui-primary); border-color: var(--ui-primary); box-shadow: none; }
+body:not(:has([data-admin-ui])) :is(.search,.refined-search):focus-within { border-color: #85aff0; box-shadow: 0 0 0 3px #2468e312; }
+body:not(:has([data-admin-ui])) :is(.tool-entry-card,.product-card,.technical-service-card,.points-package,.customer-address-list article,.order-card) {
+  background: #fff; border: 1px solid var(--ui-line); border-radius: 14px; box-shadow: var(--ui-shadow);
+}
+body:not(:has([data-admin-ui])) :is(.tool-entry-card,.product-card,.technical-service-card,.points-package):hover {
+  border-color: #aec9ee; box-shadow: var(--ui-shadow-hover); transform: translateY(-2px);
+}
+body:not(:has([data-admin-ui])) .tool-entry-card { border-top: 3px solid #c9def9; }
+body:not(:has([data-admin-ui])) .tool-entry-card:nth-child(3n+2) { border-top-color: #b9e3e9; }
+body:not(:has([data-admin-ui])) .tool-entry-logo { background: linear-gradient(135deg,#f4f8ff,#edf5ff); border-color: #dbe8f8; box-shadow: none; border-radius: 13px; }
+body:not(:has([data-admin-ui])) .tool-entry-card .tool-entry-action { font-weight: 600; }
+body:not(:has([data-admin-ui])) .tool-entry-card :is(h3,strong) { color: #193a60; }
+body:not(:has([data-admin-ui])) :is(.tool-directory-heading p,.tool-entry-card p,.product-info p,.technical-card-meta,.catalog-pagination) { color: var(--ui-muted); }
+body:not(:has([data-admin-ui])) :is(.tool-entry-card .tool-charge-badge.points,.tool-entry-card .tool-charge-badge.paid) { background: #edf4ff; color: #3164ab; }
+body:not(:has([data-admin-ui])) :is(.buy-row strong,.order-price>b,.checkout-amount,.detail-price,.points-package-price) { color: #215fbf; }
+body:not(:has([data-admin-ui])) .points-price { color:#215fbf; }
+body:not(:has([data-admin-ui])) :is(.account-points-link b,.account-menu-points>b,.checkout-product strong,.technical-service-payment>header>b) { color:#215fbf; }
+body:not(:has([data-admin-ui])) .help-banner { background: linear-gradient(110deg,#e9f2ff,#eaf7f9); border: 1px solid var(--ui-line); border-radius: 14px; }
+body:not(:has([data-admin-ui])) .help-banner>div>span { background: #daeaff; color: #2468e3; }
+body:not(:has([data-admin-ui])) .store-footer { background: #f8fbff; border-color: var(--ui-line); color: #6a8099; }
+body:not(:has([data-admin-ui])) :is(.new-user-tip,.detail-labels i,.order-product-icon) { background: #eaf2ff; color: #2c65b8; }
+
+/* Product, checkout and account. Payment QR pixels and method brands are unchanged. */
+body:not(:has([data-admin-ui])) :is(.price-panel,.account-summary,.points-hero,.account-body .points-hero,.technical-service-summary) { background: var(--ui-hero); border: 1px solid var(--ui-line); border-radius: 16px; }
+body:not(:has([data-admin-ui])) :is(.checkout-card,.detail-mini-note,.spec-grid,.account-panel,.points-how,.points-records,.orders-empty,.technical-buy-panel,.technical-detail-content>article,.technical-provider-panel,.technical-provider-detail-main,.technical-provider-profile-card,.technical-order-card,.technical-order-help,.customer-address-modal,.tool-detail,.refined-empty) {
+  background: #fff; border-color: var(--ui-line); border-radius: 14px; box-shadow: var(--ui-shadow);
+}
+body:not(:has([data-admin-ui])) :is(.refined-checkout-card .checkout-title,.order-card-top,.technical-order-progress,.checkout-product) { background: #f2f7ff; border-color: var(--ui-line); color: var(--ui-ink); }
+body:not(:has([data-admin-ui])) :is(.stepper span.done,.checkout-progress span.done,.checkout-progress span.active) { background: var(--ui-primary); color: #fff; border-color: var(--ui-primary); }
+body:not(:has([data-admin-ui])) :is(.pay-methods button.active,.technical-service-pay-methods button.active,.tool-purchase-plans>button[aria-pressed=true]) { background: #eff6ff; border-color: #8db6ef; color: #225fae; }
+body:not(:has([data-admin-ui])) .account-sidebar { background: #f8fbff; border-color: var(--ui-line); }
+body:not(:has([data-admin-ui])) :is(.account-sidebar a.active,.account-sidebar>nav a:hover,.account-filters button.active) { color: #205dc6; background: #e8f1ff; border-color: #c6dcfa; }
+body:not(:has([data-admin-ui])) .account-sidebar a.active:before { background: var(--ui-primary); }
+body:not(:has([data-admin-ui])) :is(.account-summary-points strong,.points-balance strong,.points-balance a,.points-balance button,.account-menu-points button) { color: #245fba; }
+body:not(:has([data-admin-ui])) .points-package.featured { border-color: #8bb6f1; background: linear-gradient(150deg,#fff,#f0f6ff); }
+body:not(:has([data-admin-ui])) :is(.account-table th,.points-records th) { background: #f2f7ff; color: #5a7391; }
+body:not(:has([data-admin-ui])) :is(.customer-address-list article>header em,.technical-order-address-options button.active) { background: #edf5ff; color: #2c64b0; border-color: #bdd6fa; }
+
+/* Technical service pages, conversations and technician workbench. */
+body:not(:has([data-admin-ui])) :is(.technical-provider-detail-banner,.talent-entry) { background: linear-gradient(118deg,#173b62,#245b91 65%,#287f91); color: #fff; border-radius: 16px; }
+body:not(:has([data-admin-ui])) :is(.technical-detail-tabs,.technical-provider-more,.technical-current-service-panel,.technical-purchase-overview,.technical-service-projects,.technical-other-services-panel,.technical-feature-grid article,.technical-provider-sla-list article,.technical-service-projects article) { background: #fff; border-color: var(--ui-line); border-radius: 12px; box-shadow: var(--ui-shadow); }
+body:not(:has([data-admin-ui])) :is(.technical-detail-modes button.active,.technical-current-service-modes button.active,.technical-chat-thread-list>button.active,.technical-order-address-options button.active) { color: #215fb8; border-color: #a9c9f4; background: #edf5ff; }
+body:not(:has([data-admin-ui])) :is(.technical-detail-tabs>nav button.active,.technical-provider-detail-tabs button.active)::after { background: var(--ui-primary); }
+body:not(:has([data-admin-ui])) :is(.technical-chat-sidebar,.technical-chat-main,.technical-chat-messages,.chat-thread,.technical-chat-main>.chat-thread) { background: #f2f7fd; border-color: var(--ui-line); }
+body:not(:has([data-admin-ui])) :is(.chat-bubble.is-mine,.technical-chat-message.mine>span) { background: #e5efff; color: #1d426c; border-color: #c9dcf7; }
+body:not(:has([data-admin-ui])) :is(.chat-composer,.technical-chat-composer,.technical-reference-card) { border-color: var(--ui-line); background: #fff; }
+body:not(:has([data-admin-ui])) .technician-workbench { color: var(--ui-ink); background: var(--ui-hero); }
+body:not(:has([data-admin-ui])) .technician-sidebar { background: #173452; }
+body:not(:has([data-admin-ui])) .technician-sidebar nav button.active { background: #285687; }
+body:not(:has([data-admin-ui])) .technician-main>header span { color: var(--ui-primary); }
+body:not(:has([data-admin-ui])) :is(.technician-profile-mini>span,.technician-sidebar nav em) { background:var(--ui-primary); color:#fff; }
+body:not(:has([data-admin-ui])) .technician-modal>header span { color:var(--ui-primary); }
+body:not(:has([data-admin-ui])) :is(.technician-panel,.technician-stat-grid article) { border-color: var(--ui-line); box-shadow: var(--ui-shadow); }
+
+/* Tool workspaces share the same brand, with dark navy only for navigation. */
+body:not(:has([data-admin-ui])) .ds-workspace {
+  --ds-ink: #183353; --ds-muted: #586f8a; --ds-line: #d9e5f3;
+  --ds-sidebar: #173452; --ds-panel-bar: #f2f7ff; --ds-orange: #2468e3; --ds-warm: #bddbff;
+  background: linear-gradient(120deg,#f4f8fe,#eef6fd);
+}
+body:not(:has([data-admin-ui])) .ip-workspace {
+  --ip-text: #183353; --ip-muted: #586f8a; --ip-line: #d9e5f3; --ip-accent: #2468e3;
+  --ip-ink: #173452; --ip-panel: #f2f7ff; --ip-warm: #bddbff;
+  background: linear-gradient(120deg,#f4f8fe,#eef6fd);
+}
+body:not(:has([data-admin-ui])) .ip-main { --ip-on-dark:#183353; --ip-dark-muted:#586f8a; --ip-warm:#3269aa; --ip-dark-line:#d9e5f3; }
+body:not(:has([data-admin-ui])) .seo-workspace { --seo-accent: #2468e3; --seo-line: #d9e5f3; --seo-muted: #586f8a; background: linear-gradient(120deg,#f4f8fe,#eef6fd); color: var(--ui-ink); }
+body:not(:has([data-admin-ui])) .seo-workspace { --seo-header-bg:#f2f7ff; --seo-header-line:#d9e5f3; --seo-header-text:#183353; --seo-header-muted:#586f8a; --seo-header-accent:#326cba; --seo-action:#2468e3; }
+body:not(:has([data-admin-ui])) :is(.ds-panel,.ip-settings,.ip-preview,.ip-result,.seo-card,.video-panel,.stamp-panel,.ds-mode-heading) { border-color: var(--ui-line); border-radius: 12px; box-shadow: var(--ui-shadow); }
+body:not(:has([data-admin-ui])) :is(.ds-panel-heading,.ip-topbar,.ip-preview-heading,.stamp-panel-heading,.video-panel-heading,.seo-site-add-heading,.seo-managed-site-header,.seo-module-panel>.seo-section-title,.seo-module-planned-heading,.seo-profile>.seo-section-title,.seo-report-panel>.seo-section-title) { background: linear-gradient(105deg,#f6f9ff,#edf5ff); color: var(--ui-ink); border-color: var(--ui-line); }
+body:not(:has([data-admin-ui])) :is(.ds-panel-heading h3,.ip-topbar h2,.ip-preview-heading h3,.ds-panel-heading>span,.ip-panel-title) { color: var(--ui-ink); }
+body:not(:has([data-admin-ui])) :is(.ds-panel-heading svg,.ip-topbar svg,.ip-preview-heading svg) { color: #4778b4; }
+body:not(:has([data-admin-ui])) :is(.ds-upload-button,.ds-panel-heading .ds-secondary,.ip-tool-buttons button) { background: #fff; color: #2c62ac; border-color: #c9dbf3; }
+body:not(:has([data-admin-ui])) :is(.ds-sidebar nav button[aria-current],.ds-sidebar nav button.active,.ds-modes button[aria-pressed=true],.ip-sidebar nav button[aria-current]) { background: #2b547c; color: #eaf4ff; border-color: #476e96; }
+body:not(:has([data-admin-ui])) :is(.ds-sidebar nav button[aria-current],.ds-sidebar nav button.active,.ip-sidebar nav button[aria-current])::before { background: #92c2ff; }
+body:not(:has([data-admin-ui])) .ds-modes button[aria-pressed=true]::before { background:#92c2ff; }
+body:not(:has([data-admin-ui])) :is(.ds-asset-tabs button[aria-pressed=true],.ds-asset-list button[aria-pressed=true],.ip-tool-buttons button[aria-pressed=true],.stamp-templates button.selected,.stamp-plan-options label.selected) { background: #edf5ff; color: #205fc2; border-color: #9dbff0; }
+body:not(:has([data-admin-ui])) .stamp-templates button.selected b { color:#245fae; }
+body:not(:has([data-admin-ui])) .ds-workspace .ds-placement[aria-pressed=true] { outline-color: #2468e3; }
+body:not(:has([data-admin-ui])) :is(.ds-position,.ip-panel-footer,.ip-bottom-bar,.ip-empty,.ip-result-empty,.video-empty) { background: #f5f9ff; border-color: var(--ui-line); }
+body:not(:has([data-admin-ui])) :is(.stamp-step,.video-step,.video-empty-symbol,.ip-preview-badge,.seo-heading-icon,.seo-panel-title>svg) { background: #e8f1ff; color: #326cba; }
+body:not(:has([data-admin-ui])) :is(.stamp-text-button,.stamp-history-actions a,.stamp-preview-retry,.stamp-history-empty a) { color: #2c65b3; }
+body:not(:has([data-admin-ui])) :is(.video-note,.stamp-field-hint,.stamp-heading p,.ip-operation-description,.ip-image-caption,.ip-result-meta small,.points-hero p,.points-section-title p,.ds-placement-settings p:not(.ds-error,.ds-notice)) { color:var(--ui-muted); }
+body:not(:has([data-admin-ui])) :is(.video-kicker,.video-quiet,.video-steps li>span) { color:#326cba; }
+body:not(:has([data-admin-ui])) :is(.stamp-feature-pills span,.stamp-entitlement,.stamp-export-panel .stamp-export-entitlement,.video-entitlement) { background: #eef5ff; color: #476a97; border-color: #d3e2f6; }
+body:not(:has([data-admin-ui])) .stamp-export-entitlement strong { color: #285fae; }
+body:not(:has([data-admin-ui])) :is(.stamp-fields input[type=range],.stamp-fields input[type=checkbox],.video-panel progress) { accent-color: var(--ui-primary); }
+body:not(:has([data-admin-ui])) .video-panel progress::-webkit-progress-value { background: var(--ui-primary); }
+body:not(:has([data-admin-ui])) :is(.seo-sidebar,.seo-workspace-sidebar) { background: #f8fbff; border-color: var(--ui-line); }
+body:not(:has([data-admin-ui])) :is(.seo-sidebar nav button.active,.seo-workspace-sidebar nav button.active,.seo-workspace-sidebar .seo-submenu button.active,.seo-filter-tabs button[aria-pressed=true],.seo-module-tabs button[aria-selected=true],.seo-controls .seo-check:has(input:checked)) { background: #e8f1ff; color: #225fb7; border-color: #c9dcf8; }
+body:not(:has([data-admin-ui])) :is(.seo-title-row,.seo-controls.seo-console,.seo-site-onboarding) { background: var(--ui-hero); border-color: var(--ui-line); color: var(--ui-ink); }
+body:not(:has([data-admin-ui])) :is(.seo-controls .seo-console-heading,.seo-controls .seo-domain-row,.seo-controls .seo-control-meta) { background: #f8fbff; border-color: var(--ui-line); }
+body:not(:has([data-admin-ui])) :is(.seo-console .seo-heading-icon,.seo-console .seo-eyebrow,.seo-progress-label strong,.seo-controls .seo-heading-icon,.seo-workspace .seo-text-button,.seo-module-context .seo-quiet,.seo-module-planned>.seo-quiet) { color:#326cba; }
+body:not(:has([data-admin-ui])) .seo-site-onboarding>span::before { color:#326cba; }
+body:not(:has([data-admin-ui])) .seo-workspace-sidebar .seo-menu-group.current>.seo-menu-toggle,
+body:not(:has([data-admin-ui])) .seo-report-panel>.seo-section-title .seo-filter-tabs button[aria-pressed=true] { color:#245fae; }
+body:not(:has([data-admin-ui])) :is(.seo-sites-heading h2,.seo-site-script-heading h3)::before,
+body:not(:has([data-admin-ui])) .seo-submenu button.active .seo-menu-dot { background:var(--ui-primary); }
+body:not(:has([data-admin-ui])) :is(.ip-points strong,.ip-process-actions>a:not(.ip-primary)) { color:#245fae; }
+
+/* AI workspace joins its public landing page's light palette. */
+body:not(:has([data-admin-ui])) .al-site:not(.al-landing) { --al-bg:#f3f8fe; --al-panel:#fff; --al-line:#d9e5f3; --al-muted:#586f8a; --al-accent:#2468e3; background:var(--ui-hero); color:var(--ui-ink); color-scheme:light; }
+body:not(:has([data-admin-ui])) .al-sidebar { background: #173452; border-color: #2a4d70; }
+body:not(:has([data-admin-ui])) .al-sidebar nav button[aria-current=page] { background: #2b547c; border-color: #476e96; color: #e9f3ff; }
+body:not(:has([data-admin-ui])) .al-sidebar nav button:hover { background: #254b70; }
+body:not(:has([data-admin-ui])) :is(.al-panel,.al-conditions-body,.al-plan-body) { background: #fff; border-color: var(--ui-line); color: var(--ui-ink); }
+body:not(:has([data-admin-ui])) .al-panel { border-radius: 12px; box-shadow: var(--ui-shadow); }
+body:not(:has([data-admin-ui])) :is(.al-panel-header,.al-conditions-footer,.al-result-caption,.al-data-options,.al-summary-tags span,.al-history-index,.al-results th) { background: #f0f6ff; border-color: var(--ui-line); color: #526f91; }
+body:not(:has([data-admin-ui])) .al-site:not(.al-landing) :is(h1,h2,h3,.al-fieldset legend,.al-search-row>label,.al-topic-options label,.al-data-options label,.al-results td,.al-profile dd) { color: var(--ui-ink); }
+body:not(:has([data-admin-ui])) .al-site:not(.al-landing) :is(.al-workspace-heading p,.al-fieldset>p,.al-plan-body>p,.al-plan-body dt,.al-summary-tip,.al-profile p,.al-profile dt,.al-history p,.al-empty p,.al-panel-header>small,.al-conditions-footer>span,.al-platform-controls>span) { color: var(--ui-muted); border-color: var(--ui-line); }
+body:not(:has([data-admin-ui])) .al-site :is(input:not([type=checkbox]),select) { background:#fff; color:var(--ui-ink); border-color:var(--ui-line); color-scheme:light; }
+body:not(:has([data-admin-ui])) .al-site input[type=checkbox] { accent-color: var(--ui-primary); }
+body:not(:has([data-admin-ui])) .al-site .al-primary,
+body:not(:has([data-admin-ui])) .ip-workspace .ip-download { color:#fff !important; }
+body:not(:has([data-admin-ui])) :is(.al-platform-options>label,.al-plan-symbol,.al-sample-avatar) { background:#f5f9ff; border-color:var(--ui-line); color:#4e7199; }
+body:not(:has([data-admin-ui])) .al-platform-options>label.is-checked { color:#225fb7; background:#eaf2ff; border-color:#9cbff0; }
+body:not(:has([data-admin-ui])) .al-site:not(.al-landing) .al-platform-mark { background:#e8f2ff; }
+body:not(:has([data-admin-ui])) .al-site:not(.al-landing) .al-segment { background:#f0f6ff; border-color:var(--ui-line); }
+body:not(:has([data-admin-ui])) .al-site:not(.al-landing) .al-segment button { color:#526f91; }
+body:not(:has([data-admin-ui])) .al-site:not(.al-landing) .al-segment button[aria-pressed=true] { background:#fff; color:#245fae; box-shadow:0 2px 6px #274e7b0d; }
+body:not(:has([data-admin-ui])) .al-fieldset legend b { color:#4e7199; border-color:var(--ui-line); background:#edf5ff; }
+body:not(:has([data-admin-ui])) :is(.al-plan-body dd,.al-table-action,.al-platform-controls>span button,.al-panel-header>span>svg) { color:#2566c5; }
+body:not(:has([data-admin-ui])) :is(.al-preview-notice,.al-mode-badge) { background:#edf7fa; color:#34798b; border-color:#cfe7ee; }
+body:not(:has([data-admin-ui])) :is(.al-fieldset,.al-plan-body dl>div,.al-results td,.al-history article) { border-color:var(--ui-line); }
+body:not(:has([data-admin-ui])) .al-form-error { color:#b94e47; }
+body:not(:has([data-admin-ui])) .al-landing .al-launch-image-note { color:#60738f; font-size:11px; line-height:1.8; }
+
+/* Disk cleaner marketing and the two global floating access cards. */
+body:not(:has([data-admin-ui])) .cleaner-site { --cleaner-ink:#183353; --cleaner-muted:#586f8a; --cleaner-accent:#2468e3; --cleaner-line:#d9e5f3; background:#fff; color:var(--ui-ink); }
+body:not(:has([data-admin-ui])) .cleaner-hero { background:var(--ui-hero); color:var(--ui-ink); border-color:var(--ui-line); }
+body:not(:has([data-admin-ui])) .cleaner-hero :is(h1,h1 span,h1 strong) { color:#173655; }
+body:not(:has([data-admin-ui])) .cleaner-hero :is(p,.cleaner-release-meta,.cleaner-eyebrow) { color:#587391; }
+body:not(:has([data-admin-ui])) .cleaner-eyebrow { background:#ffffffa6; border-color:#ccdef4; }
+body:not(:has([data-admin-ui])) :is(.cleaner-hero-badges span,.cleaner-product-strip>span) { color:#436b9a; background:#ffffffa6; border-color:#cddff4; }
+body:not(:has([data-admin-ui])) .cleaner-product-strip { color:#436b9a; border-color:#d4e4f5; }
+body:not(:has([data-admin-ui])) :is(.cleaner-feature-grid article,.cleaner-showcase,.cleaner-hero-screenshot) { border-color:var(--ui-line); box-shadow:var(--ui-shadow); border-radius:14px; }
+body:not(:has([data-admin-ui])) .cleaner-preview-section { background:var(--ui-hero); border-color:var(--ui-line); }
+body:not(:has([data-admin-ui])) .cleaner-feature-icon { background:#eaf2ff; color:#2c68bd; }
+body:not(:has([data-admin-ui])) .cleaner-screenshot-tabs { background:#173452; }
+body:not(:has([data-admin-ui])) .cleaner-screenshot-tabs button[aria-selected=true] { background:#e8f2ff; color:#245fae; border-color:#b6d0f3; }
+body:not(:has([data-admin-ui])) :is(.mobile-access,.mobile-access-card,.mobile-access-toggle) { border-color:var(--ui-line); box-shadow:var(--ui-shadow); }
+body:not(:has([data-admin-ui])) .service-float { background:#173452; border:1px solid #2c5077; box-shadow:0 8px 24px #17345222; }
+
+@media (max-width:720px) {
+  body:not(:has([data-admin-ui])) :is(.tool-entry-card,.product-card,.technical-service-card,.points-package) { border-radius:12px; }
+  body:not(:has([data-admin-ui])) :is(.storefront-banners,.account-summary,.points-hero) { border-radius:14px; }
+  body:not(:has([data-admin-ui])) :is(.confirm-order,.paid-button,.primary-wide,.points-primary,.account-primary,.ds-primary,.video-primary,.stamp-create-button,.ip-primary) { min-height:44px; }
+  body:not(:has([data-admin-ui])) .al-conditions-footer .al-primary { min-height:44px; }
+}
+@media (prefers-reduced-motion:reduce) {
+  body:not(:has([data-admin-ui])) :is(button,a,.tool-entry-card,.product-card,.technical-service-card,.points-package) { transition:none; }
+  body:not(:has([data-admin-ui])) :is(.tool-entry-card,.product-card,.technical-service-card,.points-package):hover { transform:none; }
+}
