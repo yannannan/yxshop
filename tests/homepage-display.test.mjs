@@ -13,6 +13,7 @@ import * as toolHelpers from '../lib/tool-services.ts';
 import * as categoryHelpers from '../lib/categories.ts';
 import * as catalogHelpers from '../lib/catalog.ts';
 import * as technicalHelpers from '../lib/technical-services.ts';
+import * as technicalImages from '../lib/technical-images.ts';
 
 const require = createRequire(import.meta.url);
 function load(file, mocks = {}, globals = {}) {
@@ -260,14 +261,14 @@ test('导航身份接口只使用签名会话，支持数字和字符串管理�
 
 // 模拟组件状态更新，直接执行事件回调；不启动浏览器或应用服务。
 function hookHost(file, name, mocks, globals = {}) {
-  const states = [], effects = [];
-  let cursor = 0;
+  const states = [], effects = [], dependencies = [], cleanups = [];
+  let cursor = 0, effectCursor = 0;
   const react = { ...React,
     useState(initial) { const i = cursor++; if (!(i in states)) states[i] = typeof initial === 'function' ? initial() : initial; return [states[i], value => { states[i] = typeof value === 'function' ? value(states[i]) : value; }]; },
-    useMemo: fn => fn(), useCallback: fn => fn, useEffect: fn => effects.push(fn),
+    useMemo: fn => fn(), useCallback: fn => fn, useEffect(fn, deps) { const i = effectCursor++; if (!deps || !dependencies[i] || deps.some((value, index) => !Object.is(value, dependencies[i][index]))) effects.push(() => { cleanups[i]?.(); cleanups[i] = fn(); dependencies[i] = deps; }); },
   };
   const component = load(file, { ...mocks, react }, globals)[name];
-  return { render(props) { cursor = 0; effects.length = 0; return component(props); }, mountEffects() { effects.forEach(fn => fn()); } };
+  return { render(props) { cursor = 0; effectCursor = 0; effects.length = 0; return component(props); }, mountEffects() { effects.forEach(fn => fn()); } };
 }
 function elements(node) {
   if (Array.isArray(node)) return node.flatMap(elements);
@@ -322,7 +323,8 @@ test('首页频道导航继续原地切换，Ctrl点击仍保留浏览器打开�
 
 test('订单、地址、后台、技术人员和工具介绍等页面的商城Logo都使用原生首页链接', () => {
   for (const name of ['page.tsx', 'orders/page.tsx', 'addresses/page.tsx', 'admin/page.tsx', 'technician/page.tsx', 'service-orders/page.tsx', 'service-orders/[id]/page.tsx', 'tools/[slug]/page.tsx', 'product/[id]/page.tsx', 'checkout/[id]/page.tsx', 'service/[slug]/page.tsx']) {
-    const source = ts.createSourceFile(name, readFileSync(new URL(`../app/${name}`, import.meta.url), 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    const path = name === 'service/[slug]/page.tsx' ? '../components/technical-service-detail.tsx' : `../app/${name}`;
+    const source = ts.createSourceFile(name, readFileSync(new URL(path, import.meta.url), 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
     let count = 0;
     function visit(node) {
       if (ts.isJsxSelfClosingElement(node) && node.tagName.getText(source) === 'StorefrontHeader') count++;
@@ -377,7 +379,8 @@ function storefrontHost(globals = {}, mocks = {}) {
   const services = Array.from({ length: 26 }, (_, i) => ({ ...technicalHelpers.technicalServices[0], slug: `service-${i + 1}`, title: `技术服务${i + 1}`, homepageFeatured: i < 14 }));
   return hookHost('../app/page.tsx', 'default', {
     '../components/storefront-header': storefrontHeader,
-    'next/link': Link, 'next/image': Image,
+    'next/link': Link, 'next/image': Image, 'next/dynamic': () => () => null,
+    '../lib/technical-images': technicalImages,
     '../components/technical-support-chat': { TechnicalSupportChat: () => null },
     '../components/technical-provider-application': { TechnicalProviderApplication: () => null },
     '../components/storefront-banners': { StorefrontBanners: () => null },
@@ -390,6 +393,23 @@ function storefrontHost(globals = {}, mocks = {}) {
     ...mocks,
   }, globals);
 }
+
+test('直接打开上门频道只请求当前频道，切回商城再加载商品/工具，头像用轻量资源', async () => {
+  const requests = [];
+  const host = storefrontHost({ window: { localStorage: { getItem: () => null }, location: { search: '?channel=technical', hash: '' } }, fetch: async url => {
+    requests.push(url); return Response.json(url === '/api/auth/session' ? { authenticated: false } : url === '/api/technical-services' ? technicalHelpers.technicalServices : []);
+  } });
+  host.render(); host.mountEffects(); await new Promise(resolve => setImmediate(resolve)); host.render(); host.mountEffects(); await new Promise(resolve => setImmediate(resolve));
+  const tree = host.render();
+  assert.equal(requests.filter(url => url === '/api/technical-services').length, 1);
+  assert.ok(!requests.includes('/api/products')); assert.ok(!requests.includes('/api/tools')); assert.ok(!requests.includes('/api/categories'));
+  assert.ok(markup(tree).includes('provider-zhangwei-card-v2.webp'));
+  const channelButton = elements(tree).find(node => node.type === 'button' && node.props.className === 'channel-switch-card' && textOf(node).includes('AI数字服务'));
+  const buttons = elements(tree).filter(node => node.type === 'button' && node.props['aria-pressed'] === false);
+  (channelButton || buttons.find(node => textOf(node).includes('AI数字服务'))).props.onClick();
+  host.render(); host.mountEffects(); await new Promise(resolve => setImmediate(resolve));
+  assert.ok(requests.includes('/api/products')); assert.ok(requests.includes('/api/tools')); assert.ok(requests.includes('/api/categories'));
+});
 
 test('首页页脚的工具入口不依赖客户端路由，工具分类仍可原地切换', () => {
   const host = storefrontHost({}, { 'next/link': props => {
@@ -406,7 +426,7 @@ test('首页页脚的工具入口不依赖客户端路由，工具分类仍可�
 
 test('首页有有效管理员 Cookie 保留角色和页脚管理入口；全部同时保留工具和普通商品',async()=>{
   const host=storefrontHost({window:{localStorage:{getItem:()=>null},location:{search:'',hash:''}},fetch:async url=>Response.json(url==='/api/auth/session'?{authenticated:true,phone:'13800000000',isAdmin:true,isTechnician:false}:url==='/api/products'?products:url==='/api/tools'?tools:url==='/api/homepage-display'?{mode:'grouped',sectionOrder:['tools'],itemOrder:[]}:[])});
-  host.render();host.mountEffects();await new Promise(resolve=>setImmediate(resolve));const html=markup(host.render());
+  host.render();host.mountEffects();await new Promise(resolve=>setImmediate(resolve));host.render();host.mountEffects();await new Promise(resolve=>setImmediate(resolve));const html=markup(host.render());
   assert.ok(html.includes('管理后台'));assert.equal(elements(host.render()).find(node => node.type === storefrontHeader.StorefrontHeader).props.isAdmin,true);assert.equal((html.match(/class="product-card refined-card"/g)||[]).length,24);assert.equal((html.match(/class="tool-entry-card"/g)||[]).length, 8);
 });
 
@@ -425,7 +445,7 @@ test('首页不再重复渲染手机二维码，独立的客服面板仍可打�
 });
 test('商品接口 HTTP 500 时首页明确提示读取失败，不能静默显示成只有工具',async()=>{
   const host=storefrontHost({window:{localStorage:{getItem:()=>null},location:{search:'',hash:''}},fetch:async url=>url==='/api/products'?new Response('server error',{status:500}):Response.json(url==='/api/tools'?tools:url==='/api/auth/session'?{authenticated:false}:[])});
-  host.render();host.mountEffects();await new Promise(resolve=>setImmediate(resolve));const html=markup(host.render());assert.ok(html.includes('商品列表暂不可用'));assert.ok(html.includes('role="alert"'));assert.equal((html.match(/class="tool-entry-card"/g)||[]).length, 8);assert.equal((html.match(/class="product-card refined-card"/g)||[]).length,0);
+  host.render();host.mountEffects();await new Promise(resolve=>setImmediate(resolve));host.render();host.mountEffects();await new Promise(resolve=>setImmediate(resolve));const html=markup(host.render());assert.ok(html.includes('商品列表暂不可用'));assert.ok(html.includes('role="alert"'));assert.equal((html.match(/class="tool-entry-card"/g)||[]).length, 8);assert.equal((html.match(/class="product-card refined-card"/g)||[]).length,0);
 });
 
 test('首页分类列表每页 12 件，点击翻页换商品，切换分类重置页码且含更多入口', () => {

@@ -3,10 +3,10 @@ import { useI18n } from '@/components/language-provider';
 
 
 import Image from "next/image";
+import dynamic from 'next/dynamic';
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { TechnicalSupportChat } from "../components/technical-support-chat";
-import { TechnicalProviderApplication } from "../components/technical-provider-application";
+import { technicalAvatarImage } from '../lib/technical-images';
 import { ToolDirectory } from "../components/tool-directory";
 import { StorefrontBanners } from "../components/storefront-banners";
 import { StorefrontHeader } from "../components/storefront-header";
@@ -29,6 +29,9 @@ import {
   technicalServices,
   type TechnicalService,
 } from "../lib/technical-services";
+
+const TechnicalSupportChat = dynamic(() => import('../components/technical-support-chat').then(module => module.TechnicalSupportChat), { ssr: false });
+const TechnicalProviderApplication = dynamic(() => import('../components/technical-provider-application').then(module => module.TechnicalProviderApplication), { ssr: false });
 
 type CategoryGroup = CategoryNode & { id?: number };
 const pageSize = 12;
@@ -63,8 +66,11 @@ export default function StorePage() {
   const [phoneRegistered, setPhoneRegistered] = useState<boolean | null>(null);
   const [serviceOpen, setServiceOpen] = useState(false);
   const [providerApplicationOpen, setProviderApplicationOpen] = useState(false);
+  const [providerApplicationVisited, setProviderApplicationVisited] = useState(false);
   const [channel, setChannel] = useState<"mall" | "technical">("mall");
+  const [channelInitialized, setChannelInitialized] = useState(false);
   const [technicalChatOpen, setTechnicalChatOpen] = useState(false);
+  const [technicalChatVisited, setTechnicalChatVisited] = useState(false);
   const [technicalChatService, setTechnicalChatService] =
     useState<TechnicalService | null>(null);
   const [technicalServiceItems, setTechnicalServiceItems] =
@@ -89,6 +95,7 @@ export default function StorePage() {
       const searchParams = new URLSearchParams(window.location.search);
       if (searchParams.get("channel") === "technical") setChannel("technical");
       if (searchParams.get("allServices") === "1") setShowAllTechnical(true);
+      setChannelInitialized(true);
       if (accountReturnPath(searchParams.get("returnTo"))) setAuthOpen(true);
       const requested = Number(searchParams.get("product"));
       if (requested) { setPendingProduct(requested); setAuthOpen(true); }
@@ -123,6 +130,10 @@ export default function StorePage() {
       .then(response => response.ok ? response.json() : null)
       .then(result => { if (result) setHomepageDisplay(readHomepageDisplay(result)); })
       .catch(() => null);
+  }, []);
+
+  useEffect(() => {
+    if (!channelInitialized || channel !== 'mall') return;
     fetch('/api/tools', { cache: 'no-store' })
       .then(async response => {
         if (!response.ok) throw new Error('工具服务暂不可用，请稍后重试');
@@ -144,13 +155,17 @@ export default function StorePage() {
         setCategoryGroups(groups);
       })
       .catch(() => null);
+  }, [channelInitialized, channel]);
+
+  useEffect(() => {
+    if (!channelInitialized || channel !== 'technical') return;
     fetch("/api/technical-services", { cache: "no-store" })
       .then((response) => (response.ok ? response.json() : []))
       .then((result: unknown) => {
         if (Array.isArray(result)) setTechnicalServiceItems(result as TechnicalService[]);
       })
       .catch(() => null);
-  }, []);
+  }, [channelInitialized, channel]);
 
   useEffect(() => {
     if (!authOpen) return;
@@ -267,7 +282,8 @@ export default function StorePage() {
         <header className="technical-reference-card-header">
           <Image
             className="technical-reference-card-avatar"
-            src={service.avatar}
+            src={technicalAvatarImage(service.avatar)}
+            unoptimized
             alt={t(`${service.provider}技术人员头像`)}
             width={108}
             height={108}
@@ -644,17 +660,17 @@ export default function StorePage() {
         </div>
       </footer>
 
-      <TechnicalSupportChat
+      {(technicalChatOpen || technicalChatVisited) && <TechnicalSupportChat
         activeService={technicalChatService}
         open={technicalChatOpen}
         services={technicalServiceItems}
-        onClose={() => setTechnicalChatOpen(false)}
-      />
+        onClose={() => { setTechnicalChatVisited(true); setTechnicalChatOpen(false); }}
+      />}
 
-      <TechnicalProviderApplication
+      {(providerApplicationOpen || providerApplicationVisited) && <TechnicalProviderApplication
         open={providerApplicationOpen}
-        onClose={() => setProviderApplicationOpen(false)}
-      />
+        onClose={() => { setProviderApplicationVisited(true); setProviderApplicationOpen(false); }}
+      />}
 
       <div className="service-widget">
         {serviceOpen && (

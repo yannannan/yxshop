@@ -5,6 +5,7 @@ import { softwareEnglish } from './software-en.mjs';
 import { consultationEnglish } from './consultation-en.mjs';
 // Interface copy only. User-authored business content is preserved.
 export const english: Record<string, string> = {
+  '服务暂不可用，请稍后重试': 'This service is temporarily unavailable. Please try again later.',
   '删除此制作记录？删除后该成品将无法查看或下载。工具使用记录和积分消耗明细仍保留，已消耗权益不退回。': 'Delete this result? It will no longer be available to view or download. Tool usage and points records will remain, and consumed credits will not be refunded.',
   '删除制作记录': 'Delete result',
   '删除制作记录，保留使用流水': 'Delete result and retain usage records',

@@ -55,7 +55,10 @@ mysql.createPool = () => ({ async execute(sql, values = []) {
   if (sql.startsWith('SELECT id,parent_id,name FROM categories WHERE status=')) return [[]];
   if (sql.startsWith("SELECT * FROM products WHERE status='active' AND COALESCE(product_type,'digital')")) return [[]];
   if (sql === "SELECT * FROM products WHERE status='active' AND id=? LIMIT 1") return [[{ id: 1, name: '生产数据库商品一', description: '商品一功能说明', product_type: 'digital' }, { id: 2, name: '生产数据库商品二', description: '商品二交付说明', product_type: 'digital' }].filter(row => row.id === values[0])];
-  if (sql.startsWith('SELECT s.slug,s.title,s.summary FROM technical_services ')) return [[{ slug: 'ai-site-deployment', title: '生产网站部署服务', summary: '网站部署服务说明' }, { slug: 'ai-system-customization', title: '生产系统定制服务', summary: '系统定制服务说明' }].filter(row => row.slug === values[0])];
+  if (sql.startsWith('SELECT s.slug,s.title,s.summary,')) {
+    queries++;
+    return [[{ slug: 'ai-site-deployment', title: '生产网站部署服务', summary: '网站部署服务说明' }, { slug: 'ai-system-customization', title: '生产系统定制服务', summary: '系统定制服务说明' }].map(row => ({ ...row, provider_code: 'provider-zhangwei', provider_name: '测试技术人员', avatar: '/technical-services/provider-zhangwei-v1.png', delivery_modes_json: '["online","onsite"]', price: 500, unit: '次' }))];
+  }
   if (sql.startsWith('SELECT ') && (sql.includes('FROM tool_software_pages') || sql.includes('FROM tool_software_releases'))) return [[]];
   if (sql.startsWith('SELECT ') && sql.includes('FROM site_analysis_integrations i')) { queries++; return [[{ site_id: '22222222-2222-4222-8222-222222222222', script_token: 'a'.repeat(64), user_id: 1, verified_at: '2026-10-26', host: 'example.org' }]]; }
   const publicTool = sql.includes("FROM products WHERE product_type='tool' AND status='active'") ||
@@ -85,7 +88,8 @@ for (const spec of ${JSON.stringify(paths)}) {
   }
   const html = await response.text();
   const $ = require('cheerio').load(html);
-  metadata.push({ path, title: $('head title').text(), description: $('head meta[name="description"]').attr('content'), keywords: $('head meta[name="keywords"]').attr('content'), robots: $('head meta[name="robots"]').attr('content'), canonical: $('head link[rel="canonical"]').attr('href'), descriptionCount: $('head meta[name="description"]').length, keywordsCount: $('head meta[name="keywords"]').length, ogDescription: $('head meta[property="og:description"]').attr('content'), twitterDescription: $('head meta[name="twitter:description"]').attr('content') });
+  const serviceDetail = path.startsWith('/service/') ? { text: $('.technical-provider-detail-layout').text(), images: $('img[src^="/technical-services/"]').map((_, image) => $(image).attr('src')).get() } : undefined;
+  metadata.push({ path, serviceDetail, title: $('head title').text(), description: $('head meta[name="description"]').attr('content'), keywords: $('head meta[name="keywords"]').attr('content'), robots: $('head meta[name="robots"]').attr('content'), canonical: $('head link[rel="canonical"]').attr('href'), descriptionCount: $('head meta[name="description"]').length, keywordsCount: $('head meta[name="keywords"]').length, ogDescription: $('head meta[property="og:description"]').attr('content'), twitterDescription: $('head meta[name="twitter:description"]').attr('content') });
   const mobileAccessCount = (html.match(/data-mobile-access="true"/g) || []).length;
   const stampSidebar = path.startsWith('/tools/stamp-maker.html') ? html.match(/<aside class="ds-sidebar">.*?<\\/aside>/s)?.[0] || '' : '';
   const stampMenu = [...stampSidebar.matchAll(/<button[^>]*aria-pressed="(true|false)"[^>]*>.*?<span>([^<]+)<\\/span><\\/button>/gs)].map(match => match.slice(1));
@@ -108,6 +112,20 @@ console.log(JSON.stringify({ pages, metadata, errors, queries }));
 }
 
 const needsBuild = !existsSync(entry) ? '请先执行 pnpm build 生成生产包' : false;
+
+test('上门服务详情首屏含后台正文和轻量图片，SEO与页面共享一次读取，素材随包发布', { skip: needsBuild }, async () => {
+  const result = await renderPages([{ path: '/service/ai-site-deployment' }, { path: '/service/ai-system-customization', locale: 'en' }]);
+  assert.deepEqual(result.errors, []); assert.deepEqual(result.pages.map(page => page.status), [200, 200]); assert.equal(result.queries, 1);
+  for (const [index, title] of ['生产网站部署服务', '生产系统定制服务'].entries()) {
+    const detail = result.metadata[index].serviceDetail;
+    assert.ok(detail.text.includes(title)); assert.ok(detail.images.length >= 2);
+    assert.ok(detail.images.every(image => image.endsWith('-v2.webp'))); assert.ok(detail.images.some(image => image.includes('portrait-v2.webp')));
+  }
+  for (const name of ['ai-technical-service-hero', ...['zhangwei', 'lina', 'wangqiang'].flatMap(name => [`provider-${name}-card`, `provider-${name}-portrait`])]) {
+    const path = `technical-services/${name}-v2.webp`;
+    assert.deepEqual(readFileSync(new URL('../dist/client/' + path, import.meta.url)), readFileSync(new URL('../public/' + path, import.meta.url)));
+  }
+});
 
 test('所有页面在服务器HTML头部提供独立SEO，含四个固定词且私有页面维持noindex', { skip: needsBuild }, async () => {
   const paths = ['/', '/tools', '/products', '/ai-operations', '/ai-leads', '/ai-leads/workspace', '/product/1', '/product/2', '/service/ai-site-deployment', '/service/ai-system-customization', '/account', '/account/orders', '/account/activity', '/account/profile', '/points', '/addresses', '/orders', '/checkout/demo-order', '/service-orders', '/service-orders/demo-order', '/technician', '/admin', '/tools/stamp-maker.html', '/tools/handprint-maker.html', '/tools/document-signature.html', '/tools/c-drive-cleaner.html', '/tools/image-processor.html', '/tools/video-extractor.html', '/tools/yxstar-site-tool.html'];

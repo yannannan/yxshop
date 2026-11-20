@@ -69,10 +69,10 @@ test('每种内置工具及站长别名输出对应功能文案，新增工具�
 });
 
 const require = createRequire(import.meta.url);
-function load(file, mocks) {
+function load(file, mocks, globals = {}) {
   const exports = {};
   const code = ts.transpileModule(readFileSync(new URL(file, import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2022 } }).outputText;
-  vm.runInNewContext(code, { exports, console: { error() {} }, require(name) { if (name in mocks) return mocks[name]; if (name === 'react/jsx-runtime') return require(name); throw Error(`Unexpected import ${name}`); } });
+  vm.runInNewContext(code, { exports, console: { error() {} }, ...globals, require(name) { if (name in mocks) return mocks[name]; if (name === 'react/jsx-runtime') return require(name); throw Error(`Unexpected import ${name}`); } });
   return exports;
 }
 const i18n = { getI18n: async () => ({ locale: 'zh-CN', t: value => value }) };
@@ -100,18 +100,19 @@ test('服务详情SEO随发布资料更新，并为不存在或读取失败的�
 
 test('公开详情读取仅查询有效商品/服务/技术人员，旧服务表缺失才使用原有兼容资料', async () => {
   const queries = []; let error = null, row = null;
-  const runtime = { env: { DB: { prepare(sql) { return { bind(...args) { queries.push({ sql, args }); return this; }, async first() { if (error) throw error; return row; } }; } } } };
+  const runtime = { env: { DB: { prepare(sql) { let args = []; return { bind(...values) { args = values; return this; }, async first() { queries.push({ sql, args }); if (error) throw error; return row; }, async all() { queries.push({ sql, args }); if (error) throw error; return { results: row ? [row] : [] }; } }; } } } };
   const product = load('../lib/product-data.ts', { '@/db/mysql-runtime': runtime });
   assert.equal(await product.getPublishedProduct(0), null); assert.equal(queries.length, 0);
   row = { id: 900, name: '新商品', product_type: 'points', cost_price: 1 }; assert.equal(await product.getPublishedProduct(900), null);
   row.product_type = 'digital'; const published = await product.getPublishedProduct(900); assert.equal(published.name, row.name); assert.equal('cost_price' in published, false);
   assert.match(queries[0].sql, /status='active' AND id=\? LIMIT 1/);
-  const data = load('../lib/technical-service-data.ts', { '@/db/mysql-runtime': runtime, './technical-services': { getTechnicalService: slug => slug === 'old-service' ? { slug, title: '旧库服务', summary: '兼容介绍' } : null } });
+  let now = 0;
+  const data = load('../lib/technical-service-data.ts', { '@/db/mysql-runtime': runtime, './technical-services': { technicalServices: [{ slug: 'old-service', title: '旧库服务', summary: '兼容介绍' }] } }, { Date: { now: () => now } });
   row = { slug: 'new-service', title: '已发布服务', summary: '介绍' }; assert.equal((await data.getPublishedServiceSummary('new-service')).title, row.title);
   assert.match(queries.at(-1).sql, /s.status='active' AND p.status='active'/);
   const count = queries.length; assert.equal(await data.getPublishedServiceSummary("bad' OR 1=1"), null); assert.equal(queries.length, count);
-  error = Object.assign(new Error('legacy table missing'), { code: 'ER_NO_SUCH_TABLE' }); assert.equal((await data.getPublishedServiceSummary('old-service')).title, '旧库服务');
-  error = new Error('connection refused'); await assert.rejects(data.getPublishedServiceSummary('old-service'), /connection refused/);
+  now += 5001; error = Object.assign(new Error('legacy table missing'), { code: 'ER_NO_SUCH_TABLE' }); assert.equal((await data.getPublishedServiceSummary('old-service')).title, '旧库服务');
+  now += 5001; error = new Error('connection refused'); await assert.rejects(data.getPublishedServiceSummary('old-service'), /connection refused/);
   assert.ok(queries.every(query => query.sql.startsWith('SELECT ')));
 });
 
