@@ -41,6 +41,11 @@ try {
   // 只复用新增表定义；初始化不覆盖既有工具配置。
   const siteSchema = readFileSync(new URL('../sql/10_site_analysis_20261025.sql', import.meta.url), 'utf8').replace(/^--.*$/gm, '');
   for (const statement of siteSchema.split(';').map(s => s.trim()).filter(s => /^CREATE TABLE IF NOT EXISTS site_analysis_/i.test(s))) await pool.query(statement);
+  const resultDeletionSchema = readFileSync(new URL('../sql/17_tool_result_soft_delete_20261120.sql', import.meta.url), 'utf8').replace(/^--.*$/gm, '');
+  for (const statement of resultDeletionSchema.split(';').map(value => value.trim()).filter(Boolean)) {
+    try { await pool.query(statement); }
+    catch (error) { if (!['ER_DUP_FIELDNAME', 'ER_NO_SUCH_TABLE'].includes(error.code)) throw error; }
+  }
   // 兼容首次导入前已由旧脚本创建的 TEXT 字段。
   await pool.query('ALTER TABLE payment_qrs MODIFY image_url MEDIUMTEXT NULL');
   console.log(`MySQL 初始化完成：${config.host}:${config.port}/${config.database}`);

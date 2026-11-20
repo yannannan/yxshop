@@ -9,6 +9,7 @@ import {
 import type { RenderTask } from 'pdfjs-dist';
 import { useI18n } from './language-provider';
 import { StampMaker } from './stamp-maker';
+import { ToolResultDelete } from './tool-result-delete';
 import { SignatureViewport } from './signature-viewport';
 import { SigningAssetPreview } from './signing-asset-preview';
 import { HandprintMaker } from './handprint-maker';
@@ -710,7 +711,12 @@ function SignatureEditor({ tool, stampTool, initialMode = 'create' }: SignatureE
         <div className="ds-panel-heading"><h3><ClockIcon aria-hidden="true" />{t('最近签署文件')}</h3><span>{t('重复下载不扣积分')}</span></div>
         <ul>{access?.documents.map(file => <li key={file.id}>
           <div><strong>{file.name}</strong><small>{(file.bytes / 1024).toFixed(0)} KB · {t('有效期至')} {new Date(file.expiresAt).toLocaleString(locale)}</small></div>
-          <a className="ds-secondary" href={file.downloadUrl} download><ArrowDownTrayIcon aria-hidden="true" />{t('下载签署文件')}</a>
+          <div className="tool-result-actions"><a className="ds-secondary" href={file.downloadUrl} download><ArrowDownTrayIcon aria-hidden="true" />{t('下载签署文件')}</a>
+            <ToolResultDelete kind="signed-document" id={file.id} disabled={busy} onDeleted={id => {
+              setAccess(old => old && ({ ...old, documents: old.documents.filter(item => item.id !== id) }));
+              if (result?.id === id) resetResult();
+              notifyAccountChanged();
+            }} /></div>
         </li>)}</ul>
       </section>}
     </main>

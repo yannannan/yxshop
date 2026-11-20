@@ -1,3 +1,4 @@
+import { toolResultsMock } from './helpers/tool-results.mjs';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
@@ -169,7 +170,7 @@ function load(file, mocks) {
   vm.runInNewContext(code, {
     exports, Buffer, Response, Request, FormData, URL, Uint8Array, structuredClone,
     console: { error() {} },
-    require(name) { return name in mocks ? mocks[name] : require(name); },
+    require(name) { if (toolResultsMock(name)) return toolResultsMock(name); return name in mocks ? mocks[name] : require(name); },
   });
   return exports;
 }

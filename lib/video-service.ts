@@ -9,10 +9,13 @@ import { materializeVideo, videoEngineHealth, videoTaskDirectory } from './video
 import { VideoError, videoRetentionHours, type VideoAccess, type VideoFormat, type VideoInfo, type VideoPreview, type VideoTask } from './video-options';
 import { videoObjectStorage, VideoStorageError, type StoredVideo } from './video-object-storage.mjs';
 import { cleanVideoStorage, removeLocalVideoCopy } from './video-storage-cleanup.mjs';
+import { ensureToolResultDeletions, resultDeletedAt, visibleToolResults } from './tool-result-deletion';
 
 export type VideoTool = { id: number; tool_charge_type: string; tool_points_cost: number };
-type TaskRow = { id: string; user_id: number; product_id: number; request_hash: string; title: string; format_label: string; format_json: string; billing_mode: string; points_cost: number; status: VideoTask['status']; progress: number; file_extension: string; file_size: number; charged: number; points_spent: number; error_message: string; created_at: string; updated_at: string; expires_at: string };
+type TaskRow = { id: string; user_id: number; product_id: number; request_hash: string; title: string; format_label: string; format_json: string; billing_mode: string; points_cost: number; status: VideoTask['status']; progress: number; file_extension: string; file_size: number; charged: number; points_spent: number; error_message: string; created_at: string; updated_at: string; expires_at: string; result_deleted_at?: string | null };
+const taskColumns = `*,${resultDeletedAt('video')} AS result_deleted_at`;
 function publicTask(row: TaskRow): VideoTask {
+  if (row.result_deleted_at) throw new VideoError('该制作成品已删除，请重新制作', 410);
   let permanent = false;
   try { const storage = JSON.parse(row.format_json).storage; permanent = storage?.provider === 'oss' && storage.retention === 'permanent' && !storage.deletedAt; } catch { /* 历史记录仍可显示，下载时严格校验。 */ }
   return { id: row.id, title: row.title, status: row.status, format: row.format_label, extension: row.file_extension, size: Number(row.file_size), progress: Number(row.progress), error: row.error_message, createdAt: row.created_at, expiresAt: row.expires_at, permanent, charged: Boolean(row.charged), pointsSpent: Number(row.points_spent), downloadUrl: row.status === 'ready' ? `/api/tools/video-extractor/download?id=${row.id}` : '' };
@@ -31,13 +34,14 @@ async function ordersFor(userId: number, productId: number) {
   return (await env.DB.prepare("SELECT id,tool_billing_cycle,tool_paid_at,tool_uses_remaining,tool_plan_name FROM orders WHERE user_id=? AND product_id=? AND status IN ('paid','pending_delivery','delivered') ORDER BY created_at,id").bind(userId, productId).all<ToolOrderAccess>()).results.filter(order => usableToolOrder(order)).sort((a, b) => Number(a.tool_billing_cycle === 'times') - Number(b.tool_billing_cycle === 'times'));
 }
 export async function videoAccess(tool: VideoTool, user: { id: number } | null, requestedPage = 1): Promise<VideoAccess> {
+  if (user) await ensureToolResultDeletions('video');
   scheduleVideoCleanup();
   const storage = videoObjectStorage.readiness();
   const rights = user && ['paid', 'points'].includes(tool.tool_charge_type) ? await ordersFor(user.id, tool.id) : [];
   const wallet = user && tool.tool_charge_type === 'points' ? await pointsBalance(user.id) : 0;
-  const count = user ? await env.DB.prepare('SELECT COUNT(*) AS total FROM video_extraction_tasks WHERE user_id=? AND product_id=?').bind(user.id, tool.id).first<{ total: number }>() : null;
+  const count = user ? await env.DB.prepare(`SELECT COUNT(*) AS total FROM video_extraction_tasks WHERE user_id=? AND product_id=? AND ${visibleToolResults('video')}`).bind(user.id, tool.id).first<{ total: number }>() : null;
   const total = Number(count?.total || 0), page = Math.max(1, Math.min(Math.ceil(total / 5) || 1, Math.floor(requestedPage) || 1));
-  const rows = user ? (await env.DB.prepare('SELECT * FROM video_extraction_tasks WHERE user_id=? AND product_id=? ORDER BY created_at DESC,id DESC LIMIT 5 OFFSET ?').bind(user.id, tool.id, (page - 1) * 5).all<TaskRow>()).results : [];
+  const rows = user ? (await env.DB.prepare(`SELECT ${taskColumns} FROM video_extraction_tasks WHERE user_id=? AND product_id=? AND ${visibleToolResults('video')} ORDER BY created_at DESC,id DESC LIMIT 5 OFFSET ?`).bind(user.id, tool.id, (page - 1) * 5).all<TaskRow>()).results : [];
   for (let index = 0; index < rows.length; index++) if (rows[index].status === 'processing') rows[index] = await ownedVideoTask(user!.id, rows[index].id);
   for (const row of rows.filter(row => row.status === 'queued')) startVideoTask(row.id, Number(row.user_id));
   return { signedIn: Boolean(user), chargeType: tool.tool_charge_type, canExtract: storage.ready && Boolean(user) && (tool.tool_charge_type === 'free' || rights.length > 0 && ['paid', 'points'].includes(tool.tool_charge_type) || tool.tool_charge_type === 'points' && Number(tool.tool_points_cost) > 0 && wallet >= Number(tool.tool_points_cost)), storageProvider: storage.provider, storageReady: storage.ready, storageMessage: storage.message, pointsBalance: wallet, pointsCost: Number(tool.tool_points_cost), remaining: rights.reduce((sum, row) => sum + (row.tool_billing_cycle === 'times' ? Number(row.tool_uses_remaining) : 0), 0), membershipName: rights[0]?.tool_plan_name || (rights[0] ? rights[0].tool_billing_cycle === 'times' ? '按次权益' : '有效会员' : ''), purchaseUrl: tool.tool_charge_type === 'points' ? '/points' : `/product/${tool.id}`, ...await videoEngineHealth(), history: rows.map(publicTask), page, total };
@@ -76,7 +80,7 @@ export async function queueVideoTask(userId: number, tool: VideoTool, id: string
   const access = await videoAccess(tool, { id: userId });
   const task = await env.DB.transaction(async db => {
     await lockPointsUser(db, userId);
-    const existing = await db.prepare('SELECT * FROM video_extraction_tasks WHERE id=? FOR UPDATE').bind(id).first<TaskRow>();
+    const existing = await db.prepare(`SELECT ${taskColumns} FROM video_extraction_tasks WHERE id=? FOR UPDATE`).bind(id).first<TaskRow>();
     if (existing) {
       if (Number(existing.user_id) !== userId || Number(existing.product_id) !== tool.id || existing.request_hash !== hash) throw new VideoError('提取任务与当前请求不匹配，请重新发起', 409);
       return publicTask(existing);
@@ -100,8 +104,10 @@ export async function queueVideoTask(userId: number, tool: VideoTool, id: string
   return task;
 }
 export async function ownedVideoTask(userId: number, id: string) {
-  const row = await env.DB.prepare('SELECT * FROM video_extraction_tasks WHERE id=? AND user_id=?').bind(id, userId).first<TaskRow>();
+  await ensureToolResultDeletions('video');
+  const row = await env.DB.prepare(`SELECT ${taskColumns} FROM video_extraction_tasks WHERE id=? AND user_id=?`).bind(id, userId).first<TaskRow>();
   if (!row) throw new VideoError('视频任务不存在或不属于当前账号', 404);
+  if (row.result_deleted_at) throw new VideoError('该制作成品已删除，请重新制作', 410);
   if (row.status === 'processing' && Date.parse(row.updated_at) < Date.now() - 10 * 60000) {
     const update = await env.DB.prepare("UPDATE video_extraction_tasks SET status='failed',error_message=?,updated_at=? WHERE id=? AND status='processing' AND updated_at=?").bind('处理已中断，请重新提取；本次未扣费', new Date().toISOString(), id, row.updated_at).run();
     if (update.meta.changes !== 1) return ownedVideoTask(userId, id);
@@ -115,10 +121,12 @@ export async function readVideoTask(userId: number, id: string) {
   return publicTask(row);
 }
 export async function finishVideoTask(userId: number, id: string, size: number, stored: StoredVideo | null = null) {
+  await ensureToolResultDeletions('video');
   return env.DB.transaction(async db => {
     await lockPointsUser(db, userId);
-    const task = await db.prepare('SELECT * FROM video_extraction_tasks WHERE id=? AND user_id=? FOR UPDATE').bind(id, userId).first<TaskRow>();
+    const task = await db.prepare(`SELECT ${taskColumns} FROM video_extraction_tasks WHERE id=? AND user_id=? FOR UPDATE`).bind(id, userId).first<TaskRow>();
     if (!task) throw new VideoError('视频任务不存在', 404);
+    if (task.result_deleted_at) throw new VideoError('该制作成品已删除，请重新制作', 410);
     if (task.status === 'ready') return publicTask(task);
     if (task.status !== 'processing') throw new VideoError('提取任务状态已变化，请刷新后重试', 409);
     if (Date.parse(task.expires_at) <= Date.now() || !Number.isSafeInteger(size) || size <= 0) throw new VideoError('任务已过期或文件无效；本次未扣费', 410);

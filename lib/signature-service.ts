@@ -9,6 +9,7 @@ import {
   type SavedSignature, type SignatureAccess, type SignatureAction, type SignatureQuote, type SignedDocument,
 } from './signature-tool';
 import type { SignatureObject } from './signature-oss.mjs';
+import { ensureToolResultDeletions, resultDeletedAt, visibleToolResults } from './tool-result-deletion';
 
 type Tool = { id: number; tool_charge_type: string; tool_points_cost: number };
 type Task = { id: string; product_id: number; request_hash: string };
@@ -20,11 +21,12 @@ type LibraryKind = 'signature' | 'handprint';
 const libraryTable = (kind: LibraryKind) => kind === 'handprint' ? 'document_handprints' : 'document_signatures';
 type DocumentRow = Task & {
   file_name: string; file_bytes: number; points_spent: number; expires_at: string; storage_json: string;
+  result_deleted_at?: string | null;
 };
 type Operation = { userId: number; toolId: number; id: string; hash: string; quote: SignatureQuote };
 
 const signatureColumns = 'id,product_id,request_hash,name,image_width,image_height,points_spent,deleted_at,created_at';
-const documentColumns = 'id,product_id,request_hash,file_name,file_bytes,points_spent,expires_at,storage_json';
+const documentColumns = `id,product_id,request_hash,file_name,file_bytes,points_spent,expires_at,storage_json,${resultDeletedAt('signed-document')} AS result_deleted_at`;
 
 export function publicSignature(row: SignatureRow, kind: LibraryKind = 'signature'): SavedSignature {
   return {
@@ -68,6 +70,7 @@ async function costsFor(db: PointsDatabase, tool: Tool, lock = false) {
 export async function getSignatureAccess(tool: Tool, userId: number | null, readiness: {
   storageReady: boolean; wordReady: boolean;
 }): Promise<SignatureAccess> {
+  if (userId) await ensureToolResultDeletions('signed-document');
   const [costs, balance, order, signatures, stamps, documents, handprintLibrary] = await Promise.all([
     costsFor(env.DB, tool),
     userId ? pointsBalance(userId) : 0,
@@ -76,7 +79,7 @@ export async function getSignatureAccess(tool: Tool, userId: number | null, read
       AND deleted_at IS NULL ORDER BY created_at DESC,id DESC LIMIT 30`).bind(userId, tool.id).all<SignatureRow>() : null,
     userId ? listSigningStamps(userId) : [],
     userId ? env.DB.prepare(`SELECT ${documentColumns} FROM signed_documents WHERE user_id=? AND product_id=?
-      AND expires_at>? ORDER BY created_at DESC,id DESC LIMIT 10`)
+      AND expires_at>? AND ${visibleToolResults('signed-document')} ORDER BY created_at DESC,id DESC LIMIT 10`)
       .bind(userId, tool.id, new Date().toISOString()).all<DocumentRow>() : null,
     userId ? env.DB.prepare(`SELECT ${signatureColumns} FROM document_handprints WHERE user_id=? AND product_id=?
       AND deleted_at IS NULL ORDER BY created_at DESC,id DESC LIMIT 30`).bind(userId, tool.id).all<SignatureRow>()
@@ -127,9 +130,12 @@ export async function findCreatedSignature(operation: Operation, db = env.DB as 
   return publicSignature(row, kind);
 }
 
-export function findSignedDocument(userId: number, id: string, db = env.DB as PointsDatabase) {
-  return db.prepare(`SELECT ${documentColumns} FROM signed_documents WHERE user_id=? AND id=?`)
+export async function findSignedDocument(userId: number, id: string, db = env.DB as PointsDatabase) {
+  await ensureToolResultDeletions('signed-document');
+  const row = await db.prepare(`SELECT ${documentColumns} FROM signed_documents WHERE user_id=? AND id=?`)
     .bind(userId, id).first<DocumentRow>();
+  if (row?.result_deleted_at) throw new SignatureError('该制作成品已删除，请重新制作', 410);
+  return row;
 }
 
 export function reconcileSignedDocument(userId: number, id: string) {
@@ -205,6 +211,7 @@ export async function saveCreatedSignature(operation: Operation, image: {
 }
 
 export async function saveSignedDocument(operation: Operation, name: string, object: SignatureObject) {
+  await ensureToolResultDeletions('signed-document');
   return env.DB.transaction(async db => {
     await lockPointsUser(db, operation.userId);
     const previous = await findSignedDocument(operation.userId, operation.id, db);

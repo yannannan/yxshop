@@ -1,3 +1,4 @@
+import { ensureToolResultDeletions, resultDeletedAt, type ToolResultKind } from './tool-result-deletion';
 import { createHash } from 'node:crypto';
 import { env } from '@/db/mysql-runtime';
 import { getVerifiedSessionPhone } from '@/db/setup';
@@ -107,6 +108,7 @@ export async function saveAccountProfile(request: Request) {
 
 type RecordRow = { id: string; title: string; kind: string; status: string; created_at: string; amount?: number | null };
 function recordHref(row: RecordRow) {
+  if (row.status === 'deleted') return null;
   const id = encodeURIComponent(row.id);
   if (row.kind.startsWith('site:')) return `/tools/${encodeURIComponent(row.kind.slice(5))}.html?run=${id}`;
   switch (row.kind) {
@@ -116,26 +118,28 @@ function recordHref(row: RecordRow) {
     case 'signature': return row.status === 'ready' ? `${signatureApi}/${id}?kind=signature` : null;
     case 'handprint': return row.status === 'ready' ? `${signatureApi}/${id}?kind=handprint` : null;
     case 'signed-document': return row.status === 'ready' ? `${signatureApi}/${id}` : null;
+    case 'image': return `/tools/image-processor.html?result=${id}`;
     default: return `/checkout/${id}`;
   }
 }
 
 export async function readAccountRecords(userId: number, group: 'orders' | 'activity', requested = 1, filter = 'all'): Promise<AccountRecords> {
-  const warnings = new Set<string>(), sources: { sql: string; args: unknown[]; warning?: string }[] = [];
+  const warnings = new Set<string>(), sources: { sql: string; args: unknown[]; warning?: string; resultKind?: ToolResultKind }[] = [];
   if (group === 'orders') {
     if (['all','mall','points'].includes(filter)) sources.push({ sql: `SELECT o.id,p.name AS title,CASE WHEN p.product_type='points' THEN 'points' ELSE 'mall' END AS kind,o.status,o.created_at,o.amount FROM orders o JOIN products p ON p.id=o.product_id WHERE o.user_id=?${filter === 'points' ? " AND p.product_type='points'" : filter === 'mall' ? " AND p.product_type<>'points'" : ''}`, args: [userId] });
     if (['all','technical'].includes(filter)) sources.push({ sql: "SELECT o.id,COALESCE(s.title,'技术服务') AS title,'technical' AS kind,o.status,o.created_at,o.amount FROM technical_service_orders o LEFT JOIN technical_services s ON s.id=o.service_id WHERE o.user_id=?", args: [userId] });
   } else {
-    if (['all','video'].includes(filter)) sources.push({ sql: "SELECT id,title,'video' AS kind,status,created_at,NULL AS amount FROM video_extraction_tasks WHERE user_id=?", args: [userId] });
-    if (['all','stamp'].includes(filter)) sources.push({ sql: "SELECT id,'印章制作' AS title,'stamp' AS kind,'ready' AS status,created_at,NULL AS amount FROM tool_generation_results WHERE user_id=?", args: [userId] });
+    if (['all','video'].includes(filter)) sources.push({ resultKind: 'video', sql: `SELECT id,title,'video' AS kind,CASE WHEN ${resultDeletedAt('video')} IS NOT NULL THEN 'deleted' ELSE status END AS status,created_at,NULL AS amount FROM video_extraction_tasks WHERE user_id=?`, args: [userId] });
+    if (['all','stamp'].includes(filter)) sources.push({ resultKind: 'stamp', sql: `SELECT id,'印章制作' AS title,'stamp' AS kind,CASE WHEN ${resultDeletedAt('stamp')} IS NOT NULL THEN 'deleted' ELSE 'ready' END AS status,created_at,NULL AS amount FROM tool_generation_results WHERE user_id=?`, args: [userId] });
+    if (['all','image'].includes(filter)) sources.push({ resultKind: 'image', sql: `SELECT CONVERT(id USING utf8mb4) COLLATE utf8mb4_general_ci AS id,'图片处理' AS title,'image' AS kind,CASE WHEN ${resultDeletedAt('image')} IS NOT NULL THEN 'deleted' ELSE 'ready' END AS status,created_at,NULL AS amount FROM image_processing_results WHERE user_id=?`, args: [userId] });
     if (['all','site'].includes(filter)) sources.push({ sql: "SELECT r.id,CONCAT('站长分析 · ',r.host) AS title,CONCAT('site:',p.tool_slug) AS kind,r.status,r.created_at,NULL AS amount FROM site_analysis_runs r JOIN products p ON p.id=r.product_id WHERE r.user_id=?", args: [userId] });
     if (['all','signature'].includes(filter)) {
       sources.push({
         sql: "SELECT CONVERT(id USING utf8mb4) COLLATE utf8mb4_general_ci AS id,name AS title,'signature' AS kind,CASE WHEN deleted_at IS NULL THEN 'ready' ELSE 'deleted' END AS status,created_at,NULL AS amount FROM document_signatures WHERE user_id=?",
         args: [userId], warning: '文件签名记录尚未初始化',
       }, {
-        sql: "SELECT CONVERT(id USING utf8mb4) COLLATE utf8mb4_general_ci AS id,file_name AS title,'signed-document' AS kind,CASE WHEN expires_at<=? THEN 'expired' ELSE 'ready' END AS status,created_at,NULL AS amount FROM signed_documents WHERE user_id=?",
-        args: [new Date().toISOString(), userId], warning: '文件签名记录尚未初始化',
+        sql: `SELECT CONVERT(id USING utf8mb4) COLLATE utf8mb4_general_ci AS id,file_name AS title,'signed-document' AS kind,CASE WHEN ${resultDeletedAt('signed-document')} IS NOT NULL THEN 'deleted' WHEN expires_at<=? THEN 'expired' ELSE 'ready' END AS status,created_at,NULL AS amount FROM signed_documents WHERE user_id=?`,
+        args: [new Date().toISOString(), userId], resultKind: 'signed-document', warning: '文件签名记录尚未初始化',
       });
     }
     if (['all', 'handprint'].includes(filter)) sources.push({
@@ -147,7 +151,7 @@ export async function readAccountRecords(userId: number, group: 'orders' | 'acti
   // 各模块独立查询以兼容尚未初始化的历史模块；真正查询失败不会伪装成空记录。
   const usable: typeof sources = []; let total = 0;
   for (const source of sources) {
-    try { const count = await env.DB.prepare(`SELECT COUNT(*) AS total FROM (${source.sql}) account_records`).bind(...source.args).first<{ total: number }>(); total += Number(count?.total || 0); usable.push(source); }
+    try { if (source.resultKind) await ensureToolResultDeletions(source.resultKind); const count = await env.DB.prepare(`SELECT COUNT(*) AS total FROM (${source.sql}) account_records`).bind(...source.args).first<{ total: number }>(); total += Number(count?.total || 0); usable.push(source); }
     catch (error) { if (!missingTable(error)) throw error; warnings.add(source.warning || (source.sql.includes('site_analysis_runs') ? '站长分析记录尚未初始化' : source.sql.includes('video_extraction') ? '视频记录尚未初始化' : source.sql.includes('tool_generation') ? '印章记录尚未初始化' : '部分订单记录尚未初始化')); }
   }
   const pageSize = 10, page = Math.max(1, Math.min(Math.ceil(total / pageSize) || 1, Number.isFinite(requested) ? Math.floor(requested) : 1));

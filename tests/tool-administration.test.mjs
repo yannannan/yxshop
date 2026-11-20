@@ -1,3 +1,4 @@
+import { toolResultsMock } from './helpers/tool-results.mjs';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -17,7 +18,7 @@ const requestHelpers = await tsImport('../lib/image-request.ts', import.meta.url
 function load(file, mocks, globals = {}) {
   const result = { exports: {} };
   const code = ts.transpileModule(readFileSync(new URL(file, import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText;
-  vm.runInNewContext(code, { module: result, exports: result.exports, Response, Request, URL, Date, TextDecoder, console: { error() {} }, ...globals, require(name) { if (name in mocks) return mocks[name]; if (name.startsWith('node:') || name === 'react/jsx-runtime') return require(name); throw Error('Missing mock: ' + name); } });
+  vm.runInNewContext(code, { module: result, exports: result.exports, Response, Request, URL, Date, TextDecoder, console: { error() {} }, ...globals, require(name) { if (toolResultsMock(name)) return toolResultsMock(name); if (name in mocks) return mocks[name]; if (name.startsWith('node:') || name === 'react/jsx-runtime') return require(name); throw Error('Missing mock: ' + name); } });
   return result.exports;
 }
 const rows = [

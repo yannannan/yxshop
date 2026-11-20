@@ -1,3 +1,4 @@
+import { toolResultsMock } from './helpers/tool-results.mjs';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {createRequire} from 'node:module';
@@ -13,7 +14,7 @@ import jpeg from 'jpeg-js';
 const spec=await tsImport('../lib/image-tool.ts',import.meta.url),engine=await tsImport('../lib/image-processing.ts',import.meta.url),codec=await tsImport('../lib/raster-codec.ts',import.meta.url);
 const signatureSpec=await tsImport('../lib/signature-tool.ts',import.meta.url);
 const require=createRequire(import.meta.url),id='11111111-1111-4111-8111-111111111111',second='22222222-2222-4222-8222-222222222222';
-function load(file,mocks={},globals={}){const exports={},code=ts.transpileModule(readFileSync(new URL(file,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX,esModuleInterop:true}}).outputText;vm.runInNewContext(code,{exports,Buffer,Response,Request,FormData,File,Blob,URL,AbortController,Uint8Array,TextEncoder,crypto:webcrypto,console:{error(){}},...globals,require(name){if(name in mocks)return mocks[name];return require(name);}});return exports;}
+function load(file,mocks={},globals={}){const exports={},code=ts.transpileModule(readFileSync(new URL(file,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX,esModuleInterop:true}}).outputText;vm.runInNewContext(code,{exports,Buffer,Response,Request,FormData,File,Blob,URL,AbortController,Uint8Array,TextEncoder,crypto:webcrypto,console:{error(){}},...globals,require(name){ if (toolResultsMock(name)) return toolResultsMock(name);if(name in mocks)return mocks[name];return require(name);}});return exports;}
 const options=(extra={})=>spec.parseImageOptions({...spec.defaultImageOptions,...extra});
 function raster(w=8,h=8,color=[255,255,255,255]){const data=new Uint8Array(w*h*4);for(let p=0;p<data.length;p+=4)data.set(color,p);return {width:w,height:h,data};}
 function pngPixels(bytes){let offset=8,body=[];const width=bytes.readUInt32BE(16),height=bytes.readUInt32BE(20);while(offset<bytes.length){const length=bytes.readUInt32BE(offset),name=bytes.subarray(offset+4,offset+8).toString();if(name==='IDAT')body.push(bytes.subarray(offset+8,offset+8+length));offset+=length+12;}const raw=inflateSync(Buffer.concat(body)),data=new Uint8Array(width*height*4),stride=width*4;for(let y=0;y<height;y++){assert.equal(raw[y*(stride+1)],1);for(let x=0;x<stride;x++)data[y*stride+x]=(raw[y*(stride+1)+x+1]+(x>=4?data[y*stride+x-4]:0))&255;}return{width,height,data};}

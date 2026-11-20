@@ -5,6 +5,21 @@ import { softwareEnglish } from './software-en.mjs';
 import { consultationEnglish } from './consultation-en.mjs';
 // Interface copy only. User-authored business content is preserved.
 export const english: Record<string, string> = {
+  '删除此制作记录？删除后该成品将无法查看或下载。工具使用记录和积分消耗明细仍保留，已消耗权益不退回。': 'Delete this result? It will no longer be available to view or download. Tool usage and points records will remain, and consumed credits will not be refunded.',
+  '删除制作记录': 'Delete result',
+  '删除制作记录，保留使用流水': 'Delete result and retain usage records',
+  '请等待当前操作完成后再删除': 'Wait for the current operation to finish before deleting',
+  '删除中…': 'Deleting…',
+  '删除失败，请稍后重试': 'Deletion failed. Please try again later.',
+  '删除暂不可用，请稍后重试': 'Deletion is temporarily unavailable. Please try again later.',
+  '请登录后管理自己的制作记录': 'Sign in to manage your results',
+  '制作记录不存在或不属于当前账号': 'This result does not exist or belongs to another account',
+  '正在处理的任务暂不能删除，请完成后再试': 'A running task cannot be deleted. Please wait for it to finish.',
+  '该制作成品已删除，请重新制作': 'This result has been deleted. Start a new task to create another.',
+  '制作记录已删除，工具使用记录和积分明细仍保留。': 'Result deleted. Tool usage and points records have been retained.',
+  '成品已删除': 'Result deleted',
+  '制作成品可在各工具中删除，使用记录与积分明细会保留。': 'Delete created results in each tool. Usage and points records are retained.',
+  '图片处理': 'Image processing',
   '朱雀仿宋 · 公章风格': 'Zhuque Fangsong · Traditional stamp style',
   '字体粗细': 'Text stroke weight',
   '0为字体原始笔画，增大可加粗；不改变印章边框。': '0 preserves the original font strokes. Increase to thicken the text without changing the stamp border.',

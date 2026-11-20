@@ -1,3 +1,4 @@
+import { toolResultsMock } from './helpers/tool-results.mjs';
 import { i18nMock } from './helpers/i18n.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -23,7 +24,7 @@ const require = createRequire(import.meta.url);
 function load(file, mocks = {}, globals = {}) {
   const exports = {};
   const code = ts.transpileModule(readFileSync(new URL(file, import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText;
-  vm.runInNewContext(code, { exports, Response, Request, URL, URLSearchParams, AbortController, Buffer, crypto: webcrypto, console: { error() {} }, ...globals, require(name) { if (name in mocks) return mocks[name]; if (i18nMock(name)) return i18nMock(name); if (name === '../lib/account') return account; if (name === '../lib/account-client') return { notifyAccountChanged() {} }; if (name === './account-menu') return { AccountMenu: () => null }; if (name === '../../../components/storefront-header') return { StorefrontHeader: () => null }; if (name === '@/components/video-extractor') return { VideoExtractor: () => null }; if (name === '@/lib/points') return points; if (['@/lib/points-service', './points-service'].includes(name)) return { PointsError: class extends Error {} }; if (name === '@/lib/tool-points-usage') return {};  if (['react', 'react/jsx-runtime', 'node:crypto'].includes(name)) return require(name); throw new Error(`Unexpected module: ${name}`); } });
+  vm.runInNewContext(code, { exports, Response, Request, URL, URLSearchParams, AbortController, Buffer, crypto: webcrypto, console: { error() {} }, ...globals, require(name) { if (toolResultsMock(name)) return toolResultsMock(name); if (name in mocks) return mocks[name]; if (i18nMock(name)) return i18nMock(name); if (name === '../lib/account') return account; if (name === '../lib/account-client') return { notifyAccountChanged() {} }; if (name === './account-menu') return { AccountMenu: () => null }; if (name === '../../../components/storefront-header') return { StorefrontHeader: () => null }; if (name === '@/components/video-extractor') return { VideoExtractor: () => null }; if (name === '@/lib/points') return points; if (['@/lib/points-service', './points-service'].includes(name)) return { PointsError: class extends Error {} }; if (name === '@/lib/tool-points-usage') return {};  if (['react', 'react/jsx-runtime', 'node:crypto'].includes(name)) return require(name); throw new Error(`Unexpected module: ${name}`); } });
   return exports;
 }
 const pureEntitlements = load('../lib/tool-entitlements.ts', { '@/db/mysql-runtime': { env: {} }, './tool-services': tools });

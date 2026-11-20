@@ -1,7 +1,7 @@
 import { isStampId } from './stamp-options';
 import { stampResultPng } from './stamp-renderer';
-import { findStampResult, findStampTool, listStampResults } from './stamp-service';
-import { signatureApi, type SavedStamp } from './signature-tool';
+import { findStampResult, findStampTool, listStampResults, StampError } from './stamp-service';
+import { signatureApi, SignatureError, type SavedStamp } from './signature-tool';
 
 export async function listSigningStamps(userId: number): Promise<SavedStamp[]> {
   const tool = await findStampTool();
@@ -22,6 +22,11 @@ export async function listSigningStamps(userId: number): Promise<SavedStamp[]> {
 }
 
 export async function readSigningStamp(userId: number, productId: number, id: string, preview = false) {
-  const stamp = await findStampResult(userId, productId, id.toLowerCase());
-  return stamp ? stampResultPng(stamp, preview ? 240 : 600) : null;
+  try {
+    const stamp = await findStampResult(userId, productId, id.toLowerCase());
+    return stamp ? stampResultPng(stamp, preview ? 240 : 600) : null;
+  } catch (error) {
+    if (error instanceof StampError) throw new SignatureError(error.message, error.status);
+    throw error;
+  }
 }

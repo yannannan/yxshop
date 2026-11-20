@@ -1,5 +1,20 @@
 /* Public storefront theme. AdminLayout always supplies data-admin-ui, including
    its login screen. Keep business status colors, artwork and canvas pixels local. */
+body:not(:has([data-admin-ui])) .tool-result-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; flex-shrink: 0; }
+body:not(:has([data-admin-ui])) .tool-result-delete { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; max-width: 260px; }
+body:not(:has([data-admin-ui])) .tool-result-delete button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 36px; padding: 7px 11px; border: 1px solid #d9e5f3; border-radius: 8px; background: #fff; color: #586f8a; font-size: 13px; line-height: 20px; cursor: pointer; box-shadow: none; }
+body:not(:has([data-admin-ui])) .tool-result-delete button:hover:not(:disabled) { color: #b42318; border-color: #efc2be; background: #fff6f5; }
+body:not(:has([data-admin-ui])) .tool-result-delete button:disabled { cursor: not-allowed; opacity: .55; }
+body:not(:has([data-admin-ui])) .tool-result-delete button svg { width: 16px; height: 16px; flex-shrink: 0; }
+body:not(:has([data-admin-ui])) .tool-result-delete small[role="alert"] { color: #b42318; font-size: 12px; line-height: 1.5; }
+body:not(:has([data-admin-ui])) .ip-recent-item { display: flex; align-items: center; gap: 12px; }
+body:not(:has([data-admin-ui])) .ip-recent-item > a { min-width: 0; flex: 1; }
+body:not(:has([data-admin-ui])) .ip-recent-item .tool-result-delete { padding: 8px 12px 8px 0; }
+@media (max-width: 600px) {
+  body:not(:has([data-admin-ui])) .tool-result-delete button { min-height: 44px; }
+  body:not(:has([data-admin-ui])) .tool-result-actions { gap: 6px; }
+  body:not(:has([data-admin-ui])) .ip-recent-item { flex-wrap: wrap; padding-bottom: 8px; }
+}
 body:not(:has([data-admin-ui])) {
   --ui-primary: #2468e3;
   --ui-primary-hover: #1856c2;

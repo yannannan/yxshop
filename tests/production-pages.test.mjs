@@ -298,3 +298,13 @@ test('生产工具管理与统计拒绝匿名访问，点击接口拒绝损坏�
   assert.deepEqual(result.pages.map(page => page.status), [403, 403, 400]);
   assert.equal(result.queries, 0); assert.deepEqual(result.errors, []);
 });
+
+test('制作记录删除生产接口拒绝匿名，工具使用和积分流水没有删除方法', { skip: needsBuild }, async () => {
+  const id = 'abcdef12-1111-4111-8111-111111111111';
+  const result = await renderPages([
+    ...['signed-document', 'stamp', 'image', 'video'].map(kind => ({ path: `/api/tools/results/${kind}/${id}`, method: 'DELETE' })),
+    ...['/api/account/records?kind=activity', '/api/points', '/api/tools/usage', '/api/tools/activity'].map(path => ({ path, method: 'DELETE' })),
+  ]);
+  assert.deepEqual(result.pages.map(page => page.status), [401, 401, 401, 401, 405, 405, 405, 405]);
+  assert.deepEqual(result.errors, []); assert.equal(result.queries, 0);
+});

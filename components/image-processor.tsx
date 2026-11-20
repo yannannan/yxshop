@@ -4,6 +4,7 @@
 import { useCallback,useEffect,useRef,useState,type PointerEvent } from 'react';
 import { AdjustmentsHorizontalIcon,ArrowDownTrayIcon,ArrowPathIcon,ArrowUpTrayIcon,ArrowsPointingOutIcon,ChevronLeftIcon,ClockIcon,PaintBrushIcon,PencilSquareIcon,PhotoIcon,RectangleGroupIcon,RectangleStackIcon,ScissorsIcon,SparklesIcon,TrashIcon,WrenchScrewdriverIcon,XMarkIcon } from '@heroicons/react/24/outline';
 import { useI18n } from './language-provider';
+import { ToolResultDelete } from './tool-result-delete';
 import { notifyAccountChanged,useAccount } from '../lib/account-client';
 import { accountLoginHref } from '../lib/account';
 import { imageActions,imageLimits,imageToolSlug,defaultImageOptions,type ImageAccess,type ImageAction,type ImageOptions,type ImageResult,type ImageRect } from '../lib/image-tool';
@@ -82,7 +83,7 @@ export function ImageProcessor({tool}:{tool:ToolService}) {
         </section>
       </div>
       <footer className="ip-bottom-bar"><div className="ip-points"><span>{t('剩余积分')} <strong>{access?.signedIn?access.pointsBalance:'—'}</strong></span><span>{t('本次预计消耗')} <b>{access?.chargeType==='free'||access?.hasMembership?0:cost}</b> {t('积分')}{access?.hasMembership&&` · ${t('有效套餐优先使用')}`}</span><small>{t('每张大图自动适配至200万像素以内，按显示的处理尺寸输出。')}</small></div><div className="ip-process-actions">{access&&!access.signedIn?<a className="ip-primary" href={accountLoginHref(`/tools/${imageToolSlug}.html`)}>{t('登录后处理')}</a>:<><a href={access?.chargeType==='paid'?`/product/${tool.id}`:'/points'}>{t(access?.chargeType==='paid'?'购买套餐':'充值积分')}</a><button type="button" className="ip-primary" disabled={blocked} onClick={()=>void process()}><SparklesIcon aria-hidden="true"/>{t(busy?'正在处理…':result?'重新生成':retryable?'重试本次任务':'生成处理结果')}</button></>}</div></footer>
-      {Boolean(access?.recent?.length)&&<section className="ip-recent"><div className="ip-preview-heading"><h3><ClockIcon aria-hidden="true"/>{t('最近处理结果')}</h3></div><p>{t('已保存结果可直接打开下载，不重复扣分。')}</p><div className="ip-recent-list">{access?.recent.map(item=><a key={item.id} href={`/tools/${imageToolSlug}.html?result=${item.id}`}><span>{t(imageActions[item.action])} · {item.format.toUpperCase()}</span><small>{new Date(item.createdAt).toLocaleString(locale,{hour12:false})}</small></a>)}</div></section>}
+      {Boolean(access?.recent?.length)&&<section className="ip-recent"><div className="ip-preview-heading"><h3><ClockIcon aria-hidden="true"/>{t('最近处理结果')}</h3></div><p>{t('已保存结果可直接打开下载，不重复扣分。')}</p><div className="ip-recent-list">{access?.recent.map(item=><div className="ip-recent-item" key={item.id}><a href={`/tools/${imageToolSlug}.html?result=${item.id}`}><span>{t(imageActions[item.action])} · {item.format.toUpperCase()}</span><small>{new Date(item.createdAt).toLocaleString(locale,{hour12:false})}</small></a><ToolResultDelete kind="image" id={item.id} disabled={busy || uploading} onDeleted={id=>{setAccess(old=>old&&({...old,recent:old.recent.filter(row=>row.id!==id)}));if(result?.id===id)reset();if(task.current===id)task.current='';setNotice('制作记录已删除，工具使用记录和积分明细仍保留。');notifyAccountChanged();void refresh();}} /></div>)}</div></section>}
     </main>
   </div>;
 }

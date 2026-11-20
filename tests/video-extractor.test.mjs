@@ -1,3 +1,4 @@
+import { toolResultsMock } from './helpers/tool-results.mjs';
 import { i18nMock } from './helpers/i18n.mjs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -23,7 +24,7 @@ const require = createRequire(import.meta.url);
 function load(file, mocks = {}, globals = {}) {
   const exports = {};
   const code = ts.transpileModule(readFileSync(new URL(file, import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText;
-  vm.runInNewContext(code, { exports, URL, Request, Response, Buffer, AbortSignal, crypto: webcrypto, process, setTimeout, clearTimeout, setInterval, clearInterval, console: { error() {} }, ...globals, require(name) { if (name in mocks) return mocks[name]; if (i18nMock(name)) return i18nMock(name); if (name === '../lib/account-client') return { notifyAccountChanged() {} }; if (name === './account-menu') return { AccountMenu: () => null }; if (name === '../../../components/storefront-header') return { StorefrontHeader: () => null }; if (name.startsWith('node:') || ['react', 'react/jsx-runtime'].includes(name)) return require(name); throw new Error(`Unexpected module: ${name}`); } });
+  vm.runInNewContext(code, { exports, URL, Request, Response, Buffer, AbortSignal, crypto: webcrypto, process, setTimeout, clearTimeout, setInterval, clearInterval, console: { error() {} }, ...globals, require(name) { if (toolResultsMock(name)) return toolResultsMock(name); if (name in mocks) return mocks[name]; if (i18nMock(name)) return i18nMock(name); if (name === '../lib/account-client') return { notifyAccountChanged() {} }; if (name === './account-menu') return { AccountMenu: () => null }; if (name === '../../../components/storefront-header') return { StorefrontHeader: () => null }; if (name.startsWith('node:') || ['react', 'react/jsx-runtime'].includes(name)) return require(name); throw new Error(`Unexpected module: ${name}`); } });
   return exports;
 }
 const id = '11111111-1111-4111-8111-111111111111', id2 = '22222222-2222-4222-8222-222222222222';

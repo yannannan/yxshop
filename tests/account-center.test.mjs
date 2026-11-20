@@ -1,3 +1,4 @@
+import { toolResultsMock } from './helpers/tool-results.mjs';
 import { i18nMock } from './helpers/i18n.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -15,7 +16,7 @@ function load(file, mocks = {}, globals = {}) {
   const exports = {};
   const code = ts.transpileModule(readFileSync(new URL(file, import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText;
   vm.runInNewContext(code, { exports, Buffer, Request, Response, URL, URLSearchParams, Uint8Array, URIError, decodeURIComponent, TextDecoder, AbortController, Event, console: { error() {} }, ...globals,
-    require(name) { if (name in mocks) return mocks[name]; if (i18nMock(name)) return i18nMock(name); if (['node:crypto','react','react/jsx-runtime','@heroicons/react/24/outline'].includes(name)) return require(name); throw Error(`Unexpected import ${name}`); } });
+    require(name) { if (toolResultsMock(name)) return toolResultsMock(name); if (name in mocks) return mocks[name]; if (i18nMock(name)) return i18nMock(name); if (['node:crypto','react','react/jsx-runtime','@heroicons/react/24/outline'].includes(name)) return require(name); throw Error(`Unexpected import ${name}`); } });
   return exports;
 }
 const signatureTool = load('../lib/signature-tool.ts', { './stamp-options': load('../lib/stamp-options.ts') });
@@ -37,6 +38,7 @@ function fixture({ missingProfile = false, missingModules = false, walletFailure
     if (dbFailure && sql.includes(dbFailure)) throw error('ER_ACCESS_DENIED_ERROR');
     if (missingModules && /technical_service_orders|video_extraction_tasks|tool_generation_results|site_analysis_runs|document_signatures|document_handprints|signed_documents/.test(sql)) throw error('ER_NO_SUCH_TABLE');
     let rows;
+    if (sql.includes('image_processing_results')) return [];
     if (sql.includes('site_analysis_runs')) rows = state.analyses;
     else if (sql.includes('technical_service_orders')) rows = state.technical;
     else if (sql.includes('video_extraction_tasks')) rows = state.videos;

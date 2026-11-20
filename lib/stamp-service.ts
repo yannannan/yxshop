@@ -4,14 +4,18 @@ import { usableToolOrder, type ToolOrderAccess } from './tool-entitlements';
 import { toolAccessExpiresAt } from './tool-services';
 import { stampImageData, type StampAccess, type StampResult } from './stamp-options';
 import { consumePoints, pointsBalance } from './points-service';
+import { ensureToolResultDeletions, resultDeletedAt, visibleToolResults } from './tool-result-deletion';
 
 export class StampError extends Error {
   constructor(message: string, public status = 400) { super(message); }
 }
 export type StampTool = { id: number; tool_charge_type: 'free' | 'paid' | 'pending' | 'points'; tool_points_cost?: number };
-type ResultRow = { id: string; user_id: number; product_id: number; request_hash: string; image_base64: string; image_size: number; created_at: string; charged: number };
-const resultColumns = 'id,user_id,product_id,request_hash,image_base64,image_size,created_at,charged';
-const publicResult = (row: ResultRow, reused: boolean): StampResult => ({ id: row.id, ...stampImageData(row.image_base64), size: Number(row.image_size), createdAt: row.created_at, charged: !reused && Boolean(row.charged), reused });
+type ResultRow = { id: string; user_id: number; product_id: number; request_hash: string; image_base64: string; image_size: number; created_at: string; charged: number; result_deleted_at?: string | null };
+const resultColumns = `id,user_id,product_id,request_hash,image_base64,image_size,created_at,charged,${resultDeletedAt('stamp')} AS result_deleted_at`;
+const publicResult = (row: ResultRow, reused: boolean): StampResult => {
+  if (row.result_deleted_at) throw new StampError('该制作成品已删除，请重新制作', 410);
+  return { id: row.id, ...stampImageData(row.image_base64), size: Number(row.image_size), createdAt: row.created_at, charged: !reused && Boolean(row.charged), reused };
+};
 
 export function findStampTool() {
   return env.DB.prepare("SELECT id,tool_charge_type,tool_points_cost FROM products WHERE tool_slug='stamp-maker' AND product_type='tool' AND status='active'").first<StampTool>();
@@ -35,7 +39,8 @@ function balance(orders: ToolOrderAccess[]) {
   return { remaining: usable.filter(order => order.tool_billing_cycle === 'times').reduce((sum, order) => sum + Number(order.tool_uses_remaining), 0), cycle: first ? first.tool_billing_cycle || 'once' : null, membershipName: first?.tool_plan_name || null, expiresAt: first ? toolAccessExpiresAt(first.tool_billing_cycle, first.tool_paid_at || '') : null };
 }
 export async function listStampResults(userId: number, productId: number, limit = 5) {
-  const { results } = await env.DB.prepare('SELECT id,image_size AS size,created_at AS createdAt FROM tool_generation_results WHERE user_id=? AND product_id=? ORDER BY created_at DESC,id DESC LIMIT ?')
+  await ensureToolResultDeletions('stamp');
+  const { results } = await env.DB.prepare(`SELECT id,image_size AS size,created_at AS createdAt FROM tool_generation_results WHERE user_id=? AND product_id=? AND ${visibleToolResults('stamp')} ORDER BY created_at DESC,id DESC LIMIT ?`)
     .bind(userId, productId, limit).all<StampAccess['recent'][number]>();
   return results;
 }
@@ -48,6 +53,7 @@ export async function stampAccess(tool: StampTool, user: { id: number } | null):
   return { chargeType: tool.tool_charge_type, signedIn: Boolean(user), canGenerate: tool.tool_charge_type === 'free' || (['paid', 'points'].includes(tool.tool_charge_type) && Boolean(rights.cycle)) || (tool.tool_charge_type === 'points' && Boolean(user) && cost > 0 && wallet >= cost), ...rights, pointsBalance: wallet, pointsCost: cost, purchaseUrl: tool.tool_charge_type === 'points' ? '/points' : `/product/${tool.id}`, recent };
 }
 export async function findStampResult(userId: number, productId: number, id: string, hash?: string) {
+  await ensureToolResultDeletions('stamp');
   const row = await env.DB.prepare(`SELECT ${resultColumns} FROM tool_generation_results WHERE id=? AND user_id=? AND product_id=?`).bind(id, userId, productId).first<ResultRow>();
   if (row && hash && row.request_hash !== hash) throw new StampError('制作参数已变化，请重新发起制作', 409);
   return row ? publicResult(row, true) : null;
@@ -56,6 +62,7 @@ export async function findStampResult(userId: number, productId: number, id: str
 // 图片先成功渲染；权益复核、扣次、成功日志和成品保存随后在同一事务内完成。
 // 锁住当前用户使同用户并发请求串行，最后一次权益不能被两个不同任务同时消费。
 export async function saveStamp(userId: number, productId: number, id: string, hash: string, image: Buffer, size: number, free = false): Promise<StampResult> {
+  await ensureToolResultDeletions('stamp');
   return env.DB.transaction(async db => {
     const user = await db.prepare("SELECT id FROM users WHERE id=? AND status='active' FOR UPDATE").bind(userId).first();
     if (!user) throw new StampError('请重新登录后制作', 401);

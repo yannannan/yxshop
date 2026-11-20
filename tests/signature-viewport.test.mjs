@@ -1,3 +1,4 @@
+import { toolResultsMock } from './helpers/tool-results.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
@@ -11,6 +12,7 @@ function load(file, mocks = {}, globals = {}) {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
   }).outputText;
   vm.runInNewContext(code, { module: compiled, exports: compiled.exports, require: name => {
+    if (toolResultsMock(name)) return toolResultsMock(name);
     if (name in mocks) return mocks[name];
     throw Error(`Unexpected dependency: ${name}`);
   }, ...globals }, { filename: file });

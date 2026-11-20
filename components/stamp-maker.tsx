@@ -1,5 +1,6 @@
 "use client";
 import { useI18n } from '@/components/language-provider';
+import { ToolResultDelete } from './tool-result-delete';
 
 
 import Image from 'next/image';
@@ -141,6 +142,17 @@ export function StampMaker({ tool, onStampReady }: {
   const buyHref = tool.chargeType === 'points' ? access?.signedIn ? '/points' : '/?returnTo=/points' : `/product/${tool.id}${chosenPlan ? `?${toolPlanQuery(chosenPlan)}` : ''}`;
   const resultFormat = stampFormats[result?.format || 'png'];
   const recent = access?.recent ?? [];
+  function resultDeleted(id: string) {
+    setAccess(old => old && ({ ...old, recent: old.recent.filter(item => item.id !== id) }));
+    setResult(old => old?.id === id ? null : old);
+    if (request.current?.id === id) { request.current = null; setRetryPending(false); }
+    const url = new URL(window.location.href);
+    if (url.searchParams.get('result') === id) { url.searchParams.delete('result'); window.history.replaceState(null, '', url); }
+    setMessageSuccess(true); setMessage('制作记录已删除，工具使用记录和积分明细仍保留。');
+    onStampReady?.(id);
+    notifyAccountChanged();
+    void refresh();
+  }
 
   const layoutPanel = <section className="stamp-panel stamp-layout-panel" aria-labelledby="stamp-layout-title">
           <div className="stamp-panel-heading"><h2 id="stamp-layout-title">{t("颜色与排版")}</h2></div>
@@ -234,7 +246,7 @@ export function StampMaker({ tool, onStampReady }: {
                   <b>{t('印章成品')}</b><span>{item.size} × {item.size} px</span>
                   <time dateTime={item.createdAt}>{time(item.createdAt, locale, true)}</time>
                 </div>
-                <button type="button" className="stamp-history-open" disabled={busy} onClick={() => void restore(item.id)}>{t('查看成品')}</button>
+                <div className="tool-result-actions"><button type="button" className="stamp-history-open" disabled={busy} onClick={() => void restore(item.id)}>{t('查看成品')}</button><ToolResultDelete kind="stamp" id={item.id} disabled={busy} onDeleted={resultDeleted} /></div>
               </li>)}
             </ul> : checking ? <p className="stamp-history-empty" role="status">{t('正在读取记录…')}</p>
               : access?.signedIn ? <p className="stamp-history-empty">{t('暂无印章制作记录。')}</p>

@@ -3,9 +3,13 @@ import { consumePoints, lockPointsUser, pointsBalance } from './points-service';
 import { getToolEntitlement, usableToolOrder, type ToolOrderAccess } from './tool-entitlements';
 import { modulePrices } from './tool-module-pricing';
 import { imageActions, imageToolSlug, ImageToolError, type ImageAction, type ImageAccess, type ImageResult } from './image-tool';
+import { ensureToolResultDeletions, resultDeletedAt, visibleToolResults } from './tool-result-deletion';
 type Tool={id:number;tool_slug:string;tool_charge_type:string;tool_points_cost:number};
-type Stored={id:string;user_id:number;product_id:number;request_hash:string;action:ImageAction;image_base64:string;image_width:number;image_height:number;image_format:'png'|'jpeg';image_bytes:number;points_spent:number;created_at:string};
-const publicResult=(row:Omit<Stored,'image_base64'>,reused:boolean):ImageResult=>({id:row.id,action:row.action,width:Number(row.image_width),height:Number(row.image_height),format:row.image_format,bytes:Number(row.image_bytes),pointsSpent:Number(row.points_spent),createdAt:row.created_at,reused,downloadUrl:`/api/tools/image-processor/${row.id}`});
+type Stored={id:string;user_id:number;product_id:number;request_hash:string;action:ImageAction;image_base64:string;image_width:number;image_height:number;image_format:'png'|'jpeg';image_bytes:number;points_spent:number;created_at:string;result_deleted_at?:string|null};
+const publicResult=(row:Omit<Stored,'image_base64'>,reused:boolean):ImageResult=>{
+  if(row.result_deleted_at)throw new ImageToolError('该制作成品已删除，请重新制作',410);
+  return {id:row.id,action:row.action,width:Number(row.image_width),height:Number(row.image_height),format:row.image_format,bytes:Number(row.image_bytes),pointsSpent:Number(row.points_spent),createdAt:row.created_at,reused,downloadUrl:`/api/tools/image-processor/${row.id}`};
+};
 export async function getImageTool():Promise<Tool> {
   const tool=await env.DB.prepare("SELECT id,tool_slug,tool_charge_type,tool_points_cost FROM products WHERE tool_slug=? AND product_type='tool' AND status='active'").bind(imageToolSlug).first<Tool>();
   if(!tool)throw new ImageToolError('图片工具不存在或已停用',404);
@@ -13,21 +17,24 @@ export async function getImageTool():Promise<Tool> {
   return tool;
 }
 export async function imageAccess(tool:Tool,user:{id:number}|null):Promise<ImageAccess> {
+  if(user)await ensureToolResultDeletions('image');
   const overrides=await modulePrices(env.DB,tool.id,imageToolSlug),order=user&&['points','paid'].includes(tool.tool_charge_type)?await getToolEntitlement(user.id,tool.id):null;
   const balance=user?await pointsBalance(user.id):0;
   const costs=Object.fromEntries(Object.keys(imageActions).map(action=>[action,tool.tool_charge_type==='points'?overrides[action]??Number(tool.tool_points_cost):0])) as Record<ImageAction,number>;
-  const recent=user?(await env.DB.prepare('SELECT id,user_id,product_id,request_hash,action,image_width,image_height,image_format,image_bytes,points_spent,created_at FROM image_processing_results WHERE user_id=? AND product_id=? ORDER BY created_at DESC,id DESC LIMIT 5').bind(user.id,tool.id).all<Omit<Stored,'image_base64'>>()).results:[];
+  const recent=user?(await env.DB.prepare(`SELECT id,user_id,product_id,request_hash,action,image_width,image_height,image_format,image_bytes,points_spent,created_at FROM image_processing_results WHERE user_id=? AND product_id=? AND ${visibleToolResults('image')} ORDER BY created_at DESC,id DESC LIMIT 5`).bind(user.id,tool.id).all<Omit<Stored,'image_base64'>>()).results:[];
   return {signedIn:Boolean(user),chargeType:tool.tool_charge_type,pointsBalance:balance,hasMembership:Boolean(order),costs,canProcess:Boolean(user)&&tool.tool_charge_type!=='pending'&&(tool.tool_charge_type!=='paid'||Boolean(order)),recent:recent.map(row=>publicResult(row,true))};
 }
 export async function findImageResult(userId:number,id:string,hash?:string) {
-  const row=await env.DB.prepare('SELECT * FROM image_processing_results WHERE id=? AND user_id=?').bind(id,userId).first<Stored>();
+  await ensureToolResultDeletions('image');
+  const row=await env.DB.prepare(`SELECT *,${resultDeletedAt('image')} AS result_deleted_at FROM image_processing_results WHERE id=? AND user_id=?`).bind(id,userId).first<Stored>();
   if(row&&hash&&row.request_hash!==hash)throw new ImageToolError('图片或参数已变化，请重新发起处理',409);
   return row?{row,result:publicResult(row,true)}:null;
 }
 export async function saveImageResult(userId:number,toolId:number,id:string,hash:string,action:ImageAction,quote:{chargeType:string;cost:number},image:{bytes:Buffer;width:number;height:number;format:'png'|'jpeg'}):Promise<ImageResult> {
+  await ensureToolResultDeletions('image');
   return env.DB.transaction(async db=>{
     await lockPointsUser(db,userId);
-    const previous=await db.prepare('SELECT * FROM image_processing_results WHERE id=? FOR UPDATE').bind(id).first<Stored>();
+    const previous=await db.prepare(`SELECT *,${resultDeletedAt('image')} AS result_deleted_at FROM image_processing_results WHERE id=? FOR UPDATE`).bind(id).first<Stored>();
     if(previous){if(Number(previous.user_id)!==userId||Number(previous.product_id)!==toolId||previous.request_hash!==hash)throw new ImageToolError('处理任务与当前请求不匹配',409);return publicResult(previous,true);}
     const tool=await db.prepare("SELECT id,tool_slug,tool_charge_type,tool_points_cost FROM products WHERE id=? AND tool_slug=? AND product_type='tool' AND status='active' FOR UPDATE").bind(toolId,imageToolSlug).first<Tool>();
     if(!tool||tool.tool_charge_type==='pending')throw new ImageToolError('工具配置已变化，请刷新页面后重试',409);
