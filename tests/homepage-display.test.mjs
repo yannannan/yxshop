@@ -25,7 +25,7 @@ function load(file, mocks = {}, globals = {}) {
     exports, Response, URL, URLSearchParams, AbortController, setTimeout, clearTimeout, console: { error() {} }, ...globals,
     require(name) {
       if (name in mocks) return mocks[name]; if (i18nMock(name)) return i18nMock(name); if (name === '../lib/account') return accountHelpers; if (name === '../lib/account-client') return { notifyAccountChanged() {} }; if (name === './account-menu') return { AccountMenu: () => null }; if (name === '../../../components/storefront-header') return { StorefrontHeader: () => null };
-      if (['react', 'react/jsx-runtime'].includes(name)) return require(name);
+      if (['react', 'react/jsx-runtime', '@heroicons/react/24/outline'].includes(name)) return require(name);
       throw new Error(`Unexpected module: ${name}`);
     },
   });
@@ -176,6 +176,19 @@ test('直接展示共用 12 件商品一页，工具仍独立分页；没有商�
   const empty = markup(React.createElement(component.HomepageCatalog, { ...props, products: [] }));
   assert.ok(!empty.includes('product-category-section'));
   assert.equal((empty.match(/class="tool-entry-card"/g) || []).length, 8);
+});
+
+test('新首页以真实工具和上架商品分类组成最多12个服务入口，沿用后台顺序而不凑数', () => {
+  const component = load('../components/homepage-catalog.tsx', { 'next/link': Link, '../lib/homepage-display': helpers, './tool-directory': directory, './catalog-pagination': pagination });
+  const props = { products, tools: tools.slice(0, 8), settings: { mode: 'grouped', sectionOrder: ['category:短信', 'tools', 'category:会员'], itemOrder: [105, 101] }, portal: true, query: '', loading: false, error: '', renderProduct };
+  const html = markup(React.createElement(component.HomepageCatalog, props));
+  assert.equal((html.match(/class="tool-entry-card"/g) || []).length, 8);
+  assert.equal((html.match(/class="portal-shortcut"/g) || []).length, 2);
+  assert.ok(html.indexOf('/tools/tool-5.html') < html.indexOf('/tools/tool-1.html'));
+  assert.ok(html.indexOf(`/products?category=${encodeURIComponent('短信')}`) < html.indexOf(`/products?category=${encodeURIComponent('会员')}`));
+  assert.ok(!html.includes('catalog-pagination')); assert.ok(html.includes('href="/products"'));
+  const search = markup(React.createElement(component.HomepageCatalog, { ...props, query: '商品' }));
+  assert.ok(search.includes('data-product=')); assert.ok(!search.includes('portal-shortcut'));
 });
 
 test('链接分页保留筛选条件，边界按钮不可点击，单页不显示无效翻页', () => {
@@ -449,10 +462,10 @@ test('首页页脚的工具入口不依赖客户端路由，工具分类仍可�
   assert.ok(elements(tree).some(node => node.type === directory.ToolDirectory));
 });
 
-test('首页有有效管理员 Cookie 保留角色和页脚管理入口；全部同时保留工具和普通商品',async()=>{
+test('首页服务导航保留管理员角色、工具与数字商品目录入口',async()=>{
   const host=storefrontHost({window:{localStorage:{getItem:()=>null},location:{search:'',hash:''}},fetch:async url=>Response.json(url==='/api/auth/session'?{authenticated:true,phone:'13800000000',isAdmin:true,isTechnician:false}:url==='/api/products'?products:url==='/api/tools'?tools:url==='/api/homepage-display'?{mode:'grouped',sectionOrder:['tools'],itemOrder:[]}:[])});
   host.render();host.mountEffects();await new Promise(resolve=>setImmediate(resolve));host.render();host.mountEffects();await new Promise(resolve=>setImmediate(resolve));const html=markup(host.render());
-  assert.ok(html.includes('管理后台'));assert.equal(elements(host.render()).find(node => node.type === storefrontHeader.StorefrontHeader).props.isAdmin,true);assert.equal((html.match(/class="product-card refined-card"/g)||[]).length,24);assert.equal((html.match(/class="tool-entry-card"/g)||[]).length, 8);
+  assert.ok(html.includes('管理后台'));assert.equal(elements(host.render()).find(node => node.type === storefrontHeader.StorefrontHeader).props.isAdmin,true);assert.equal((html.match(/class="product-card refined-card"/g)||[]).length,0);assert.equal((html.match(/class="tool-entry-card"/g)||[]).length, 12);assert.ok(html.includes('href="/products"'));
 });
 
 test('首页不再重复渲染手机二维码，独立的客服面板仍可打开和关闭', () => {
@@ -470,7 +483,7 @@ test('首页不再重复渲染手机二维码，独立的客服面板仍可打�
 });
 test('商品接口 HTTP 500 时首页明确提示读取失败，不能静默显示成只有工具',async()=>{
   const host=storefrontHost({window:{localStorage:{getItem:()=>null},location:{search:'',hash:''}},fetch:async url=>url==='/api/products'?new Response('server error',{status:500}):Response.json(url==='/api/tools'?tools:url==='/api/auth/session'?{authenticated:false}:[])});
-  host.render();host.mountEffects();await new Promise(resolve=>setImmediate(resolve));host.render();host.mountEffects();await new Promise(resolve=>setImmediate(resolve));const html=markup(host.render());assert.ok(html.includes('商品列表暂不可用'));assert.ok(html.includes('role="alert"'));assert.equal((html.match(/class="tool-entry-card"/g)||[]).length, 8);assert.equal((html.match(/class="product-card refined-card"/g)||[]).length,0);
+  host.render();host.mountEffects();await new Promise(resolve=>setImmediate(resolve));host.render();host.mountEffects();await new Promise(resolve=>setImmediate(resolve));const html=markup(host.render());assert.ok(html.includes('商品列表暂不可用'));assert.ok(html.includes('role="alert"'));assert.equal((html.match(/class="tool-entry-card"/g)||[]).length, 12);assert.equal((html.match(/class="product-card refined-card"/g)||[]).length,0);
 });
 
 test('首页分类列表每页 12 件，点击翻页换商品，切换分类重置页码且含更多入口', () => {

@@ -9,7 +9,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { technicalAvatarImage } from '../lib/technical-images';
 import { ToolDirectory } from "../components/tool-directory";
-import { StorefrontBanners } from "../components/storefront-banners";
+import { ArrowUpRightIcon, CommandLineIcon, WrenchScrewdriverIcon, MagnifyingGlassIcon, ShieldCheckIcon, EnvelopeIcon, ChatBubbleLeftRightIcon } from '@heroicons/react/24/outline';
 import { StorefrontHeader } from "../components/storefront-header";
 import { accountReturnPath } from "../lib/account";
 import { notifyAccountChanged } from "../lib/account-client";
@@ -449,13 +449,12 @@ export default function StorePage({ initialTools = null, initialToolsError = '',
   }
 
   return (
-    <main className="store-shell refined-store">
+    <main className="store-shell refined-store glass-home">
       <StorefrontHeader channel={channel} onNavigate={switchChannel} isAdmin={isAdmin} isTechnician={isTechnician} onSignIn={() => setAuthOpen(true)} onSignedOut={signOut} />
 
       <div className="store-layout refined-layout no-sidebar-layout">
         <section className="content refined-content">
-          <StorefrontBanners />
-
+          <div className="portal-welcome"><div><span>YUXING · DIGITAL WORKSPACE</span><h1>{t('连接 AI，开启更多可能')}</h1></div><p>{t('实用工具 · 数字服务 · 专业技术支持')}</p></div>
           <section className="channel-switch" aria-label={t("服务频道")}>
             <button
               type="button"
@@ -463,12 +462,12 @@ export default function StorePage({ initialTools = null, initialToolsError = '',
               aria-pressed={channel === "mall"}
               onClick={() => switchChannel("mall")}
             >
-              <span className="channel-icon">⌘</span>
+              <span className="channel-icon"><CommandLineIcon aria-hidden="true" /></span>
               <span>
                 <b>{t("AI数字服务")}</b>
                 <small>{t("会员、账号、工具与 AI 教程，即买即用")}</small>
               </span>
-              <em>{t(channel === "mall" ? "当前频道" : "切换频道")}</em>
+              <em>{t(channel === "mall" ? "当前频道" : "切换频道")}<ArrowUpRightIcon aria-hidden="true" /></em>
             </button>
             <button
               type="button"
@@ -476,12 +475,12 @@ export default function StorePage({ initialTools = null, initialToolsError = '',
               aria-pressed={channel === "technical"}
               onClick={() => switchChannel("technical")}
             >
-              <span className="channel-icon">⌖</span>
+              <span className="channel-icon"><WrenchScrewdriverIcon aria-hidden="true" /></span>
               <span>
                 <b>{t("上门技术服务")}</b>
                 <small>{t("在线咨询最快 1–5 分钟，到场最快 20 分钟")}</small>
               </span>
-              <em>{t(channel === "technical" ? "当前频道" : "切换频道")}</em>
+              <em>{t(channel === "technical" ? "当前频道" : "切换频道")}<ArrowUpRightIcon aria-hidden="true" /></em>
             </button>
           </section>
 
@@ -523,7 +522,7 @@ export default function StorePage({ initialTools = null, initialToolsError = '',
                 ))}
               </nav>
               <label className="search catalog-search">
-                <span aria-hidden="true">⌕</span>
+                <span aria-hidden="true"><MagnifyingGlassIcon /></span>
                 <input
                   aria-label={t(isToolsCategory ? '搜索工具' : showGroupedCatalog ? '搜索商品或工具' : '搜索商品')}
                   value={query}
@@ -584,7 +583,7 @@ export default function StorePage({ initialTools = null, initialToolsError = '',
 
           {!isToolsCategory && productsError && <p className="catalog-load-error" role="alert">{t(productsError)}{t("。请稍后刷新，或联系客服。")}</p>}
           {isToolsCategory ? <ToolDirectory key={query} tools={visibleTools} loading={toolsLoading} error={toolsError} onRetry={retryTools} /> : showGroupedCatalog ? (
-            <HomepageCatalog products={visible} tools={visibleTools} settings={homepageDisplay} loading={toolsLoading} error={toolsError} onToolsRetry={retryTools} query={query} renderProduct={renderProductCard} />
+            <HomepageCatalog products={visible} tools={visibleTools} settings={homepageDisplay} loading={toolsLoading} error={toolsError} onToolsRetry={retryTools} query={query} renderProduct={renderProductCard} portal />
           ) : (
             <><div className="catalog-list-heading"><h2>{t(thirdCategory !== '全部' ? thirdCategory : subcategory !== '全部' ? subcategory : category)}</h2><Link className="catalog-more-link" href={`/products?${moreProductsParams}`}>{t("更多商品 →")}</Link></div><div className="product-grid refined-grid homepage-product-grid">{t(pagedProducts.map(renderProductCard))}</div><CatalogPagination page={currentPage} totalPages={totalPages} onChange={setPage} label={t("商品分页")} /></>
           )}
@@ -661,7 +660,7 @@ export default function StorePage({ initialTools = null, initialToolsError = '',
             </span>
             <span>{t("宇星脉通")}</span>
           </a>
-          <p>{t("简单、透明、可靠的数字商品购买体验。")}</p>
+          <p>{t("简单、透明、可靠的数字商品购买体验。")}</p><div className="portal-footer-assurances"><span><ShieldCheckIcon aria-hidden="true" />{t('品质保障')}</span><span><EnvelopeIcon aria-hidden="true" />{t('订单邮箱交付')}</span><span><ChatBubbleLeftRightIcon aria-hidden="true" />{t('人工售后服务')}</span></div>
         </div>
         <div>
           <b>{t("购买帮助")}</b>
