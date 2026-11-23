@@ -292,7 +292,7 @@ body:not(:has([data-admin-ui])) :is(.al-plan-body dd,.al-table-action,.al-platfo
 body:not(:has([data-admin-ui])) :is(.al-preview-notice,.al-mode-badge) { background:#edf7fa; color:#34798b; border-color:#cfe7ee; }
 body:not(:has([data-admin-ui])) :is(.al-fieldset,.al-plan-body dl>div,.al-results td,.al-history article) { border-color:var(--ui-line); }
 body:not(:has([data-admin-ui])) .al-form-error { color:#b94e47; }
-body:not(:has([data-admin-ui])) .al-landing .al-launch-image-note { color:#60738f; font-size:11px; line-height:1.8; }
+body:not(:has([data-admin-ui])) .al-landing .al-launch-image-note { color:#60738f; font-size:12px; line-height:1.8; }
 
 /* Disk cleaner marketing and the two global floating access cards. */
 body:not(:has([data-admin-ui])) .cleaner-site { --cleaner-ink:#183353; --cleaner-muted:#586f8a; --cleaner-accent:#2468e3; --cleaner-line:#d9e5f3; background:#fff; color:var(--ui-ink); }
