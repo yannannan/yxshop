@@ -1,5 +1,6 @@
 /node_modules/
 /.next/
+# Vinext运行状态与PID锁只属于本机，禁止提交（包括dev/lock.json）。
 /.vinext/
 /.wrangler/
 /dist/
