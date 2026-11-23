@@ -7,10 +7,34 @@ export type WorkspaceProspect = {
   interest: LocalizedText; status: ProspectStatus; score: number; email: string; note: string;
 };
 export const workspaceAgents = [
-  { key: 'collect', icon: 'prospect', zh: 'AI智能获客', en: 'AI prospecting', detailZh: '发现市场与潜在客户', detailEn: 'Discover markets and prospects' },
-  { key: 'social', icon: 'content', zh: 'AI新媒体运营', en: 'AI social media', detailZh: '选题、内容与发布计划', detailEn: 'Ideas, content and planning' },
-  { key: 'marketing', icon: 'marketing', zh: 'AI自动化营销', en: 'AI marketing', detailZh: '营销策略与客户互动', detailEn: 'Campaigns and conversations' },
-  { key: 'website', icon: 'website', zh: 'AI智能建站', en: 'AI website builder', detailZh: '从业务资料到品牌网站', detailEn: 'Turn your business into a site' },
+  {
+    key: 'collect', avatar: 'market-advisor', zh: 'AI智能获客', en: 'AI prospecting',
+    roleZh: '市场拓展智能体', roleEn: 'Market intelligence agent',
+    detailZh: '拆解目标市场，协同跨平台检索与高意向线索筛选。',
+    detailEn: 'Plan market discovery and qualify high-intent leads.',
+    skillsZh: ['关键词分析', '精准筛选', '线索归集'], skillsEn: ['Keywords', 'Qualification', 'Lead capture'],
+  },
+  {
+    key: 'social', avatar: 'content-strategist', zh: 'AI新媒体运营', en: 'AI social media',
+    roleZh: '内容运营智能体', roleEn: 'Content operations agent',
+    detailZh: '统筹品牌选题、内容创作与多平台自动化发布计划。',
+    detailEn: 'Coordinate brand content and publishing workflows.',
+    skillsZh: ['选题策划', '内容生成', '发布排期'], skillsEn: ['Ideation', 'Content', 'Scheduling'],
+  },
+  {
+    key: 'marketing', avatar: 'campaign-advisor', zh: 'AI自动化营销', en: 'AI marketing',
+    roleZh: '营销协同智能体', roleEn: 'Marketing workflow agent',
+    detailZh: '结合客户画像，编排精准触达、会话互动与持续跟进。',
+    detailEn: 'Orchestrate outreach, conversations and follow-up.',
+    skillsZh: ['策略编排', '会话协同', '客户跟进'], skillsEn: ['Outreach', 'Conversations', 'Follow-up'],
+  },
+  {
+    key: 'website', avatar: 'website-architect', zh: 'AI智能建站', en: 'AI website builder',
+    roleZh: '品牌建站智能体', roleEn: 'Website experience agent',
+    detailZh: '理解企业资料，规划多语言品牌网站与获客落地页。',
+    detailEn: 'Plan multilingual brand sites and conversion pages.',
+    skillsZh: ['网站规划', '多语言', '线索承接'], skillsEn: ['Site planning', 'Languages', 'Conversion'],
+  },
 ] as const;
 
 export const sampleProspects: WorkspaceProspect[] = [

@@ -1,5 +1,32 @@
 # Design QA
 
+## 2026-11-23 Human agent cards and translucent workspace sidebar
+
+- Scope: redesign the AI workspace's left sidebar in response to the user's request for genuine agent cards, professional automation descriptions, human character imagery and a translucent technology feel. The human-agent screenshot is a conceptual reference; its identities, colors and full-page layout were not copied. The rejected robot direction was discarded before commit.
+- Source capture: `C:/Users/Administrator/.codex/visualizations/2026/11/23/agent-card-sidebar/before.jpg`. Final implementation: `desktop-final.jpg` in the same directory. Both show the Chinese initial prospecting workspace at a 1920 × 945 CSS viewport, captured at one image pixel per CSS pixel. Both verification captures are signed out.
+- Comparison evidence: `comparison-full.png` places the source and final implementation side by side; `comparison-sidebar.png` compares equal 368 × 871 crops aligned at y=74. The source sidebar is 280px wide, so its crop includes 88px of main content; the new 368px width is an intentional layout change.
+- Hierarchy: each card now contains a role, an 18px primary title, a specific automation description, three capability tags, and an original fictional human portrait. The selected card has a brighter border and checkmark. Decorative images are hidden from assistive technology; each native button keeps its previous accessible name and gains a description association.
+- Visual treatment: navy layered background, restrained blue/lavender lighting, translucent card surfaces and subtle inner highlights. Platform data remains a separate, compact two-button group anchored below the agent list. Only the agent list scrolls on shorter desktop windows; the data entries and return link remain accessible.
+- Assets: four transparent 192px-wide PNG portraits, approximately 49–54 KB each, produced with the built-in Image Gen tool and stored in `public/media/ai-workspace/people/`. Source prompts and original-output filenames are recorded in `public/media/ai-workspace/ASSETS.md`. No robot images or external portrait requests remain in the delivered interface.
+- Copy: four bilingual role descriptions cover market discovery/lead screening, content/publishing workflows, customer outreach/follow-up, and multilingual website planning. The existing prototype notice remains visible; no live model, collection, publication or messaging capability was added.
+
+### Review and corrections
+
+1. [P2, desktop layout, fixed] The first taller card treatment cut off the fourth card on a 945px-high desktop. Reduced card padding and redundant footer spacing, then added a compact-height desktop rule. Final checks show the four complete Chinese cards at 1920 × 945 and 1440 × 900, with the data menus and return link visible. Evidence: `desktop-final.jpg`, `desktop-1440-final.jpg`.
+2. [P2, responsive layout, fixed] Retained a dedicated right rail for the expanded global QR panel. At 768px the agents form two columns; at 390px the cards use a native horizontal scroll area with the next card partially visible. Platform data stays below the selector. Evidence: `tablet-768.jpg`, `mobile-390.jpg`. No document-level horizontal overflow was observed in Chinese or English at the checked desktop/mobile widths.
+3. One capture taken immediately after a viewport resize showed a transient compositor frame. It was rejected. Stable replacement: `customers-1440-v2.jpg`; the earlier `customers-1440.jpg` is not accepted QA evidence.
+4. English card roles, titles, descriptions and skill tags wrap without horizontal clipping. The agent list can scroll vertically when longer English content exceeds the available desktop height. Evidence: `english-1440.jpg`.
+
+### Interaction and verification
+
+- Clicked all four agents and both platform-data entries; each showed the expected existing workspace heading. No data/backend behavior changed.
+- Tab moved focus from Prospecting to Social media; Enter selected the focused agent and updated the workspace. Focus outlines remain available.
+- At 390px, selecting the fourth agent scrolled it into the visible horizontal selector and opened Website builder. No document overflow appeared.
+- All four portrait requests completed successfully. The final browser console error check returned no entries. The preview was returned to Chinese, viewport overrides were reset, and the workspace tab was retained for review.
+- Production build, the existing 17 acquisition/workspace tests, changed-source ESLint and whitespace checks pass. Admin source and shared global styles were not modified. Screenshot review supports the scoped visual conclusions; it is not a full accessibility certification.
+
+final result: passed
+
 ## 2026-11-23 AI growth workspace interface prototype
 
 - Design target: the user's existing AI prospecting workspace screenshot, extended by the explicitly agreed four-agent/two-data-workspace layout. Source visual truth: `C:/Users/ADMINI~1/AppData/Local/Temp/codex-clipboard-57446211-ccfc-41d5-b685-9f5137728200.png`.

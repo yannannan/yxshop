@@ -4,7 +4,7 @@ import { AdjustmentsHorizontalIcon, ArrowRightIcon, CheckIcon, ClockIcon, Docume
 import { useI18n } from './language-provider';
 import { acquisitionDraftError, acquisitionFields, acquisitionPlatforms, acquisitionQuantities, type AcquisitionDraft, type AcquisitionField, type AcquisitionPlatform } from '../lib/ai-leads-design';
 import { convertProspect, sampleCustomers, sampleProspects, workspaceAgents, type WorkspaceProspect, type WorkspaceView } from '../lib/ai-workspace-design';
-import { WorkspaceIcon } from './ai-workspace-ui';
+import { WorkspaceAgentAvatar, WorkspaceIcon } from './ai-workspace-ui';
 import { WorkspaceDataPanel } from './ai-workspace-data';
 import { WorkspaceMarketingPanel, WorkspaceSocialPanel, WorkspaceWebsitePanel } from './ai-workspace-studio';
 
@@ -72,10 +72,16 @@ export function AiLeadsWorkspace() {
   function convertToCustomer(record: WorkspaceProspect) { setCustomers(current => convertProspect(current, record)); updateLead({ ...record, status: 'converted' }); }
   return <div className="al-site al-workspace-shell al-agent-workspace">
     <aside className="ag-sidebar"><a href="/ai-leads" className="ag-workspace-brand"><span className="ag-brand-icon"><WorkspaceIcon name="sparkles" /></span><span><strong>{tx('AI增长工作台', 'AI growth workspace')}</strong><small>YUXING INTELLIGENCE</small></span></a>
-      <nav aria-label={tx('智能体选择', 'AI agents')} className="ag-agent-nav"><div className="ag-nav-heading"><span>{tx('我的智能体', 'MY AGENTS')}</span><small>04</small></div>
-        {workspaceAgents.map(agent => <button className="ag-agent-card" type="button" key={agent.key} aria-label={locale === 'en' ? agent.en : agent.zh} aria-current={(view === agent.key || agent.key === 'collect' && view === 'history') ? 'page' : undefined} onClick={() => { setView(agent.key); setProfile(null); }}><span className="ag-agent-icon"><WorkspaceIcon name={agent.icon} /></span><span className="ag-agent-card-copy"><strong>{locale === 'en' ? agent.en : agent.zh}</strong><small>{locale === 'en' ? agent.detailEn : agent.detailZh}</small></span></button>)}
+      <nav aria-label={tx('智能体选择', 'AI agents')} className="ag-agent-nav"><div className="ag-nav-heading"><span>{tx('我的智能团队', 'MY AI TEAM')}</span><small>{tx('4 位专属助手', '4 specialist agents')}</small></div>
+        <div className="ag-agent-list">{workspaceAgents.map(agent => {
+          const selected = view === agent.key || agent.key === 'collect' && view === 'history';
+          return <button className="ag-agent-card" type="button" key={agent.key} aria-label={locale === 'en' ? agent.en : agent.zh} aria-describedby={`${id}-agent-${agent.key}`} aria-current={selected ? 'page' : undefined} onClick={() => { setView(agent.key); setProfile(null); }}>
+            <span className="ag-agent-profile"><span className="ag-agent-card-copy"><small>{locale === 'en' ? agent.roleEn : agent.roleZh}</small><strong>{locale === 'en' ? agent.en : agent.zh}</strong><span className="ag-agent-description" id={`${id}-agent-${agent.key}`}>{locale === 'en' ? agent.detailEn : agent.detailZh}</span></span><span className="ag-agent-portrait"><WorkspaceAgentAvatar name={agent.avatar} /></span></span>
+            <span className="ag-agent-card-bottom"><span className="ag-agent-skills">{(locale === 'en' ? agent.skillsEn : agent.skillsZh).map(skill => <span key={skill}>{skill}</span>)}</span><span className="ag-agent-select" aria-hidden="true"><WorkspaceIcon name={selected ? 'check' : 'arrow'} /></span></span>
+          </button>;
+        })}</div>
       </nav><nav className="ag-data-nav" aria-label={tx('平台数据', 'Platform data')}><div className="ag-nav-heading"><span>{tx('平台数据', 'PLATFORM DATA')}</span></div><button type="button" aria-label={tx('线索管理', 'Lead management')} aria-current={view === 'leads' ? 'page' : undefined} onClick={() => setView('leads')}><WorkspaceIcon name="leads" /><span>{tx('线索管理', 'Lead management')}</span><small>{leads.length}</small></button><button type="button" aria-label={tx('客户管理', 'Customer management')} aria-current={view === 'customers' ? 'page' : undefined} onClick={() => setView('customers')}><WorkspaceIcon name="customers" /><span>{tx('客户管理', 'Customer management')}</span><small>{customers.length}</small></button></nav>
-      <div className="ag-sidebar-footer"><span><WorkspaceIcon name="check" />{tx('界面设计版 · 账户通用', 'UI prototype · Shared account')}</span><a href="/ai-leads"><WorkspaceIcon name="back" />{tx('返回产品介绍', 'Product overview')}</a></div>
+      <div className="ag-sidebar-footer"><a href="/ai-leads"><WorkspaceIcon name="back" />{tx('返回产品介绍', 'Product overview')}</a><span>{tx('设计预览', 'Design preview')}</span></div>
     </aside>
     <main className="al-workspace-main ag-main"><header className="al-workspace-heading ag-workspace-heading"><div><span className="ag-eyebrow">{view === 'leads' || view === 'customers' ? 'PLATFORM DATA' : 'AGENT WORKSPACE'}</span><h1>{heading}</h1><p>{description}</p></div><span className="ag-badge ag-preview-badge">{tx('交互设计预览', 'Interactive prototype')}</span></header>
       <div className="al-preview-notice ag-preview-notice"><DocumentMagnifyingGlassIcon /><p>{tx('当前为交互演示：不会启动真实采集、不扣积分。所有示例资料、草稿与操作仅在本页保留，刷新后清除。', 'Interactive preview: no real collection or point charges. All sample data, drafts and actions stay on this page and clear on reload.')}</p></div>

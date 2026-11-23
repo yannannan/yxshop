@@ -5,6 +5,9 @@ import { useEffect, useId, useRef, type ReactNode } from 'react';
 export function WorkspaceIcon({ name, className = '' }: { name: string; className?: string }) {
   return <img className={'ag-icon ' + className} src={'/media/ai-workspace/icons/' + name + '.png'} width={24} height={24} alt="" aria-hidden="true" />;
 }
+export function WorkspaceAgentAvatar({ name }: { name: string }) {
+  return <img className="ag-agent-avatar" src={'/media/ai-workspace/people/' + name + '.png'} width={192} height={246} alt="" aria-hidden="true" decoding="async" />;
+}
 export function WorkspaceDialog({ title, children, onClose, wide = false }: { title: string; children: ReactNode; onClose: () => void; wide?: boolean }) {
   const ref = useRef<HTMLDialogElement>(null), titleId = useId();
   useEffect(() => { const dialog = ref.current; dialog?.showModal(); return () => dialog?.close(); }, []);
