@@ -5,6 +5,8 @@ import { softwareEnglish } from './software-en.mjs';
 import { consultationEnglish } from './consultation-en.mjs';
 // Interface copy only. User-authored business content is preserved.
 export const english: Record<string, string> = {
+  '清理、提取、签名与制作，从这里找到需要的工具。': 'Find tools for cleaning, extraction, signing and creation.',
+  '工具列表读取超时，请重试': 'The tool list request timed out. Please try again.',
   '服务暂不可用，请稍后重试': 'This service is temporarily unavailable. Please try again later.',
   '删除此制作记录？删除后该成品将无法查看或下载。工具使用记录和积分消耗明细仍保留，已消耗权益不退回。': 'Delete this result? It will no longer be available to view or download. Tool usage and points records will remain, and consumed credits will not be refunded.',
   '删除制作记录': 'Delete result',

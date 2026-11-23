@@ -15,14 +15,14 @@ const toolCardIcons: Record<string, string> = {
   'site-analysis': 'webmaster-tools', 'site-analyzer': 'webmaster-tools', 'website-analysis': 'webmaster-tools',
 };
 
-export function ToolDirectory({ tools, loading = false, error = '', title = '让日常工作，更简单一点', pageSize = 8, page, moreHref = '/tools' }: { tools: ToolService[]; loading?: boolean; error?: string; title?: string; pageSize?: 8 | 12; page?: number; moreHref?: string | null }) {
+export function ToolDirectory({ tools, loading = false, error = '', onRetry, title = '让日常工作，更简单一点', pageSize = 8, page, moreHref = '/tools' }: { tools: ToolService[]; loading?: boolean; error?: string; onRetry?: () => void; title?: string; pageSize?: 8 | 12; page?: number; moreHref?: string | null }) {
   const { t } = useI18n();
   const [localPage, setLocalPage] = useState(1);
   const result = paginate(tools, page ?? localPage, pageSize);
   return <section className="tool-directory" aria-labelledby="tool-directory-title">
-    <header className="tool-directory-heading"><div><span className="section-kicker">TOOLS & UTILITIES</span><h2 id="tool-directory-title">{t(title)}</h2><p>{t("清理、提取、签名与制作，从这里找到需要的工具。共 ")}{t(tools.length)}{t(" 个工具。")}</p></div>{moreHref && <a href={moreHref}>{t("更多工具 →")}</a>}</header>
+    <header className="tool-directory-heading"><div><span className="section-kicker">TOOLS & UTILITIES</span><h2 id="tool-directory-title">{t(title)}</h2><p>{loading || error ? t('清理、提取、签名与制作，从这里找到需要的工具。') : <>{t("清理、提取、签名与制作，从这里找到需要的工具。共 ")}{t(tools.length)}{t(" 个工具。")}</>}</p></div>{moreHref && <a href={moreHref}>{t("更多工具 →")}</a>}</header>
     {/* 工具是独立操作页，使用浏览器原生导航，入口不等待客户端路由完成。 */}
-    {loading ? <p className="tool-directory-empty" role="status">{t("正在读取工具…")}</p> : error ? <p className="tool-directory-empty" role="alert">{t(error)}</p> : tools.length ? <div className="tool-entry-grid">{result.items.map(tool => {
+    {loading ? <p className="tool-directory-empty" role="status">{t("正在读取工具…")}</p> : error ? <div className="tool-directory-empty" role="alert"><p>{t(error)}</p>{onRetry && <button type="button" className="account-secondary" onClick={onRetry}>{t('重试读取')}</button>}</div> : tools.length ? <div className="tool-entry-grid">{result.items.map(tool => {
       const builtInIcon = isWebsiteAnalysis(tool.slug, tool.name) ? 'webmaster-tools' : Object.hasOwn(toolCardIcons, tool.slug) ? toolCardIcons[tool.slug] : '';
       const logo = builtInIcon ? `/tool-icons/${builtInIcon}.svg` : tool.logo || '/tool-icons/tool.svg';
       return <a className="tool-entry-card" data-tool-entry={tool.slug === 'ai-leads' ? undefined : tool.slug} href={toolPagePath(tool.slug)} key={tool.slug}>

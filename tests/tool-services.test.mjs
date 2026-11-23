@@ -18,6 +18,7 @@ import * as accountHelpers from '../lib/account.ts';
 
 const require = createRequire(import.meta.url);
 function load(file, mocks, globals = {}) {
+  mocks = { './tool-result-delete': { ToolResultDelete: () => null }, ...mocks };
   const code = ts.transpileModule(readFileSync(new URL(file, import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText;
   const exports = {};
   vm.runInNewContext(code, { exports, Response, URL, crypto: webcrypto, console: { error() {} }, ...globals, require(name) { if (name in mocks) return mocks[name]; if (i18nMock(name)) return i18nMock(name); if (name === '../lib/account-client') return { notifyAccountChanged() {} }; if (name === './account-menu') return { AccountMenu: () => null }; if (name === '../../../components/storefront-header') return { StorefrontHeader: () => null }; if (name === '@/components/video-extractor') return { VideoExtractor: () => null }; if (name === '@/lib/points') return points; if (['@/lib/points-service', './points-service'].includes(name)) return { PointsError: class extends Error {} }; if (name === '@/lib/tool-points-usage') return {};  if (['react', 'react/jsx-runtime'].includes(name)) return require(name); throw new Error(`Unexpected module: ${name}`); } });

@@ -22,7 +22,7 @@ function load(file, mocks = {}, globals = {}) {
   }).outputText;
   const exports = {};
   vm.runInNewContext(code, {
-    exports, Response, URL, URLSearchParams, console: { error() {} }, ...globals,
+    exports, Response, URL, URLSearchParams, AbortController, setTimeout, clearTimeout, console: { error() {} }, ...globals,
     require(name) {
       if (name in mocks) return mocks[name]; if (i18nMock(name)) return i18nMock(name); if (name === '../lib/account') return accountHelpers; if (name === '../lib/account-client') return { notifyAccountChanged() {} }; if (name === './account-menu') return { AccountMenu: () => null }; if (name === '../../../components/storefront-header') return { StorefrontHeader: () => null };
       if (['react', 'react/jsx-runtime'].includes(name)) return require(name);
@@ -323,7 +323,7 @@ test('首页频道导航继续原地切换，Ctrl点击仍保留浏览器打开�
 
 test('订单、地址、后台、技术人员和工具介绍等页面的商城Logo都使用原生首页链接', () => {
   for (const name of ['page.tsx', 'orders/page.tsx', 'addresses/page.tsx', 'admin/page.tsx', 'technician/page.tsx', 'service-orders/page.tsx', 'service-orders/[id]/page.tsx', 'tools/[slug]/page.tsx', 'product/[id]/page.tsx', 'checkout/[id]/page.tsx', 'service/[slug]/page.tsx']) {
-    const path = name === 'service/[slug]/page.tsx' ? '../components/technical-service-detail.tsx' : `../app/${name}`;
+    const path = name === 'page.tsx' ? '../components/storefront-page.tsx' : name === 'service/[slug]/page.tsx' ? '../components/technical-service-detail.tsx' : `../app/${name}`;
     const source = ts.createSourceFile(name, readFileSync(new URL(path, import.meta.url), 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
     let count = 0;
     function visit(node) {
@@ -377,7 +377,7 @@ test('四列首页的7或8个工具一次显示且无分页，9个才翻页，�
 function storefrontHost(globals = {}, mocks = {}) {
   const fixtures = Array.from({ length: 26 }, (_, i) => ({ ...products[0], id: i + 1 }));
   const services = Array.from({ length: 26 }, (_, i) => ({ ...technicalHelpers.technicalServices[0], slug: `service-${i + 1}`, title: `技术服务${i + 1}`, homepageFeatured: i < 14 }));
-  return hookHost('../app/page.tsx', 'default', {
+  return hookHost('../components/storefront-page.tsx', 'default', {
     '../components/storefront-header': storefrontHeader,
     'next/link': Link, 'next/image': Image, 'next/dynamic': () => () => null,
     '../lib/technical-images': technicalImages,
@@ -393,6 +393,31 @@ function storefrontHost(globals = {}, mocks = {}) {
     ...mocks,
   }, globals);
 }
+
+test('服务端已有工具时首屏直接显示且不重复请求；禁用localStorage仍会初始化其他目录', async () => {
+  const requests = [], props = { initialTools: tools.slice(0, 8), initialConfig: helpers.defaultHomepageDisplay() };
+  const host = storefrontHost({ window: { localStorage: { getItem() { throw Error('storage blocked'); } }, location: { search: '', hash: '' } }, fetch: async url => { requests.push(url); return Response.json(url === '/api/auth/session' ? { authenticated: false } : []); } });
+  let tree = host.render(props); assert.equal((markup(tree).match(/class="tool-entry-card"/g) || []).length, 8); assert.ok(!markup(tree).includes('正在读取工具'));
+  host.mountEffects(); await new Promise(resolve => setImmediate(resolve)); host.render(props); host.mountEffects(); await new Promise(resolve => setImmediate(resolve));
+  assert.ok(!requests.includes('/api/tools')); assert.ok(!requests.includes('/api/homepage-display')); assert.ok(requests.includes('/api/products'));
+});
+
+test('客户端补取工具超时结束加载并可点击重试，成功后保留首屏数据', async () => {
+  const timers = new Map(); let next = 0, attempts = 0;
+  const host = storefrontHost({ window: { localStorage: { getItem: () => null }, location: { search: '', hash: '' } },
+    setTimeout(fn) { timers.set(++next, fn); return next; }, clearTimeout(id) { timers.delete(id); },
+    fetch: async (url, options) => {
+      if (url === '/api/tools') { attempts++; if (attempts === 1) return new Promise((_, reject) => options.signal.addEventListener('abort', () => reject(Error('aborted')))); return Response.json(tools.slice(0, 8)); }
+      return Response.json(url === '/api/auth/session' ? { authenticated: false } : []);
+    },
+  });
+  host.render(); host.mountEffects(); await new Promise(resolve => setImmediate(resolve)); host.render(); host.mountEffects();
+  for (const timer of [...timers.values()]) timer(); await new Promise(resolve => setImmediate(resolve));
+  let tree = host.render(); host.mountEffects(); assert.ok(markup(tree).includes('工具列表读取超时')); assert.ok(!markup(tree).includes('正在读取工具'));
+  elements(tree).find(node => typeof node.props.onToolsRetry === 'function').props.onToolsRetry();
+  host.render(); host.mountEffects(); await new Promise(resolve => setImmediate(resolve)); tree = host.render();
+  assert.equal(attempts, 2); assert.equal((markup(tree).match(/class="tool-entry-card"/g) || []).length, 8); assert.equal(timers.size, 0);
+});
 
 test('直接打开上门频道只请求当前频道，切回商城再加载商品/工具，头像用轻量资源', async () => {
   const requests = [];

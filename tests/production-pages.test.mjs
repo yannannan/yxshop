@@ -77,7 +77,7 @@ ssr.renderToReadableStream = (tree, options = {}) => render(tree, {
 });
 const module = await import(${JSON.stringify(entry.href)});
 const handler = typeof module.default === 'function' ? module.default : module.default.fetch.bind(module.default);
-const pages = [], metadata = [];
+const pages = [], metadata = [], homeTools = [];
 for (const spec of ${JSON.stringify(paths)}) {
   const path = typeof spec === 'string' ? spec : spec.path;
   const response = await handler(new Request('http://localhost:3000' + path, { method: typeof spec === 'object' ? spec.method || 'GET' : 'GET', headers: typeof spec === 'object' ? { 'user-agent': spec.userAgent || 'Mozilla/5.0 (YXStar QA)', cookie: 'yxshop_locale=' + (spec.locale || 'zh-CN') } : {} }));
@@ -88,6 +88,7 @@ for (const spec of ${JSON.stringify(paths)}) {
   }
   const html = await response.text();
   const $ = require('cheerio').load(html);
+  if (path === '/' || path.startsWith('/?') || path === '/api/tools') homeTools.push({ path, cards: $('a.tool-entry-card').length, loading: $('.tool-directory [role="status"]').length > 0, serverTiming: response.headers.get('server-timing') });
   const serviceDetail = path.startsWith('/service/') ? { text: $('.technical-provider-detail-layout').text(), images: $('img[src^="/technical-services/"]').map((_, image) => $(image).attr('src')).get() } : undefined;
   metadata.push({ path, serviceDetail, title: $('head title').text(), description: $('head meta[name="description"]').attr('content'), keywords: $('head meta[name="keywords"]').attr('content'), robots: $('head meta[name="robots"]').attr('content'), canonical: $('head link[rel="canonical"]').attr('href'), descriptionCount: $('head meta[name="description"]').length, keywordsCount: $('head meta[name="keywords"]').length, ogDescription: $('head meta[property="og:description"]').attr('content'), twitterDescription: $('head meta[name="twitter:description"]').attr('content') });
   const mobileAccessCount = (html.match(/data-mobile-access="true"/g) || []).length;
@@ -105,13 +106,20 @@ for (const spec of ${JSON.stringify(paths)}) {
   if (path.startsWith('/tools/c-drive-cleaner.html')) Object.assign(pages.at(-1), { cleaner: html.includes('class="cleaner-site"'), pending: html.includes('版本即将发布'), englishCleaner: html.includes('Coming soon') && html.includes('Free C: drive cleanup') && html.includes('Yuxing Disk Manager'), genericLaunch: html.includes('class="tool-detail"'), requestedHero: html.includes('class="cleaner-hero-title"') && html.includes('class="cleaner-hero-tagline"') && (html.includes('免费C盘清理100%释放') || html.includes('Free C: drive cleanup · 100% space release')), sharedNav: html.includes('unified-topbar') && html.includes('href="/ai-leads"') && html.includes('href="/?channel=technical#channel-content"') && html.includes('storefront-account-actions') && !html.includes('class="cleaner-header"'), disabledDownload: html.includes('class="cleaner-download" disabled=""'), canonical: html.includes('https://www.yxstar.shop/tools/c-drive-cleaner.html'), screenshots: (html.match(/role="tab"[^>]*aria-selected=/g) || []).length, heroCarousel: html.includes('cleaner-showcase cleaner-showcase-hero'), hasDetails: html.includes('class="cleaner-carousel-detail"'), hasCarousel: html.includes('class="cleaner-carousel-viewport"') && (html.includes('暂停轮播') || html.includes('Pause slideshow')), stackedStories: html.includes('class="cleaner-story"'), loginFree: html.includes('免登录下载') || html.includes('No login to download') });
   if (stampSidebar) Object.assign(pages.at(-1), { menu: stampMenu, stampActive: /id="ds-stamp-maker" aria-labelledby/.test(html), structuredData: html.includes('application/ld+json'), embeddedStamp: html.includes('stamp-signature-view') });
 }
-console.log(JSON.stringify({ pages, metadata, errors, queries }));
+console.log(JSON.stringify({ pages, metadata, homeTools, errors, queries }));
 `;
   const { stdout } = await execute(process.execPath, ['--input-type=module', '-e', code], { timeout: 30000, windowsHide: true, maxBuffer: 1000000 });
   return JSON.parse(stdout.trim().split(/\r?\n/).at(-1));
 }
 
 const needsBuild = !existsSync(entry) ? '请先执行 pnpm build 生成生产包' : false;
+
+test('首页生产HTML直接含工具卡片，没有客户端读取占位，上门频道不读取工具且API含耗时', { skip: needsBuild }, async () => {
+  const result = await renderPages(['/', '/?channel=technical', '/api/tools']);
+  assert.deepEqual(result.errors, []); assert.deepEqual(result.pages.map(page => page.status), [200, 200, 200]);
+  assert.equal(result.homeTools[0].cards, 8); assert.equal(result.homeTools[0].loading, false); assert.equal(result.homeTools[1].cards, 0);
+  assert.equal(result.queries, 2); assert.match(result.homeTools[2].serverTiming, /^tools;dur=\d+$/);
+});
 
 test('上门服务详情首屏含后台正文和轻量图片，SEO与页面共享一次读取，素材随包发布', { skip: needsBuild }, async () => {
   const result = await renderPages([{ path: '/service/ai-site-deployment' }, { path: '/service/ai-system-customization', locale: 'en' }]);
