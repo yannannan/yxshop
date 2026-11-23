@@ -88,7 +88,7 @@ for (const spec of ${JSON.stringify(paths)}) {
   }
   const html = await response.text();
   const $ = require('cheerio').load(html);
-  if (path === '/' || path.startsWith('/?') || path === '/api/tools') homeTools.push({ path, cards: $('a.tool-entry-card').length, shortcuts: $('a.portal-shortcut').length, loading: $('.tool-directory [role="status"]').length > 0, serverTiming: response.headers.get('server-timing') });
+  if (path === '/' || path.startsWith('/?') || path === '/api/tools') homeTools.push({ path, cards: $('a.tool-entry-card').length, loading: $('.tool-directory [role="status"]').length > 0, serverTiming: response.headers.get('server-timing') });
   const serviceDetail = path.startsWith('/service/') ? { text: $('.technical-provider-detail-layout').text(), images: $('img[src^="/technical-services/"]').map((_, image) => $(image).attr('src')).get() } : undefined;
   metadata.push({ path, serviceDetail, title: $('head title').text(), description: $('head meta[name="description"]').attr('content'), keywords: $('head meta[name="keywords"]').attr('content'), robots: $('head meta[name="robots"]').attr('content'), canonical: $('head link[rel="canonical"]').attr('href'), descriptionCount: $('head meta[name="description"]').length, keywordsCount: $('head meta[name="keywords"]').length, ogDescription: $('head meta[property="og:description"]').attr('content'), twitterDescription: $('head meta[name="twitter:description"]').attr('content') });
   const mobileAccessCount = (html.match(/data-mobile-access="true"/g) || []).length;
@@ -114,10 +114,10 @@ console.log(JSON.stringify({ pages, metadata, homeTools, errors, queries }));
 
 const needsBuild = !existsSync(entry) ? '请先执行 pnpm build 生成生产包' : false;
 
-test('首页生产HTML直接含最多12个真实服务入口，没有客户端读取占位，上门频道不读取工具且API含耗时', { skip: needsBuild }, async () => {
+test('首页生产HTML直接含工具卡片，没有客户端读取占位，上门频道不读取工具且API含耗时', { skip: needsBuild }, async () => {
   const result = await renderPages(['/', '/?channel=technical', '/api/tools']);
   assert.deepEqual(result.errors, []); assert.deepEqual(result.pages.map(page => page.status), [200, 200, 200]);
-  assert.ok(result.homeTools[0].cards > 0 && result.homeTools[0].cards + result.homeTools[0].shortcuts <= 12); assert.equal(result.homeTools[0].loading, false); assert.equal(result.homeTools[1].cards, 0);
+  assert.equal(result.homeTools[0].cards, 8); assert.equal(result.homeTools[0].loading, false); assert.equal(result.homeTools[1].cards, 0);
   assert.equal(result.queries, 2); assert.match(result.homeTools[2].serverTiming, /^tools;dur=\d+$/);
 });
 

@@ -1,16 +1,5 @@
 # Design QA
 
-## 2026-11-23 全站 AI 透明科技风改版
-
-- 设计依据：用户提供的深蓝紫透明菜单、深色套餐卡、首页线框和样式视频。借鉴暗色玻璃、细描边、高光选中态与缓和悬停，不复制任何第三方品牌、文案、页面或素材。
-- 首页按“站点导航 → AI数字服务/上门技术服务两个渠道 → 搜索筛选 → 最多12个真实服务入口 → 页脚”重排。入口保留后台启用工具及真实数字商品分类，不伪造获客、支付、积分或管理数据，也不改变原生链接、费用和权限。
-- 全局新主题限定为`body[data-ui-theme="glass"]`，根布局只加载此主题，避免旧公开主题叠加。卡片、按钮、表单、侧栏、弹窗、账户、商品、技术服务、获客、工具工作台和后台共用深海军蓝/蓝紫玻璃层级；文档画布、上传图片和二维码刻意保留原色，不使用全局滤镜或混色。
-- 静态背景为项目自有的低体积 WebP，来源和生成说明见`public/design/ASSETS.md`。动画由单个委托监听和`requestAnimationFrame`合并；减少动态效果、触控设备、窄屏两列门户及无`backdrop-filter`环境均有清晰降级。
-- 代码验收：93项相关源码测试、22项无端口生产页检查、生产构建和修改文件 ESLint 均通过；含真实入口、主题范围、AA 对比度、动效清理、原生导航、SEO和生产静态资源检查。
-- 桌面已实际检查首页、AI智能获客及工作台、签署页、账户、商品目录和详情页。窄屏布局由主题解析与响应式入口检查覆盖；本次收尾时本地 IAB 不可用，因此不把新的窄屏浏览器截图表述为已捕获。
-
-final result: passed
-
 ## 2026-11-06 Minimal image editor navigation
 
 - The user requests a cleaner sidebar without explanatory text. Keep the title, three available actions and return link. Remove the subtitle, navigation section label, footer note, planned placeholder and trailing selected arrow. Remove the top toolbar's instruction line as well.

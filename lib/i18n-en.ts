@@ -5,13 +5,6 @@ import { softwareEnglish } from './software-en.mjs';
 import { consultationEnglish } from './consultation-en.mjs';
 // Interface copy only. User-authored business content is preserved.
 export const english: Record<string, string> = {
-  '连接 AI，开启更多可能': 'Connect with AI. Discover new possibilities.',
-  '实用工具 · 数字服务 · 专业技术支持': 'Smart tools · Digital services · Expert support',
-  '探索全部服务': 'Explore our services',
-  '从实用工具到数字服务，找到适合你的下一步。': 'Discover the right tools and digital services for your next step.',
-  '查看全部数字商品 →': 'Browse all digital products →',
-  '品质保障': 'Quality assured',
-  '人工售后服务': 'Human support',
   '清理、提取、签名与制作，从这里找到需要的工具。': 'Find tools for cleaning, extraction, signing and creation.',
   '工具列表读取超时，请重试': 'The tool list request timed out. Please try again.',
   '服务暂不可用，请稍后重试': 'This service is temporarily unavailable. Please try again later.',
