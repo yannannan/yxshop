@@ -8,6 +8,7 @@ import ts from 'typescript';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import * as design from '../lib/ai-leads-design.ts';
+import * as workspaceDesign from '../lib/ai-workspace-design.ts';
 import * as tools from '../lib/tool-services.ts';
 import * as homepage from '../lib/homepage-display.ts';
 
@@ -20,6 +21,7 @@ function load(file, mocks = {}, globals = {}) {
     fetch() { throw Error('UI preview must not send collection requests'); },
     require(name) { if (name in mocks) return mocks[name];
       if (['react', 'react/jsx-runtime', '@heroicons/react/24/outline'].includes(name)) return require(name);
+      if (['./ai-workspace-ui', './ai-workspace-data', './ai-workspace-studio'].includes(name)) return load('../components/' + name.slice(2) + '.tsx', mocks, globals);
       throw Error(`Unexpected import ${name}`);
     },
   });
@@ -36,7 +38,7 @@ function host(name = 'workspace', locale = 'zh-CN', globals = {}) {
       return [slots[index], next => { slots[index] = typeof next === 'function' ? next(slots[index]) : next; }]; },
   };
   const exported = load(`../components/ai-leads-${name}.tsx`, { react,
-    './language-provider': { useI18n: () => ({ locale }) }, '../lib/ai-leads-design': design }, globals);
+    './language-provider': { useI18n: () => ({ locale }) }, '../lib/ai-leads-design': design, '../lib/ai-workspace-design': workspaceDesign }, globals);
   const Component = exported[name === 'workspace' ? 'AiLeadsWorkspace' : 'AiLeadsLanding'];
   return { render() { cursor = 0; return Component(); }, mountEffect() { return effect?.(); }, setLocale(next) { locale = next; } };
 }
@@ -232,6 +234,6 @@ test('英文营销预设和管理视图均显示英文，搜索词保留用户�
   const label = elements(tree).find(node => node.type === 'label' && text(node) === 'Ophthalmic equipment');
   elements(label).find(node => node.type === 'input').props.onChange(); tree = h.render(); submit(tree); tree = h.render();
   assert.ok(markup(tree).includes('Ophthalmic equipment')); assert.ok(markup(tree).includes('眼科设备'));
-  findButton(tree, 'Lead management').props.onClick(); tree = h.render(); assert.ok(markup(tree).includes('Lead list'));
+  elements(tree).find(node => node.type === 'button' && node.props['aria-label'] === 'Lead management').props.onClick(); tree = h.render(); assert.ok(markup(tree).includes('Lead list'));
   assert.ok(!markup(tree).includes('意向客户'));
 });

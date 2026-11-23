@@ -28,6 +28,7 @@ import './mobile-access.css';
 import './ai-leads.css';
 import './ai-leads-landing.css';
 import './public-theme.css';
+import './ai-workspace-design.css';
 export async function generateMetadata() { return getPageMetadata('home'); }
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const { locale } = await getI18n();

@@ -1,5 +1,42 @@
 # Design QA
 
+## 2026-11-23 AI growth workspace interface prototype
+
+- Design target: the user's existing AI prospecting workspace screenshot, extended by the explicitly agreed four-agent/two-data-workspace layout. Source visual truth: `C:/Users/ADMINI~1/AppData/Local/Temp/codex-clipboard-57446211-ccfc-41d5-b685-9f5137728200.png`.
+- Local implementation: `http://localhost:3000/ai-leads/workspace`. Existing top navigation, account UI, landing page, backend styling and backend behavior are retained. Added agents are Social media, Marketing and Website builder; Leads and Customers are grouped as Platform data. History stays inside Prospecting.
+- Source and comparison implementation: English, desktop, initial prospecting state, 1920 × 945 CSS viewport and 1920 × 945 image pixels. Screenshots are normalized to one screenshot pixel per CSS pixel. Source is signed in; the verification browser is signed out. The header account-content difference is expected; no account was accessed for QA.
+- Evidence root (local, not committed): `C:/Users/Administrator/.codex/visualizations/2026/11/23/ai-workspace/`.
+- Full-view comparison: `comparison-full-v2.png`, a side-by-side source/implementation board. Implementation: `workspace-desktop-en-v2.jpg`. Focused comparison: `comparison-sidebar-v2.png`, equal-size 320 × 840 crops of the navigation area, aligned at y=74. Earlier `comparison-full.png`/`comparison-sidebar.png` used a 1280 viewport capture and are excluded from density-normalized fidelity conclusions.
+- Final Chinese implementation captures: `workspace-desktop-zh-final.jpg` and `customers-desktop-zh-final.jpg`, both 1920 × 945. Supporting responsive evidence: `customers-mobile-full-zh.jpg` (before the final desktop QR-rail adjustment; mobile styles are unchanged).
+
+### Fidelity review
+
+- Typography: retains the existing system font family and navy hierarchy; primary workspace headings are 32px, agent titles 16px, platform-data navigation 15px, inputs and body labels 14px. Secondary explanatory text uses 12–13px. Long English titles wrap within the cards. Readable labels extend the user's previous typography correction.
+- Spacing/layout: the sidebar intentionally widens from the source's 208px to 280px to fit four agent cards and a distinct platform-data group. Prospecting preserves its form/summary organization and moves history into inner tabs. New data pages use compact stats, a filter toolbar and a table or customer cards. No unintended clipping remains in the tested viewports.
+- Colors/tokens: preserves the source's navy navigation, white panels, pale sky background and blue controls. Selected agents use a pale-blue card; selected platform-data menus use a solid blue surface so the two groups remain distinguishable.
+- Assets: existing source branding and prospecting icons are retained. New interface icons are 96px transparent PNGs rasterized from the installed MIT-licensed Heroicons library, displayed at 16–25 CSS pixels. No handmade SVG illustrations, CSS artwork or stock images unrelated to the task were introduced. The website preview is sandboxed, editable-parameter-driven HTML, not a raster stand-in.
+- Copy/content: all added workspace copy is bilingual. Samples and simulation actions are identified; sample customer email addresses use `example.com`. Missing optional fields display as missing rather than fabricated contact information. The prototype does not call a model, collect data, publish content, connect domains or send messages.
+
+### Iterations and interaction evidence
+
+1. [P2, interaction] Native date/time input did not immediately update the controlled schedule in the browser interaction test. Added explicit input handling. Retest visibly confirmed the scheduled item under Publishing plan and the success message that nothing was published.
+2. [P2, layout] The default expanded global mobile QR card could cover the right edge of workspace content at intermediate desktop widths. Reserved a right rail in this workspace and tablet navigation. Post-fix evidence: `workspace-desktop-en-v2.jpg`, the two v2 comparison boards, and both final Chinese captures. Rechecked every workspace at 1440, 768 and 390 CSS pixels in English: zero document overflow or offscreen non-table controls. Chinese checks also covered 1920, 1440, 1024, 768 and 390 widths before the rail adjustment; Chinese final desktop captures were verified afterward.
+3. [P2, data presentation] A preview-generated customer with no selected email field showed an icon without text. Missing email now displays “未提供邮箱”/“Email not provided”; a new preview lead's unavailable match score displays “待分析”/“Not analyzed”. Conversion does not merge unrelated records with blank email addresses.
+- Prospecting: keyword entry and preview produce three explicitly illustrative rows and add them to the shared local Leads workspace. Region and data-field controls remain covered by the existing component suite.
+- Platform data: converted a lead and observed the customer count increase and its card become available; opened the detail drawer, saved a note and exercised the empty search/reset, card/list switch and Escape close. Pure conversion tests verify deduplication, source preservation and independent blank-email records.
+- Social media: filled brand/topic, previewed content, edited the draft, set a schedule and observed the planned item. The date-input fix was retested in the actual browser.
+- Marketing: created a draft with a selected sample customer; simulated running/pausing; previewed a reply and observed human handoff pause the simulation. Actual message count remains zero.
+- Website builder: submitted brand/business data, observed the updated preview, switched desktop/mobile width, opened publishing settings and saved a domain plan. Success text explicitly states no domain was connected and no website was published. HTML escaping and language/type variations are covered by tests.
+- Modal accessibility: native dialog provides modal focus behavior, close control and Escape handling; fields have labels. Focus outlines and reduced-motion styles are present.
+- Browser console: no error entries in the final checked preview. Browser viewport overrides were reset and a Chinese preview was left available.
+
+### Verification and result
+
+- Current production build passes. All 17 targeted design/data tests and all 22 existing production-page tests pass. Changed-source ESLint and whitespace checks pass.
+- Repository-wide TypeScript check still reports the existing admin/technician type diagnostics in `app/admin/page.tsx`, `app/api/admin/route.ts`, `app/api/technician/route.ts` and `components/admin-onsite-management.tsx`; it reports none in the changed workspace files. These unrelated files were not changed.
+- No remaining actionable P0/P1/P2 finding. Intentional differences are the four-agent card navigation, platform-data group, internal history tabs, larger type, QR rail and the newly requested UI workspaces. P3 follow-up: review eventual model-generated content and real account/platform connection states when those backend capabilities are designed.
+- final result: passed
+
 ## 2026-11-06 Minimal image editor navigation
 
 - The user requests a cleaner sidebar without explanatory text. Keep the title, three available actions and return link. Remove the subtitle, navigation section label, footer note, planned placeholder and trailing selected arrow. Remove the top toolbar's instruction line as well.
